@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1753717189151,
+      "tag": "0000_large_the_enforcers",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1753826154692,
+      "tag": "0001_colorful_deadpool",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1753912155250,
+      "tag": "0002_wooden_christian_walker",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1754401930937,
+      "tag": "0003_yellow_cable",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1754946753865,
+      "tag": "0004_panoramic_eddie_brock",
+      "breakpoints": true
+    }
+  ]
+}

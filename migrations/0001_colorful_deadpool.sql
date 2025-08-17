@@ -1,0 +1,1 @@
+ALTER TABLE `drivers` ADD `phone_number` text NOT NULL;
