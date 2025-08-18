@@ -17,17 +17,30 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@stripe/react-stripe-js": "^3.9.0",
     "@stripe/stripe-js": "^7.8.0",
+
     "@tursodatabase/api": "^1.9.0",
     "@types/lodash": "^4.17.20",
     "@types/pg": "^8.15.4",
+
+    "@stytch/nextjs": "^21.8.0",
+    "@stytch/vanilla-js": "^5.31.1",
+    "@tursodatabase/api": "^1.9.0",
+    "@types/lodash": "^4.17.20",
+    "@types/pg": "^8.15.4",
+    "@vonage/auth": "^1.12.0",
+    "@vonage/server-sdk": "^3.24.0",
+    "@vonage/verify": "^1.17.1",
+
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
     "cloudinary-react": "^1.8.1",
     "clsx": "^2.1.1",
-    "countries-list": "^3.1.1",
     "dotenv": "^17.2.1",
     "drizzle-orm": "^0.44.3",
+
     "firebase": "^12.0.0",
+    "firebase": "^12.1.0",
+>>>>>>> Added OTP Authentication
     "framer-motion": "^12.23.11",
     "input-otp": "^1.4.2",
     "loadash": "^1.0.0",
@@ -46,8 +59,12 @@
     "sonner": "^2.0.6",
     "stripe": "^18.4.0",
     "tailwind-merge": "^3.3.1",
+<<<<<<< HEAD
+    "tailwindcss-animate": "^1.0.7"
+=======
     "tailwindcss-animate": "^1.0.7",
     "twilio": "^5.8.0"
+>>>>>>> Added OTP Authentication
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

@@ -12,6 +12,11 @@ const Hero = () => {
     router.push('/driver/registration')
   }
 
+  const handleBookDeliveryClick = () => {
+    // Redirect to customer login page
+    router.push('/customer/customer-login')
+  }
+
   return (
     <section className="max-container padding-container flex flex-col gap-20 py-10 pb-32 md:gap-28 lg:py-20 xl:flex-row bg-dark-950">
       <div className="relative z-20 flex flex-1 flex-col xl:w-1/2">
@@ -44,6 +49,7 @@ const Hero = () => {
             type="button" 
             title="Book Delivery" 
             variant="btn_purple" 
+            onClick={handleBookDeliveryClick}
           />
           <Button 
             type="button" 

@@ -6,6 +6,28 @@ export type LocationData = {
 import { sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
+export const customersTable = sqliteTable('customers', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  username: text('username').unique().notNull(),
+  phoneNumber: text('phone_number').unique().notNull(),
+  password: text('password').notNull(),
+  profilePictureUrl: text('profile_picture_url'),
+  
+  // Authentication
+  isVerified: integer('is_verified', { mode: 'boolean' }).default(false).notNull(),
+  lastLogin: text('last_login').default(sql`CURRENT_TIMESTAMP`),
+  
+  // Location preferences
+  homeAddress: text('home_address'),
+  workAddress: text('work_address'),
+  lastLocation: text('last_location').$type<LocationData>().default(null),
+  
+  // Status
+  status: text('status').default('active').notNull(),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const driversTable = sqliteTable('drivers', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
   phoneNumber: text('phone_number').notNull(),
@@ -54,11 +76,17 @@ export const otpTable = sqliteTable('otps', {
   expiresAt: text('expires_at').notNull(),
 });
 
+export type InsertCustomer = typeof customersTable.$inferInsert;
+export type SelectCustomer = typeof customersTable.$inferSelect;
 export type InsertDriver = typeof driversTable.$inferInsert;
 export type SelectDriver = typeof driversTable.$inferSelect;
 export type InsertOTP = typeof otpTable.$inferInsert;
 export type SelectOTP = typeof otpTable.$inferSelect;
 
+export interface Customer extends Omit<SelectCustomer, 'isVerified' | 'lastLocation'> {
+  isVerified: boolean;
+  lastLocation: LocationData;
+}
 export interface Driver extends Omit<SelectDriver, 'isOnline' | 'lastLocation'> {
   isOnline: boolean;
   lastLocation: { longitude: number; latitude: number } | null;
