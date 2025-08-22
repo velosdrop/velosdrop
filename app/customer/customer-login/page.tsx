@@ -1,4 +1,6 @@
+// app/customer/customer-login/page.tsx
 "use client";
+
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -112,6 +114,13 @@ export default function CustomerLogin() {
         .set({ lastLogin: new Date().toISOString() })
         .where(eq(customersTable.id, customer.id))
         .run();
+
+      // Store user data in localStorage for dashboard access
+      localStorage.setItem('customerData', JSON.stringify({
+        username: customer.username,
+        phoneNumber: customer.phoneNumber,
+        profilePictureUrl: customer.profilePictureUrl
+      }));
 
       router.push("/customer/customer-dashboard");
     } catch (error) {

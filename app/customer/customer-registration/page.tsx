@@ -1,15 +1,16 @@
+// app/customer/customer-registration/page.tsx
 "use client";
+
 import { useState,  useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { db } from "@/src/db";
 import { customersTable, otpTable } from "@/src/db/schema";
-import { eq, or, and } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { hash } from "bcryptjs";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { FaMobile, FaArrowRight } from 'react-icons/fa';
+import { FaMobile } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 
 export default function CustomerRegistration() {
@@ -27,7 +28,7 @@ export default function CustomerRegistration() {
   const [resendCountdown, setResendCountdown] = useState(0);
   const router = useRouter();
 
-useEffect(() => {
+  useEffect(() => {
     if (resendCountdown <= 0) return;
     const timer = setTimeout(() => setResendCountdown(resendCountdown - 1), 1000);
     return () => clearTimeout(timer);
@@ -139,7 +140,13 @@ useEffect(() => {
         })
         .run();
 
-      router.push("/customer/dashboard");
+      // Store user data in localStorage
+      localStorage.setItem('customerData', JSON.stringify({
+        username: formData.username,
+        phoneNumber: formData.phone
+      }));
+
+      router.push("/customer/customer-dashboard");
     } catch (error) {
       console.error("Registration failed:", error);
       setErrors({ form: "Registration failed. Please try again." });
