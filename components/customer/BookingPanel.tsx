@@ -43,78 +43,123 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
   const [pickupSuggestions, setPickupSuggestions] = useState<LocationSuggestion[]>([]);
   const [deliverySuggestions, setDeliverySuggestions] = useState<LocationSuggestion[]>([]);
   const [isLocating, setIsLocating] = useState(false);
+  const [isAutoLocating, setIsAutoLocating] = useState(true);
   const { customer } = useUser();
   const { setDeliveryData } = useDelivery(); 
 
   const pickupTimeoutRef = useRef<NodeJS.Timeout>();
   const deliveryTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // Get current location
+  // Automatically get user's location when component mounts
+  useEffect(() => {
+    if (isAutoLocating) {
+      getCurrentLocation();
+    }
+  }, [isAutoLocating]);
+
+  // Get current location with better precision
   const getCurrentLocation = () => {
     setIsLocating(true);
     if (!navigator.geolocation) {
       alert("Geolocation is not supported by your browser");
       setIsLocating(false);
+      setIsAutoLocating(false);
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
+        
+        // First, set the exact coordinates for accurate mapping
+        const exactCoords: [number, number] = [longitude, latitude];
+        setPickupCoords(exactCoords);
+        
+        // Then try to get a more precise address
         try {
-            const response = await fetch(
-                `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?` +
-                `access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}` +
-                `&country=ZW` + // Focus on Zimbabwe results
-                `&types=address,place` // Get specific address types
-              );
+          // Try to get a more precise address by using a smaller radius
+          const response = await fetch(
+            `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?` +
+            `access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}` +
+            `&country=ZW` +
+            `&types=address,poi,neighborhood,locality` +
+            `&limit=5` + // Get more results to find the most specific one
+            `&radius=100` // Smaller radius for more precise results
+          );
+          
           const data = await response.json();
+          
           if (data.features && data.features.length > 0) {
-            setPickupLocation(data.features[0].place_name);
-            setPickupCoords(data.features[0].center || data.features[0].geometry.coordinates);
+            // Find the most specific result (prioritize addresses over general areas)
+            let bestMatch = data.features[0];
+            
+            // Look for address results first
+            const addressResult = data.features.find((f: any) => 
+              f.place_type.includes('address') || f.place_type.includes('poi')
+            );
+            
+            if (addressResult) {
+              bestMatch = addressResult;
+            }
+            
+            setPickupLocation(bestMatch.place_name);
             
             // Notify parent component about location selection
             if (onLocationsSelected) {
               onLocationsSelected(
                 { 
-                  address: data.features[0].place_name, 
-                  coordinates: data.features[0].center || data.features[0].geometry.coordinates 
+                  address: bestMatch.place_name, 
+                  coordinates: exactCoords
                 },
                 null
               );
             }
+          } else {
+            // If no specific address found, use coordinates directly
+            setPickupLocation(`Near ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
           }
         } catch (error) {
           console.error("Error reverse geocoding:", error);
+          // If geocoding fails, still use the coordinates
+          setPickupLocation(`Near ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
         }
+        
         setIsLocating(false);
+        setIsAutoLocating(false);
       },
       (error) => {
         console.error("Error getting location:", error);
-        alert("Unable to get your location. Please enter it manually.");
         setIsLocating(false);
+        setIsAutoLocating(false);
+        
+        if (error.code === error.PERMISSION_DENIED) {
+          alert("Location access denied. Please enable location services to use this feature.");
+        }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      { 
+        enableHighAccuracy: true, 
+        timeout: 20000,  // Increased timeout
+        maximumAge: 0    // Don't use cached position
+      }
     );
   };
 
-  // Fetch location suggestions
-  // Fetch location suggestions - UPDATED FOR ZIMBABWE
-const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<React.SetStateAction<LocationSuggestion[]>>) => {
-    if (!query || query.length < 3) {
+  // Fetch location suggestions for Zimbabwe
+  const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<React.SetStateAction<LocationSuggestion[]>>) => {
+    if (!query || query.length < 2) {
       setSuggestions([]);
       return;
     }
-  
+
     try {
       const response = await fetch(
         `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?` +
         `access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}` +
-        `&types=address,place,poi,neighborhood,locality` + // Zimbabwe-specific types
-        `&country=ZW` + // Zimbabwe country code
+        `&types=address,place,poi,neighborhood,locality` +
+        `&country=ZW` +
         `&limit=5` +
         `&language=en` +
-        `&proximity=31.033,-17.827` // Center on Zimbabwe (Harare coordinates)
+        `&proximity=31.033,-17.827`
       );
       
       const data = await response.json();
@@ -166,7 +211,6 @@ const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<Re
       setPickupCoords(locationData.coordinates);
       setPickupSuggestions([]);
       
-      // Notify parent about pickup location
       if (onLocationsSelected) {
         onLocationsSelected(locationData, deliveryCoords ? { 
           address: deliveryLocation, 
@@ -178,7 +222,6 @@ const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<Re
       setDeliveryCoords(locationData.coordinates);
       setDeliverySuggestions([]);
       
-      // Notify parent about delivery location
       if (onLocationsSelected) {
         onLocationsSelected(pickupCoords ? { 
           address: pickupLocation, 
@@ -194,7 +237,6 @@ const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<Re
       return;
     }
     
-    // Save delivery data to context for use in dashboard
     if (setDeliveryData) {
       setDeliveryData({
         pickup: { address: pickupLocation, coordinates: pickupCoords },
@@ -262,7 +304,7 @@ const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<Re
 
         <form onSubmit={handleSubmitBooking} className="space-y-6">
           {/* Progress Indicator */}
-          <div className="flex items-center justify-center space极-2 mb-6">
+          <div className="flex items-center justify-center space-x-2 mb-6">
             <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
             <div className="w-3 h-3 bg-gray-600 rounded-full"></div>
             <div className="w-3 h-3 bg-gray-600 rounded-full"></div>
@@ -281,33 +323,40 @@ const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<Re
           )}
 
           <div className="space-y-4">
-            {/* Pickup Location */}
+            {/* Pickup Location - Auto-filled with current location */}
             <div className="group">
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-purple-300">
                   Pickup Location
                 </label>
-                <button
-                  type="button"
-                  onClick={getCurrentLocation}
-                  disabled={isLocating}
-                  className="text-xs text-purple-400 hover:text-purple-300 flex items-center disabled:opacity-50"
-                >
-                  {isLocating ? (
-                    <>
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-400 mr-1"></div>
-                      Locating...
-                    </>
-                  ) : (
-                    <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0" />
-                      </svg>
-                      Use my location
-                    </>
-                  )}
-                </button>
+                {isAutoLocating ? (
+                  <span className="text-xs text-purple-400 flex items-center">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-400 mr-1"></div>
+                    Detecting exact location...
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={getCurrentLocation}
+                    disabled={isLocating}
+                    className="text-xs text-purple-400 hover:text-purple-300 flex items-center disabled:opacity-50"
+                  >
+                    {isLocating ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-400 mr-1"></div>
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Use exact location
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400">
@@ -318,21 +367,24 @@ const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<Re
                 <input
                   type="text"
                   value={pickupLocation}
-                  onChange={(e) => setPickupLocation(e.target.value)}
+                  onChange={(e) => {
+                    setPickupLocation(e.target.value);
+                    setIsAutoLocating(false);
+                  }}
                   className="w-full pl-10 pr-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700 text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 backdrop-blur-sm transition-all duration-300"
                   placeholder="Enter pickup address"
                   required
                 />
                 {pickupSuggestions.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 bg-gray-900 border border-gray-700 rounded-b-xl shadow-lg z-10 mt-1">
+                  <div className="absolute top-full left-0 right-0 bg-gray-900 border border-gray-700 rounded-b-xl shadow-lg z-10 mt-1 max-h-60 overflow-y-auto">
                     {pickupSuggestions.map((suggestion, index) => (
                       <button
                         key={index}
                         type="button"
                         onClick={() => handleSuggestionClick(suggestion, true)}
-                        className="w-full text-left px-4 py-2 hover:bg-gray-800 transition-colors text-sm text-gray-200"
+                        className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors text-sm text-gray-200 border-b border-gray-700 last:border-b-0"
                       >
-                        {suggestion.place_name}
+                        <div className="font-medium">{suggestion.place_name}</div>
                       </button>
                     ))}
                   </div>
@@ -348,7 +400,7 @@ const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<Re
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0极" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </div>
@@ -361,15 +413,15 @@ const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<Re
                   required
                 />
                 {deliverySuggestions.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 bg-gray-900 border border-gray-700 rounded-b-xl shadow-lg z-10 mt-1">
+                  <div className="absolute top-full left-0 right-0 bg-gray-900 border border-gray-700 rounded-b-xl shadow-lg z-10 mt-1 max-h-60 overflow-y-auto">
                     {deliverySuggestions.map((suggestion, index) => (
                       <button
                         key={index}
                         type="button"
                         onClick={() => handleSuggestionClick(suggestion, false)}
-                        className="w-full text-left px-4 py-2 hover:bg-gray-800 transition-colors text-sm text-gray-200"
+                        className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors text-sm text-gray-200 border-b border-gray-700 last:border-b-0"
                       >
-                        {suggestion.place_name}
+                        <div className="font-medium">{suggestion.place_name}</div>
                       </button>
                     ))}
                   </div>
@@ -385,7 +437,7 @@ const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<Re
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-极 2m0-8c1.11 0 2.08.402 2.599 1M12 7m0 1极8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v-1m0 1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
                 <input
@@ -422,7 +474,7 @@ const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<Re
                       <p className="text-sm text-gray-400">Describe what you're sending</p>
                     </div>
                   </div>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="current极olor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </div>
@@ -433,7 +485,8 @@ const fetchSuggestions = async (query: string, setSuggestions: React.Dispatch<Re
           <div className="pt-6">
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-4 px-6 rounded-xl shadow-2xl shadow-purple-900/40 hover:shadow-purple-900/60 transition-all duration-300"
+              disabled={!pickupCoords || !deliveryCoords}
+              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl shadow-2xl shadow-purple-900/40 hover:shadow-purple-900/60 transition-all duration-300"
             >
               Continue to Package Details
             </button>

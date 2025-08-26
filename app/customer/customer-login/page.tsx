@@ -9,6 +9,7 @@ import { customersTable } from "@/src/db/schema";
 import { eq } from "drizzle-orm";
 import { compare } from "bcryptjs";
 import { countries } from "countries-list";
+import { useUser } from '@/app/context/UserContext';
 
 interface Country {
   code: string;
@@ -32,6 +33,7 @@ export default function CustomerLogin() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { setCustomer } = useUser();
 
   useEffect(() => {
     const countriesData = Object.entries(countries)
@@ -115,12 +117,15 @@ export default function CustomerLogin() {
         .where(eq(customersTable.id, customer.id))
         .run();
 
-      // Store user data in localStorage for dashboard access
-      localStorage.setItem('customerData', JSON.stringify({
+      // Store complete customer data including ID
+      const customerData = {
+        id: customer.id,
         username: customer.username,
         phoneNumber: customer.phoneNumber,
-        profilePictureUrl: customer.profilePictureUrl
-      }));
+        profilePictureUrl: customer.profilePictureUrl || undefined
+      };
+      
+      setCustomer(customerData);
 
       router.push("/customer/customer-dashboard");
     } catch (error) {
@@ -282,10 +287,7 @@ export default function CustomerLogin() {
                   <path
                     className="opacity-75"
                     fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 
-                      0 0 5.373 0 12h4zm2 5.291A7.962 
-                      7.962 0 014 12H0c0 3.042 1.135 
-                      5.824 3 7.938l3-2.647z"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   ></path>
                 </svg>
                 Signing in...
