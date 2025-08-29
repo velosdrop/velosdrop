@@ -1,4 +1,3 @@
-// components/customer/RouteMap.tsx
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
@@ -13,9 +12,10 @@ interface RouteMapProps {
   pickupCoords: [number, number] | null;
   deliveryCoords: [number, number] | null;
   height?: string;
+  onRouteCalculated?: (routeData: any) => void; // Add this prop
 }
 
-export default function RouteMap({ pickupCoords, deliveryCoords, height = "200px" }: RouteMapProps) {
+export default function RouteMap({ pickupCoords, deliveryCoords, height = "200px", onRouteCalculated }: RouteMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [routeData, setRouteData] = useState<any>(null);
@@ -91,6 +91,11 @@ export default function RouteMap({ pickupCoords, deliveryCoords, height = "200px
           setRouteData(data.routes[0]);
           addRouteToMap(data.routes[0]);
 
+          // Call the callback if provided
+          if (onRouteCalculated) {
+            onRouteCalculated(data.routes[0]);
+          }
+
           // Fit map to show the entire route
           const bounds = new mapboxgl.LngLatBounds()
             .extend(pickupCoords)
@@ -114,7 +119,7 @@ export default function RouteMap({ pickupCoords, deliveryCoords, height = "200px
       map.current.on('load', updateMapWithRoute);
     }
 
-  }, [pickupCoords, deliveryCoords, MAPBOX_TOKEN]); // Add dependencies
+  }, [pickupCoords, deliveryCoords, MAPBOX_TOKEN, onRouteCalculated]); // Add onRouteCalculated to dependencies
 
   const addRouteToMap = (route: any) => {
     if (!map.current) return;

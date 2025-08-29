@@ -358,7 +358,7 @@ export default function CustomerMap({
 
       mapInstance.on('error', (e) => {
         console.error('Mapbox error:', e);
-        setMapError('Failed to load map. Please check your Mapbox token.');
+        setMapError('Failed to load map. Please check your Internet Connection.');
       });
 
       map.current = mapInstance;

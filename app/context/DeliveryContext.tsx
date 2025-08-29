@@ -1,4 +1,3 @@
-// app/context/DeliveryContext.tsx
 "use client";
 
 import React, { createContext, useState, useContext, ReactNode } from 'react';
@@ -11,7 +10,7 @@ interface DeliveryLocation {
 interface DeliveryData {
   pickup: DeliveryLocation;
   delivery: DeliveryLocation;
-  fareOffer: string;
+  distance?: number | null;
 }
 
 interface DeliveryContextType {

@@ -1,4 +1,3 @@
-// components/customer/BookingPanel.tsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -37,7 +36,6 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
   const [currentStep, setCurrentStep] = useState("booking");
   const [pickupLocation, setPickupLocation] = useState("");
   const [deliveryLocation, setDeliveryLocation] = useState("");
-  const [fareOffer, setFareOffer] = useState("");
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
   const [deliveryCoords, setDeliveryCoords] = useState<[number, number] | null>(null);
   const [pickupSuggestions, setPickupSuggestions] = useState<LocationSuggestion[]>([]);
@@ -45,7 +43,8 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
   const [isLocating, setIsLocating] = useState(false);
   const [isAutoLocating, setIsAutoLocating] = useState(true);
   const { customer } = useUser();
-  const { setDeliveryData } = useDelivery(); 
+  const { setDeliveryData } = useDelivery();
+  const [routeDistance, setRouteDistance] = useState<number | null>(null);
 
   const pickupTimeoutRef = useRef<NodeJS.Timeout>();
   const deliveryTimeoutRef = useRef<NodeJS.Timeout>();
@@ -70,11 +69,11 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
-        
+
         // First, set the exact coordinates for accurate mapping
         const exactCoords: [number, number] = [longitude, latitude];
         setPickupCoords(exactCoords);
-        
+
         // Then try to get a more precise address
         try {
           // Try to get a more precise address by using a smaller radius
@@ -86,29 +85,29 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
             `&limit=5` + // Get more results to find the most specific one
             `&radius=100` // Smaller radius for more precise results
           );
-          
+
           const data = await response.json();
-          
+
           if (data.features && data.features.length > 0) {
             // Find the most specific result (prioritize addresses over general areas)
             let bestMatch = data.features[0];
-            
+
             // Look for address results first
-            const addressResult = data.features.find((f: any) => 
+            const addressResult = data.features.find((f: any) =>
               f.place_type.includes('address') || f.place_type.includes('poi')
             );
-            
+
             if (addressResult) {
               bestMatch = addressResult;
             }
-            
+
             setPickupLocation(bestMatch.place_name);
-            
+
             // Notify parent component about location selection
             if (onLocationsSelected) {
               onLocationsSelected(
-                { 
-                  address: bestMatch.place_name, 
+                {
+                  address: bestMatch.place_name,
                   coordinates: exactCoords
                 },
                 null
@@ -123,7 +122,7 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
           // If geocoding fails, still use the coordinates
           setPickupLocation(`Near ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
         }
-        
+
         setIsLocating(false);
         setIsAutoLocating(false);
       },
@@ -131,13 +130,13 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
         console.error("Error getting location:", error);
         setIsLocating(false);
         setIsAutoLocating(false);
-        
+
         if (error.code === error.PERMISSION_DENIED) {
           alert("Location access denied. Please enable location services to use this feature.");
         }
       },
-      { 
-        enableHighAccuracy: true, 
+      {
+        enableHighAccuracy: true,
         timeout: 20000,  // Increased timeout
         maximumAge: 0    // Don't use cached position
       }
@@ -161,7 +160,7 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
         `&language=en` +
         `&proximity=31.033,-17.827`
       );
-      
+
       const data = await response.json();
       setSuggestions(data.features || []);
     } catch (error) {
@@ -210,22 +209,22 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
       setPickupLocation(suggestion.place_name);
       setPickupCoords(locationData.coordinates);
       setPickupSuggestions([]);
-      
+
       if (onLocationsSelected) {
-        onLocationsSelected(locationData, deliveryCoords ? { 
-          address: deliveryLocation, 
-          coordinates: deliveryCoords 
+        onLocationsSelected(locationData, deliveryCoords ? {
+          address: deliveryLocation,
+          coordinates: deliveryCoords
         } : null);
       }
     } else {
       setDeliveryLocation(suggestion.place_name);
       setDeliveryCoords(locationData.coordinates);
       setDeliverySuggestions([]);
-      
+
       if (onLocationsSelected) {
-        onLocationsSelected(pickupCoords ? { 
-          address: pickupLocation, 
-          coordinates: pickupCoords 
+        onLocationsSelected(pickupCoords ? {
+          address: pickupLocation,
+          coordinates: pickupCoords
         } : null, locationData);
       }
     }
@@ -236,15 +235,15 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
       alert("Please select valid pickup and delivery locations");
       return;
     }
-    
+
     if (setDeliveryData) {
       setDeliveryData({
         pickup: { address: pickupLocation, coordinates: pickupCoords },
         delivery: { address: deliveryLocation, coordinates: deliveryCoords },
-        fareOffer: fareOffer
+        distance: routeDistance
       });
     }
-    
+
     setCurrentStep("package-details");
   };
 
@@ -263,9 +262,9 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
         customerPhone={customer?.phoneNumber || ""}
         pickupLocation={pickupLocation}
         deliveryLocation={deliveryLocation}
-        fareOffer={fareOffer}
         pickupCoords={pickupCoords}
         deliveryCoords={deliveryCoords}
+        routeDistance={routeDistance}
         onBack={handleBackToBooking}
         onClose={onClose}
       />
@@ -307,7 +306,6 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
           <div className="flex items-center justify-center space-x-2 mb-6">
             <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
             <div className="w-3 h-3 bg-gray-600 rounded-full"></div>
-            <div className="w-3 h-3 bg-gray-600 rounded-full"></div>
           </div>
 
           {/* Route Map Preview */}
@@ -318,6 +316,9 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
                 pickupCoords={pickupCoords}
                 deliveryCoords={deliveryCoords}
                 height="200px"
+                onRouteCalculated={(routeData) => {
+                  setRouteDistance(routeData.distance / 1000); // Convert to km
+                }}
               />
             </div>
           )}
@@ -426,29 +427,6 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* Fare Offer */}
-            <div className="group">
-              <label className="block text-sm font-medium text-purple-300 mb-2">
-                Offer Your Fare ($)
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v-1m0 1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <input
-                  type="number"
-                  value={fareOffer}
-                  onChange={(e) => setFareOffer(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700 text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 backdrop-blur-sm transition-all duration-300"
-                  placeholder="Enter your fare offer"
-                  min="1"
-                  required
-                />
               </div>
             </div>
 
