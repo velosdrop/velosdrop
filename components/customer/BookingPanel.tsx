@@ -6,6 +6,7 @@ import PackageDetails from "@/components/customer/PackageDetails";
 import dynamic from 'next/dynamic';
 import { useDelivery } from '@/app/context/DeliveryContext';
 
+
 // Dynamically import the map component to avoid SSR issues
 const RouteMap = dynamic(() => import('@/components/customer/RouteMap'), {
   ssr: false,

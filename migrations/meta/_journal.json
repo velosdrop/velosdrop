@@ -43,6 +43,13 @@
       "when": 1755466004142,
       "tag": "0005_short_shinko_yamashiro",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1756983118290,
+      "tag": "0006_smiling_joshua_kane",
+      "breakpoints": true
     }
   ]
 }

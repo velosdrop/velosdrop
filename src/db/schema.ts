@@ -1,10 +1,11 @@
+// src/schema.ts
 export type LocationData = {
   longitude: number;
   latitude: number;
 } | null;
 
 import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text, real } from 'drizzle-orm/sqlite-core';
 
 export const customersTable = sqliteTable('customers', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
@@ -21,6 +22,9 @@ export const customersTable = sqliteTable('customers', {
   homeAddress: text('home_address'),
   workAddress: text('work_address'),
   lastLocation: text('last_location').$type<LocationData>().default(null),
+  // NEW: Separate columns for spatial queries
+  latitude: real('latitude'),
+  longitude: real('longitude'),
   
   // Status
   status: text('status').default('active').notNull(),
@@ -52,6 +56,9 @@ export const driversTable = sqliteTable('drivers', {
   // Online status
   isOnline: integer('is_online', { mode: 'boolean' }).default(false).notNull(),
   lastLocation: text('last_location').$type<LocationData>().default(null),
+  // NEW: Separate columns for spatial queries
+  latitude: real('latitude'),
+  longitude: real('longitude'),
   lastOnline: text('last_online').default(sql`CURRENT_TIMESTAMP`).notNull(),
 
   status: text('status').default('pending').notNull(),
@@ -76,17 +83,30 @@ export const otpTable = sqliteTable('otps', {
   expiresAt: text('expires_at').notNull(),
 });
 
+// NEW: Table for driver ratings
+export const driverRatingsTable = sqliteTable('driver_ratings', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  driverId: integer('driver_id').notNull().references(() => driversTable.id),
+  customerId: integer('customer_id').notNull().references(() => customersTable.id),
+  rating: integer('rating').notNull(), // 1-5 stars
+  comment: text('comment'),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export type InsertCustomer = typeof customersTable.$inferInsert;
 export type SelectCustomer = typeof customersTable.$inferSelect;
 export type InsertDriver = typeof driversTable.$inferInsert;
 export type SelectDriver = typeof driversTable.$inferSelect;
 export type InsertOTP = typeof otpTable.$inferInsert;
 export type SelectOTP = typeof otpTable.$inferSelect;
+export type InsertDriverRating = typeof driverRatingsTable.$inferInsert;
+export type SelectDriverRating = typeof driverRatingsTable.$inferSelect;
 
 export interface Customer extends Omit<SelectCustomer, 'isVerified' | 'lastLocation'> {
   isVerified: boolean;
   lastLocation: LocationData;
 }
+
 export interface Driver extends Omit<SelectDriver, 'isOnline' | 'lastLocation'> {
   isOnline: boolean;
   lastLocation: { longitude: number; latitude: number } | null;

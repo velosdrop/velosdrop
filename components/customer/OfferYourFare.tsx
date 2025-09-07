@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { calculateDistance } from "@/utils/pricingCalculator";
+import SearchingForDrivers from "@/components/customer/SearchingForDrivers";
 
 interface OfferYourFareProps {
   packageData: any;
@@ -9,9 +10,9 @@ interface OfferYourFareProps {
   onConfirmFare: (fare: string) => void;
 }
 
-// Simple function to calculate fare based only on distance (50 cents per km)
+// Simple function to calculate fare based only on distance
 const calculateRecommendedFare = (distance: number): number => {
-  // Charge only 95 cents per km as requested
+  // Charge 95 cents per km
   const distanceRate = distance * 0.95;
   
   // Apply minimum and maximum bounds
@@ -21,17 +22,39 @@ const calculateRecommendedFare = (distance: number): number => {
 export default function OfferYourFare({ packageData, onBack, onConfirmFare }: OfferYourFareProps) {
   const [fare, setFare] = useState("");
   const [isVisible, setIsVisible] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Get user's current location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          // Fallback to a default location or handle error
+          setUserLocation({ lat: 0, lng: 0 });
+        }
+      );
+    } else {
+      console.error('Geolocation is not supported by this browser');
+      setUserLocation({ lat: 0, lng: 0 });
+    }
+  }, []);
 
   // Recommended fare calculation based on actual route distance
   const recommendedFare = (() => {
-    // Use the actual route distance if available, otherwise fall back to direct distance
     if (packageData.routeDistance) {
       const fare = calculateRecommendedFare(packageData.routeDistance);
       return fare.toFixed(2);
     }
     
-    // Fallback to direct distance calculation
     if (!packageData.pickupCoords || !packageData.deliveryCoords) return "2.00";
     const distance = calculateDistance(packageData.pickupCoords, packageData.deliveryCoords);
     const fare = calculateRecommendedFare(distance);
@@ -58,7 +81,7 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (fare && parseFloat(fare) > 0) {
-      onConfirmFare(fare);
+      setIsSearching(true);
     }
   };
 
@@ -69,6 +92,29 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
       inputRef.current.focus();
     }
   };
+
+  // Handle fare updates from the SearchingForDrivers component
+  const handleFareUpdate = (newFare: string) => {
+    setFare(newFare);
+  };
+
+  // Handle final confirmation from the SearchingForDrivers component
+  const handleFinalConfirm = () => {
+    onConfirmFare(fare);
+  };
+
+  if (isSearching) {
+    return (
+      <SearchingForDrivers
+        initialFare={fare}
+        onFareChange={handleFareUpdate}
+        onCancel={() => setIsSearching(false)}
+        onConfirm={handleFinalConfirm}
+        packageData={packageData}
+        userLocation={userLocation || { lat: 0, lng: 0 }}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-end justify-center z-50">
@@ -93,11 +139,9 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-
           <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
             Offer Your Fare
           </h2>
-
           <div className="w-10"></div>
         </div>
 
@@ -113,11 +157,9 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
           <div className="text-center">
             <div className="relative flex items-center justify-center max-w-xs mx-auto">
               <div className="absolute left-3 text-purple-400 text-2xl font-bold">$</div>
-
               <div className="absolute right-3">
                 <div className="h-8 w-px bg-purple-500 mx-2 animate-pulse"></div>
               </div>
-
               <input
                 ref={inputRef}
                 type="text"
@@ -226,7 +268,7 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
             </button>
             {packageData.routeDistance ? (
               <p className="text-xs text-gray-500 mt-2">
-                 Distance: {packageData.routeDistance.toFixed(1)} km
+                Distance: {packageData.routeDistance.toFixed(1)} km
               </p>
             ) : (
               <p className="text-xs text-gray-500 mt-2">

@@ -45,6 +45,7 @@ export default function CustomerMap({
   const [currentAddress, setCurrentAddress] = useState<string>('');
   const [isLocating, setIsLocating] = useState(false);
   const [routeData, setRouteData] = useState<any>(null);
+  
 
   // Get address from coordinates
   const getAddressFromCoords = async (lng: number, lat: number): Promise<string> => {
@@ -277,17 +278,17 @@ export default function CustomerMap({
     if (!navigator.geolocation) {
       setMapError('Geolocation is not supported by your browser');
       return;
-    }
+    }  
 
     setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const location = {
-          longitude: position.coords.longitude,
-          latitude: position.coords.latitude
-        };
-        
-        setCurrentLocation(location);
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const location = {
+        longitude: position.coords.longitude,
+        latitude: position.coords.latitude
+      };
+      
+      setCurrentLocation(location);
         
         // Get address from coordinates
         const address = await getAddressFromCoords(location.longitude, location.latitude);
