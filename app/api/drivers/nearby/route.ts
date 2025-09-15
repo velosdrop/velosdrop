@@ -1,28 +1,28 @@
-// app/api/drivers/nearby/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/src/db';
 import { driversTable, driverRatingsTable } from '@/src/db/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, isNotNull } from 'drizzle-orm';
 
-// Helper function to calculate approximate distance
+// Helper function to calculate approximate distance (Haversine)
 const calculateDistance = (
-  lat1: number, 
-  lng1: number, 
-  lat2: number, 
+  lat1: number,
+  lng1: number,
+  lat2: number,
   lng2: number
 ): number => {
-  // Convert degrees to radians
   const toRad = (degree: number) => degree * (Math.PI / 180);
-  
   const R = 6371; // Earth's radius in km
+
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
-  
-  const a = 
+
+  const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
@@ -54,15 +54,16 @@ export async function GET(request: NextRequest) {
     const avgRatingSubquery = db
       .select({
         driverId: driverRatingsTable.driverId,
-        averageRating: sql`coalesce(avg(${driverRatingsTable.rating}), 0)`.as('averageRating'),
-        totalRatings: sql`count(*)`.as('totalRatings')
+        averageRating: sql`coalesce(avg(${driverRatingsTable.rating}), 0)`.as(
+          'averageRating'
+        ),
+        totalRatings: sql`count(*)`.as('totalRatings'),
       })
       .from(driverRatingsTable)
       .groupBy(driverRatingsTable.driverId)
       .as('ratings');
 
     // First get all online drivers with their locations
-    // REMOVED: eq(driversTable.status, 'approved') filter
     const allDrivers = await db
       .select({
         id: driversTable.id,
@@ -75,43 +76,58 @@ export async function GET(request: NextRequest) {
         latitude: driversTable.latitude,
         longitude: driversTable.longitude,
         isOnline: driversTable.isOnline,
-        averageRating: sql`coalesce(${avgRatingSubquery.averageRating}, 0)`.as('averageRating'),
-        totalRatings: sql`coalesce(${avgRatingSubquery.totalRatings}, 0)`.as('totalRatings'),
+        averageRating: sql`coalesce(${avgRatingSubquery.averageRating}, 0)`.as(
+          'averageRating'
+        ),
+        totalRatings: sql`coalesce(${avgRatingSubquery.totalRatings}, 0)`.as(
+          'totalRatings'
+        ),
       })
       .from(driversTable)
       .leftJoin(avgRatingSubquery, eq(avgRatingSubquery.driverId, driversTable.id))
       .where(
         and(
           eq(driversTable.isOnline, true),
-          // REMOVED the status filter: eq(driversTable.status, 'approved'),
-          sql`${driversTable.latitude} IS NOT NULL`,
-          sql`${driversTable.longitude} IS NOT NULL`
+          isNotNull(driversTable.latitude),
+          isNotNull(driversTable.longitude)
         )
       )
-      .limit(50);
+      .limit(100);
 
     console.log('All online drivers found:', allDrivers.length);
 
-    // Calculate distance on the server side (not in SQL)
+    // Calculate distance and filter nearby
     const driversWithDistance = allDrivers
-      .map(driver => {
-        const distance = calculateDistance(
+      .map((driver) => {
+        const driverLat = driver.latitude
+          ? parseFloat(String(driver.latitude))
+          : NaN;
+        const driverLng = driver.longitude
+          ? parseFloat(String(driver.longitude))
+          : NaN;
+
+        const distance = calculateDistance(userLat, userLng, driverLat, driverLng);
+
+        console.log('Distance calc:', {
+          driverId: driver.id,
           userLat,
           userLng,
-          driver.latitude as number,
-          driver.longitude as number
-        );
-        
+          driverLat,
+          driverLng,
+          distance,
+        });
+
         return {
           ...driver,
           distance,
           isOnline: Boolean(driver.isOnline),
-          rating: parseFloat(driver.averageRating as unknown as string) || 0
+          rating: parseFloat(String(driver.averageRating)) || 0,
+          totalRatings: parseInt(String(driver.totalRatings)) || 0,
         };
       })
-      .filter(driver => driver.distance <= radius)
+      .filter((driver) => !isNaN(driver.distance) && driver.distance <= radius) // allow distance === 0
       .sort((a, b) => a.distance - b.distance)
-      .slice(0, 20); // Limit to 20 closest drivers
+      .slice(0, 20);
 
     console.log('Found nearby drivers:', driversWithDistance.length);
 

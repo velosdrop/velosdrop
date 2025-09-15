@@ -5,24 +5,32 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '@/src/db';
 import { eq } from 'drizzle-orm';
 import { driversTable } from '@/src/db/schema';
-import { FiMenu, FiX, FiTruck, FiDollarSign, FiUser, FiCamera, FiUpload, FiStar, FiMap } from 'react-icons/fi';
+import { FiMenu, FiX, FiTruck, FiDollarSign, FiUser, FiCamera, FiUpload, FiStar, FiMap, FiBell } from 'react-icons/fi';
 import dynamic from 'next/dynamic';
 import LocationPermissionRequest from '@/components/driver/LocationPermissionRequest';
 import type { Driver } from '@/src/db/schema';
 import Wallet from '@/components/driver/wallet';
-
+import BookingNotification from '@/components/driver/BookingNotification';
 const Map = dynamic(() => import('@/components/driver/Map'), {
   ssr: false,
   loading: () => <div className="h-full flex items-center justify-center">Loading map...</div>,
 });
-
 interface LocationData {
   latitude: number;
   longitude: number;
   accuracy?: number;
   timestamp?: string;
 }
-
+interface BookingRequest {
+  id: number;
+  customerUsername: string;
+  pickupLocation: string;
+  dropoffLocation: string;
+  fare: number;
+  distance: number;
+  expiresIn: number;
+  createdAt: string;
+}
 export default function DriverDashboard() {
   const router = useRouter();
   const [driverData, setDriverData] = useState<Driver | null>(null);
@@ -35,14 +43,16 @@ export default function DriverDashboard() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('map');
   const [locationGranted, setLocationGranted] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
+  const [bookingRequest, setBookingRequest] = useState<BookingRequest | null>(null);
+  const [hasNewNotification, setHasNewNotification] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isSSEConnected, setIsSSEConnected] = useState(false);
   const [ratings] = useState({
     average: 4.5,
     total: 24,
     breakdown: [5, 4, 3, 2, 1]
   });
-
   // Location update function
   const getGeolocationErrorText = (code: number): string => {
     switch(code) {
@@ -56,20 +66,17 @@ export default function DriverDashboard() {
         return 'Unknown error occurred while getting location';
     }
   };
-
   // Location update function
   const updateDriverLocation = useCallback(async (position: GeolocationPosition) => {
     if (!driverData?.id || !isOnline) return;
-
     const location: LocationData = {
       latitude: position.coords.latitude,
       longitude: position.coords.longitude,
       accuracy: position.coords.accuracy,
       timestamp: new Date().toISOString()
     };
-
     try {
-      const response = await fetch('/api/driver/update-location', {
+      const response = await fetch('/api/drivers/update-location', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -79,7 +86,6 @@ export default function DriverDashboard() {
           location
         }),
       });
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to update location');
@@ -88,26 +94,21 @@ export default function DriverDashboard() {
       console.error('Location update error:', error instanceof Error ? error.message : error);
     }
   }, [driverData?.id, isOnline]);
-
   useEffect(() => {
     const isAuthenticated = sessionStorage.getItem('driver-auth-token') === 'true';
     const driverIdStr = sessionStorage.getItem('driver-id');
     const driverId = driverIdStr ? parseInt(driverIdStr) : null;
-
     if (!isAuthenticated || !driverId) {
       router.push('/driver-login');
       return;
     }
-
     const fetchDriverData = async () => {
       try {
         const driver = await db.query.driversTable.findFirst({
           where: eq(driversTable.id, driverId),
         });
-
         if (driver) {
           let parsedLocation = null;
-          
           if (driver.lastLocation && typeof driver.lastLocation === 'string') {
             try {
               parsedLocation = JSON.parse(driver.lastLocation);
@@ -120,14 +121,12 @@ export default function DriverDashboard() {
               parsedLocation = null;
             }
           }
-
           const formattedDriver: Driver = {
             ...driver,
             profilePictureUrl: driver.profilePictureUrl || '/driver-avatar.jpg',
             isOnline: driver.isOnline,
             lastLocation: parsedLocation
           };
-          
           setDriverData(formattedDriver);
           setIsOnline(formattedDriver.isOnline);
         }
@@ -137,20 +136,16 @@ export default function DriverDashboard() {
         setIsLoading(false);
       }
     };
-
     fetchDriverData();
   }, [router]);
-
   useEffect(() => {
     if (!driverData?.id) return;
-
     const checkOnlineStatus = async () => {
       try {
         const driver = await db.query.driversTable.findFirst({
           where: eq(driversTable.id, driverData.id),
           columns: { isOnline: true }
         });
-        
         if (driver && driver.isOnline !== isOnline) {
           setIsOnline(driver.isOnline);
           setDriverData(prev => prev ? { ...prev, isOnline: driver.isOnline } : null);
@@ -159,15 +154,73 @@ export default function DriverDashboard() {
         console.error('Error checking online status:', error);
       }
     };
-
     const interval = setInterval(checkOnlineStatus, 30000);
     return () => clearInterval(interval);
   }, [driverData?.id, isOnline]);
-
+  // SSE Connection for receiving booking requests - REPLACE THIS ENTIRE useEffect
+  useEffect(() => {
+    let reconnectTimeout: NodeJS.Timeout;
+    const setupSSEConnection = () => {
+      if (!isOnline || !driverData?.id) return;
+      // Clean up any existing connection
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      console.log('🚀 Setting up SSE connection for driver:', driverData.id);
+      const eventSourceUrl = `/api/drivers/updates?driverId=${driverData.id}&type=driver&t=${Date.now()}`;
+      const eventSource = new EventSource(eventSourceUrl);
+      eventSourceRef.current = eventSource;
+      eventSource.onopen = () => {
+        console.log('✅ SSE connection opened');
+        setIsSSEConnected(true);
+        setHasNewNotification(false);
+      };
+      eventSource.addEventListener('bookingRequest', (event) => {
+        try {
+          console.log('🎯 Raw booking request event:', event);
+          const data = JSON.parse(event.data);
+          console.log('🎯 Received booking request:', data);
+          if (data && data.request) {
+            setBookingRequest(data.request);
+            setHasNewNotification(true);
+            // Auto-dismiss after 30 seconds
+            setTimeout(() => {
+              setBookingRequest(null);
+              setHasNewNotification(false);
+            }, 30000);
+          } else {
+            console.log('⚠️ Invalid booking request format:', data);
+          }
+        } catch (error) {
+          console.error('Error processing booking request:', error);
+        }
+      });
+      eventSource.onerror = (error) => {
+        console.error('❌ SSE connection error:', error);
+        setIsSSEConnected(false);
+        eventSource.close();
+        reconnectTimeout = setTimeout(() => {
+          console.log('🔄 Attempting to reconnect SSE...');
+          setupSSEConnection();
+        }, 3000);
+      };
+    };
+    // Initial connection setup
+    setupSSEConnection();
+    return () => {
+      // Cleanup on unmount or dependency change
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setIsSSEConnected(false);
+    };
+  }, [isOnline, driverData?.id]);
   // Watch location when online
   useEffect(() => {
     if (!isOnline || !locationGranted) return;
-  
     let watchId: number;
     if (navigator.geolocation) {
       watchId = navigator.geolocation.watchPosition(
@@ -180,7 +233,6 @@ export default function DriverDashboard() {
             POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
             TIMEOUT: error.TIMEOUT
           });
-          
           if (error.code === error.PERMISSION_DENIED) {
             setLocationGranted(false);
           }
@@ -192,12 +244,120 @@ export default function DriverDashboard() {
         }
       );
     }
-  
     return () => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
     };
   }, [isOnline, locationGranted, updateDriverLocation]);
+  // Clean up SSE connection when component unmounts
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, []);
+  // Add this useEffect to monitor connection status
+  useEffect(() => {
+    if (isOnline && driverData?.id) {
+      const interval = setInterval(() => {
+        console.log('🔍 Driver Connection Status:', {
+          driverId: driverData.id,
+          isOnline,
+          sseReadyState: eventSourceRef.current?.readyState,
+          sseUrl: eventSourceRef.current?.url
+        });
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [isOnline, driverData?.id]);
+  const handleBookingAccept = async () => {
+    if (!bookingRequest || !driverData) return;
+    try {
+      const response = await fetch('/api/bookings/respond', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requestId: bookingRequest.id,
+          driverId: driverData.id,
+          response: 'accepted'
+        }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to accept booking');
+      }
+      setBookingRequest(null);
+      setHasNewNotification(false);
+      // Optionally switch to deliveries tab or show confirmation
+      setActiveTab('deliveries');
+    } catch (error) {
+      console.error('Error accepting booking:', error);
+    }
+  };
 
+  // Add this function to validate and refresh connection
+const validateConnection = useCallback(async () => {
+  if (!driverData?.id) return;
+  
+  try {
+    const response = await fetch('/api/drivers/validate-connection', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ driverId: driverData.id }),
+    });
+    
+    const result = await response.json();
+    console.log('Connection validation result:', result);
+    
+    if (!result.isConnected || !result.isWritable) {
+      // Force reconnection
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      // The useEffect will automatically reconnect
+    }
+  } catch (error) {
+    console.error('Connection validation failed:', error);
+  }
+}, [driverData?.id]);
+
+// Add this to your useEffect or call it periodically
+useEffect(() => {
+  if (isOnline) {
+    const validationInterval = setInterval(validateConnection, 30000);
+    return () => clearInterval(validationInterval);
+  }
+}, [isOnline, validateConnection]);
+
+  const handleBookingReject = async () => {
+    if (!bookingRequest || !driverData) return;
+    try {
+      await fetch('/api/bookings/respond', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requestId: bookingRequest.id,
+          driverId: driverData.id,
+          response: 'rejected'
+        }),
+      });
+      setBookingRequest(null);
+      setHasNewNotification(false);
+    } catch (error) {
+      console.error('Error rejecting booking:', error);
+    }
+  };
+  const handleBookingExpire = () => {
+    setBookingRequest(null);
+    setHasNewNotification(false);
+  };
   const handleLogout = async () => {
     if (driverData?.id) {
       try {
@@ -215,31 +375,46 @@ export default function DriverDashboard() {
     sessionStorage.removeItem('driver-id');
     router.push('/driver-login');
   };
-
   const toggleOnlineStatus = async () => {
     if (!driverData?.id) return;
-    
     const newStatus = !isOnline;
     setIsUpdatingStatus(true);
-    
     try {
-      await db.update(driversTable)
-        .set({ 
+      const response = await fetch('/api/drivers/online', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          driverId: driverData.id,
           isOnline: newStatus,
-          ...(newStatus ? {} : { lastOnline: new Date().toISOString() })
-        })
-        .where(eq(driversTable.id, driverData.id));
-
-      setIsOnline(newStatus);
-      setDriverData(prev => prev ? { ...prev, isOnline: newStatus } : null);
-      if (newStatus) setLocationGranted(true);
+          latitude: driverData.latitude || -17.8710215,
+          longitude: driverData.longitude || 30.9560123
+        }),
+      });
+      if (response.ok) {
+        const result = await response.json();
+        setIsOnline(newStatus);
+        setDriverData(prev => prev ? { ...prev, isOnline: newStatus } : null);
+        if (newStatus) {
+          setLocationGranted(true);
+          // SSE connection will be re-established automatically by the useEffect
+        } else {
+          setBookingRequest(null);
+          setHasNewNotification(false);
+          // SSE connection will be cleaned up automatically by the useEffect
+        }
+      } else {
+        throw new Error('Failed to update online status');
+      }
     } catch (error) {
       console.error('Error updating online status:', error);
+      // Revert the UI state if the API call failed
+      setIsOnline(isOnline);
     } finally {
       setIsUpdatingStatus(false);
     }
   };
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -251,22 +426,17 @@ export default function DriverDashboard() {
       reader.readAsDataURL(file);
     }
   };
-
   const handleUpload = async () => {
     if (!selectedFile || !driverData?.id) return;
-
     try {
       const newProfilePicUrl = previewUrl || '/default-avatar.png';
-      
       await db.update(driversTable)
         .set({ profilePictureUrl: newProfilePicUrl })
         .where(eq(driversTable.id, driverData.id));
-
       setDriverData(prev => prev ? { 
         ...prev,
         profilePictureUrl: newProfilePicUrl
       } : null);
-
       setIsEditingProfile(false);
       setSelectedFile(null);
       setPreviewUrl(null);
@@ -274,7 +444,6 @@ export default function DriverDashboard() {
       console.error('Error updating profile picture:', error);
     }
   };
-
   const renderStars = (rating: number) => {
     const stars = [];
     for (let i = 1; i <= 5; i++) {
@@ -287,7 +456,6 @@ export default function DriverDashboard() {
     }
     return stars;
   };
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -299,9 +467,29 @@ export default function DriverDashboard() {
       </div>
     );
   }
-
   return (
     <div className="min-h-screen bg-gray-100 flex">
+      {/* Booking Notification */}
+      {bookingRequest && (
+        <BookingNotification
+          request={bookingRequest}
+          onAccept={handleBookingAccept}
+          onReject={handleBookingReject}
+          onExpire={handleBookingExpire}
+          isConnected={isSSEConnected} 
+        />
+      )}
+{isOnline && (
+  <div className="fixed bottom-4 right-4 bg-gray-800 p-3 rounded-lg text-xs text-white z-40">
+    <div className="flex items-center space-x-2">
+      <div className={`w-3 h-3 rounded-full ${isSSEConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+      <span>SSE: {isSSEConnected ? 'Connected' : 'Disconnected'}</span>
+    </div>
+    <div className="mt-1 text-gray-400">
+      Driver ID: {driverData?.id} | Online: {isOnline ? 'Yes' : 'No'}
+    </div>
+  </div>
+)}
       {/* Mobile Sidebar Toggle Button */}
       <button 
         onClick={() => setSidebarOpen(true)}
@@ -309,7 +497,6 @@ export default function DriverDashboard() {
       >
         <FiMenu size={24} />
       </button>
-
       {/* Desktop Sidebar */}
       <div className="hidden md:flex md:w-64 bg-black text-white flex-col border-r border-gray-800">
         <div className="flex flex-col h-full p-4">
@@ -334,7 +521,6 @@ export default function DriverDashboard() {
             <h3 className="text-xl font-semibold text-white">
               {driverData?.firstName} {driverData?.lastName}
             </h3>
-            
             {/* Status Indicator */}
             <div className="flex items-center mt-2">
               <span className={`h-2 w-2 rounded-full mr-2 ${isOnline ? 'bg-green-500' : 'bg-gray-500'}`}></span>
@@ -342,7 +528,6 @@ export default function DriverDashboard() {
                 {isOnline ? 'Online' : 'Offline'}
               </span>
             </div>
-            
             {/* Ratings Display */}
             <div className="flex items-center mt-2">
               <div className="flex mr-2">
@@ -353,12 +538,11 @@ export default function DriverDashboard() {
               </span>
             </div>
           </div>
-
           {/* Menu Items */}
           <nav className="flex-1 mt-6">
             <ul className="space-y-2">
               <li>
-                <button 
+              <button 
                   onClick={() => setActiveTab('map')}
                   className={`w-full text-left flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'map' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
@@ -403,7 +587,6 @@ export default function DriverDashboard() {
               </li>
             </ul>
           </nav>
-
           {/* Logout Button */}
           <button 
             onClick={handleLogout}
@@ -414,7 +597,6 @@ export default function DriverDashboard() {
           </button>
         </div>
       </div>
-
       {/* Mobile Sidebar */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -426,7 +608,6 @@ export default function DriverDashboard() {
               className="fixed inset-0 bg-black z-40 md:hidden"
               onClick={() => setSidebarOpen(false)}
             />
-            
             <motion.div
               initial={{ x: -300 }}
               animate={{ x: 0 }}
@@ -441,7 +622,6 @@ export default function DriverDashboard() {
                 >
                   <FiX size={24} />
                 </button>
-
                 {/* Mobile Sidebar Content */}
                 <div className="flex flex-col items-center py-6 border-b border-gray-800">
                   <div className="relative w-20 h-20 rounded-full bg-gray-800 mb-4 overflow-hidden">
@@ -472,7 +652,6 @@ export default function DriverDashboard() {
                     </span>
                   </div>
                 </div>
-
                 <nav className="flex-1 mt-6">
                   <ul className="space-y-2">
                     <li>
@@ -533,7 +712,6 @@ export default function DriverDashboard() {
                     </li>
                   </ul>
                 </nav>
-
                 <button 
                   onClick={handleLogout}
                   className="mt-auto p-3 text-left rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition-colors flex items-center"
@@ -546,7 +724,6 @@ export default function DriverDashboard() {
           </>
         )}
       </AnimatePresence>
-
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden bg-white">
         {/* Status Bar */}
@@ -565,7 +742,14 @@ export default function DriverDashboard() {
                activeTab === 'map' ? 'Delivery Map' : 'Driver Dashboard'}
             </h1>
           </div>
-          <div className="flex items-center">
+          <div className="flex items-center space-x-4">
+            {/* Notification Bell */}
+            {hasNewNotification && (
+              <div className="relative">
+                <FiBell className="h-6 w-6 text-purple-600 animate-pulse" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
+              </div>
+            )}
             <span className={`mr-3 text-sm font-medium ${isOnline ? 'text-purple-600' : 'text-gray-600'}`}>
               {isOnline ? 'Online - Available' : 'Offline'}
             </span>
@@ -584,7 +768,6 @@ export default function DriverDashboard() {
             </button>
           </div>
         </div>
-
         {/* Profile Edit Modal */}
         <AnimatePresence>
           {isEditingProfile && (
@@ -596,7 +779,6 @@ export default function DriverDashboard() {
                 className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl"
               >
                 <h2 className="text-xl font-bold mb-4 text-gray-900">Update Profile Picture</h2>
-                
                 <div className="flex flex-col items-center mb-4">
                   <div className="w-32 h-32 rounded-full bg-gray-200 mb-4 overflow-hidden">
                     <img 
@@ -605,7 +787,6 @@ export default function DriverDashboard() {
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -613,7 +794,6 @@ export default function DriverDashboard() {
                     accept="image/*"
                     className="hidden"
                   />
-                  
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className="px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center hover:bg-purple-700 transition-colors"
@@ -622,7 +802,6 @@ export default function DriverDashboard() {
                     Choose Image
                   </button>
                 </div>
-                
                 <div className="flex justify-end space-x-3">
                   <button
                     onClick={() => {
@@ -648,7 +827,6 @@ export default function DriverDashboard() {
             </div>
           )}
         </AnimatePresence>
-
         {/* Main Content Area */}
         <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
           {activeTab === 'profile' ? (
@@ -669,7 +847,6 @@ export default function DriverDashboard() {
                   <h2 className="text-xl font-bold text-gray-900">
                     {driverData?.firstName} {driverData?.lastName}
                   </h2>
-                  
                   {/* Status Indicator */}
                   <div className="flex items-center mt-2">
                     <span className={`h-2 w-2 rounded-full mr-2 ${isOnline ? 'bg-green-500' : 'bg-gray-500'}`}></span>
@@ -677,7 +854,6 @@ export default function DriverDashboard() {
                       {isOnline ? 'Currently Online' : 'Currently Offline'}
                     </span>
                   </div>
-                  
                   {/* Ratings Display */}
                   <div className="mt-4 text-center">
                     <div className="flex justify-center mb-1">
@@ -688,7 +864,6 @@ export default function DriverDashboard() {
                     </p>
                   </div>
                 </div>
-
                 {/* Personal Details */}
                 <div className="md:w-2/3">
                   <h3 className="text-lg font-semibold mb-4 text-gray-900">Personal Information</h3>
@@ -710,7 +885,6 @@ export default function DriverDashboard() {
                       <p className="font-medium text-gray-900">{driverData?.phoneNumber}</p>
                     </div>
                   </div>
-
                   <h3 className="text-lg font-semibold mt-6 mb-4 text-gray-900">Vehicle Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -749,13 +923,84 @@ export default function DriverDashboard() {
             </div>
           ) : activeTab === 'wallet' ? (
             <Wallet />
+          ) : activeTab === 'deliveries' ? (
+            <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900">My Deliveries</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Sample delivery cards */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                      Completed
+                    </span>
+                    <span className="text-sm text-gray-500">2 hours ago</span>
+                  </div>
+                  <p className="font-medium text-gray-900">City Center to Airport</p>
+                  <p className="text-sm text-gray-600 mt-1">Customer: john_doe</p>
+                  <div className="flex items-center justify-between mt-3">
+                    <span className="text-sm font-medium text-gray-900">$15.50</span>
+                    <span className="text-sm text-gray-500">5.2 km</span>
+                  </div>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                      In Progress
+                    </span>
+                    <span className="text-sm text-gray-500">Now</span>
+                  </div>
+                  <p className="font-medium text-gray-900">Mall to Residential</p>
+                  <p className="text-sm text-gray-600 mt-1">Customer: sarah_m</p>
+                  <div className="flex items-center justify-between mt-3">
+                    <span className="text-sm font-medium text-gray-900">$12.00</span>
+                    <span className="text-sm text-gray-500">3.8 km</span>
+                  </div>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
+                      Scheduled
+                    </span>
+                    <span className="text-sm text-gray-500">Tomorrow</span>
+                  </div>
+                  <p className="font-medium text-gray-900">Office to Home</p>
+                  <p className="text-sm text-gray-600 mt-1">Customer: mike_t</p>
+                  <div className="flex items-center justify-between mt-3">
+                    <span className="text-sm font-medium text-gray-900">$18.75</span>
+                    <span className="text-sm text-gray-500">7.1 km</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="bg-white rounded-lg shadow-sm h-full flex items-center justify-center border border-gray-200">
               <div className="text-center p-6">
+                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <FiTruck className="h-8 w-8 text-purple-600" />
+                </div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  My Deliveries
+                  Ready to Deliver?
                 </h3>
-                <p className="text-gray-600">Content will appear here</p>
+                <p className="text-gray-600 mb-4">
+                  Go online to start receiving delivery requests from customers in your area.
+                </p>
+                <button
+                  onClick={toggleOnlineStatus}
+                  disabled={isUpdatingStatus}
+                  className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                    isOnline 
+                      ? 'bg-red-600 text-white hover:bg-red-700' 
+                      : 'bg-green-600 text-white hover:bg-green-700'
+                  } ${isUpdatingStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {isUpdatingStatus ? (
+                    <span>Updating...</span>
+                  ) : isOnline ? (
+                    <span>Go Offline</span>
+                  ) : (
+                    <span>Go Online</span>
+                  )}
+                </button>
               </div>
             </div>
           )}

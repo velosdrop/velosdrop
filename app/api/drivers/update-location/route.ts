@@ -7,7 +7,7 @@ import { broadcastDriverUpdate } from "@/lib/sse";
 
 export async function POST(request: Request) {
   const { driverId, location } = await request.json();
-  
+
   if (!driverId || !location) {
     return NextResponse.json(
       { error: 'Missing required fields' },
@@ -15,42 +15,59 @@ export async function POST(request: Request) {
     );
   }
 
-  // Validate location structure
-  if (typeof location !== 'object' || !location.latitude || !location.longitude) {
+  // Ensure lat/lng exist
+  if (
+    typeof location !== 'object' ||
+    location.latitude === undefined ||
+    location.longitude === undefined
+  ) {
     return NextResponse.json(
       { error: 'Invalid location format' },
       { status: 400 }
     );
   }
 
+  // Parse and validate lat/lng
+  const latitude = parseFloat(String(location.latitude));
+  const longitude = parseFloat(String(location.longitude));
+
+  if (isNaN(latitude) || isNaN(longitude)) {
+    return NextResponse.json(
+      { error: 'Latitude and longitude must be valid numbers' },
+      { status: 400 }
+    );
+  }
+
   try {
-    // Stringify the location object for lastLocation field
-    const locationString = JSON.stringify(location);
-    
-    // Update both the JSON field and separate latitude/longitude columns
-    await db.update(driversTable)
-      .set({ 
+    // Stringify the normalized location object
+    const locationString = JSON.stringify({ latitude, longitude });
+
+    // Update the DB (numbers guaranteed)
+    await db
+      .update(driversTable)
+      .set({
         lastLocation: sql`${locationString}`,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        updatedAt: sql`CURRENT_TIMESTAMP`
+        latitude,
+        longitude,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(driversTable.id, driverId));
-    
-    // Get updated driver data
-    const updatedDriver = await db.select()
+
+    // Fetch updated driver
+    const updatedDriver = await db
+      .select()
       .from(driversTable)
       .where(eq(driversTable.id, driverId))
       .limit(1);
-    
-    // Broadcast the update to all connected clients
+
+    // Broadcast location update
     if (updatedDriver.length > 0) {
       broadcastDriverUpdate({
         type: 'LOCATION_UPDATE',
-        driver: updatedDriver[0]
+        driver: updatedDriver[0],
       });
     }
-    
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating driver location:', error);

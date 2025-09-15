@@ -1,4 +1,3 @@
-// src/schema.ts
 export type LocationData = {
   longitude: number;
   latitude: number;
@@ -22,7 +21,7 @@ export const customersTable = sqliteTable('customers', {
   homeAddress: text('home_address'),
   workAddress: text('work_address'),
   lastLocation: text('last_location').$type<LocationData>().default(null),
-  // NEW: Separate columns for spatial queries
+  // Separate columns for spatial queries
   latitude: real('latitude'),
   longitude: real('longitude'),
   
@@ -56,7 +55,7 @@ export const driversTable = sqliteTable('drivers', {
   // Online status
   isOnline: integer('is_online', { mode: 'boolean' }).default(false).notNull(),
   lastLocation: text('last_location').$type<LocationData>().default(null),
-  // NEW: Separate columns for spatial queries
+  // Separate columns for spatial queries
   latitude: real('latitude'),
   longitude: real('longitude'),
   lastOnline: text('last_online').default(sql`CURRENT_TIMESTAMP`).notNull(),
@@ -66,9 +65,34 @@ export const driversTable = sqliteTable('drivers', {
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+// Delivery requests table
+export const deliveryRequestsTable = sqliteTable('delivery_requests', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  customerId: integer('customer_id').notNull().references(() => customersTable.id, { onDelete: 'cascade' }),
+  customerUsername: text('customer_username').notNull(),
+  pickupLocation: text('pickup_location').notNull(),
+  dropoffLocation: text('dropoff_location').notNull(),
+  fare: real('fare').notNull(),
+  distance: real('distance').notNull(),
+  packageDetails: text('package_details'),
+  status: text('status').default('pending').notNull(), // pending, accepted, rejected, completed, expired
+  assignedDriverId: integer('assigned_driver_id').references(() => driversTable.id), 
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  expiresAt: text('expires_at').notNull(), // 30-second timeout
+});
+
+// Driver responses table
+export const driverResponsesTable = sqliteTable('driver_responses', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  requestId: integer('request_id').notNull().references(() => deliveryRequestsTable.id, { onDelete: 'cascade' }),
+  driverId: integer('driver_id').notNull().references(() => driversTable.id, { onDelete: 'cascade' }),
+  response: text('response').notNull(), // 'accepted', 'rejected'
+  respondedAt: text('responded_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const driverTransactions = sqliteTable('driver_transactions', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
-  driver_id: integer('driver_id').notNull().references(() => driversTable.id),
+  driver_id: integer('driver_id').notNull().references(() => driversTable.id, { onDelete: 'cascade' }),
   amount: integer('amount').notNull(),
   payment_intent_id: text('payment_intent_id').notNull(),
   status: text('status').notNull(),
@@ -83,11 +107,11 @@ export const otpTable = sqliteTable('otps', {
   expiresAt: text('expires_at').notNull(),
 });
 
-// NEW: Table for driver ratings
+// Table for driver ratings
 export const driverRatingsTable = sqliteTable('driver_ratings', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
-  driverId: integer('driver_id').notNull().references(() => driversTable.id),
-  customerId: integer('customer_id').notNull().references(() => customersTable.id),
+  driverId: integer('driver_id').notNull().references(() => driversTable.id, { onDelete: 'cascade' }),
+  customerId: integer('customer_id').notNull().references(() => customersTable.id, { onDelete: 'cascade' }),
   rating: integer('rating').notNull(), // 1-5 stars
   comment: text('comment'),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
@@ -101,6 +125,10 @@ export type InsertOTP = typeof otpTable.$inferInsert;
 export type SelectOTP = typeof otpTable.$inferSelect;
 export type InsertDriverRating = typeof driverRatingsTable.$inferInsert;
 export type SelectDriverRating = typeof driverRatingsTable.$inferSelect;
+export type InsertDeliveryRequest = typeof deliveryRequestsTable.$inferInsert;
+export type SelectDeliveryRequest = typeof deliveryRequestsTable.$inferSelect;
+export type InsertDriverResponse = typeof driverResponsesTable.$inferInsert;
+export type SelectDriverResponse = typeof driverResponsesTable.$inferSelect;
 
 export interface Customer extends Omit<SelectCustomer, 'isVerified' | 'lastLocation'> {
   isVerified: boolean;
@@ -112,3 +140,9 @@ export interface Driver extends Omit<SelectDriver, 'isOnline' | 'lastLocation'> 
   lastLocation: { longitude: number; latitude: number } | null;
   profilePictureUrl: string;
 }
+
+export interface DeliveryRequest extends SelectDeliveryRequest {
+  customerUsername: string;
+}
+
+export interface DriverResponse extends SelectDriverResponse {}

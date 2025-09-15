@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { calculateDistance } from "@/utils/pricingCalculator";
 import SearchingForDrivers from "@/components/customer/SearchingForDrivers";
+import { useUser } from '@/app/context/UserContext';
 
 interface OfferYourFareProps {
   packageData: any;
@@ -25,6 +26,7 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
   const [isSearching, setIsSearching] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { customer } = useUser(); // Get customer from context
 
   // Get user's current location
   useEffect(() => {
@@ -110,8 +112,15 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
         onFareChange={handleFareUpdate}
         onCancel={() => setIsSearching(false)}
         onConfirm={handleFinalConfirm}
-        packageData={packageData}
+        packageData={{
+          pickupAddress: packageData.pickupLocation,
+          dropoffAddress: packageData.deliveryLocation,
+          routeDistance: packageData.routeDistance || 0,
+          packageDescription: packageData.packageDescription
+        }}
         userLocation={userLocation || { lat: 0, lng: 0 }}
+        customerId={customer?.id || 0} // Pass customerId
+        customerUsername={customer?.phoneNumber || packageData.customerPhone} // Use phone as username
       />
     );
   }

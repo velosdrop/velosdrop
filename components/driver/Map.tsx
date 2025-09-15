@@ -93,7 +93,7 @@ export default function Map({
     if (!driverId || !isOnline) return;
     
     try {
-      const response = await fetch('/api/driver/update-location', {
+      const response = await fetch('/api/drivers/update-location', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

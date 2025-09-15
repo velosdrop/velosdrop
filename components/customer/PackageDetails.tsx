@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import OfferYourFare from "@/components/customer/OfferYourFare";
+import { useUser } from '@/app/context/UserContext';
 
 interface PackageDetailsProps {
+  customerId?: number; 
   customerPhone: string;
   pickupLocation: string;
   deliveryLocation: string;
@@ -27,6 +29,7 @@ export default function PackageDetails({
   const [recipientPhone, setRecipientPhone] = useState("");
   const [packageDescription, setPackageDescription] = useState("");
   const [currentStep, setCurrentStep] = useState("package-details");
+  const { customer } = useUser(); // Get customer from context
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,6 +44,7 @@ export default function PackageDetails({
   const handleConfirmFare = (fare: string) => {
     // Handle the final submission with the fare
     console.log({
+      customerId: customer?.id,
       customerPhone,
       recipientPhone,
       pickupLocation,
@@ -57,6 +61,7 @@ export default function PackageDetails({
     return (
       <OfferYourFare
         packageData={{
+          customerId: customer?.id, // Pass customer ID
           customerPhone,
           recipientPhone,
           pickupLocation,
@@ -64,7 +69,7 @@ export default function PackageDetails({
           packageDescription,
           pickupCoords,
           deliveryCoords,
-          routeDistance // Add this
+          routeDistance
         }}
         onBack={handleBackToPackageDetails}
         onConfirmFare={handleConfirmFare}

@@ -260,6 +260,7 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
   if (currentStep === "package-details") {
     return (
       <PackageDetails
+        customerId={customer?.id} 
         customerPhone={customer?.phoneNumber || ""}
         pickupLocation={pickupLocation}
         deliveryLocation={deliveryLocation}
