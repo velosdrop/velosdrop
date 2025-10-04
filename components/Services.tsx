@@ -5,8 +5,8 @@ const Services = () => {
     { 
       type: "Motorcycle", 
       icon: "motorcycle.svg", 
-      capacity: "Small packages (up to 5kg)",
-      description: "Fastest option for small urgent deliveries"
+      capacity: "Small packages (up to 5 kg)",
+      description: "Fastest option for small deliveries"
     },
     { 
       type: "Car", 
