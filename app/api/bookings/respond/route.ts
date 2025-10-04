@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/src/db';
 import { deliveryRequestsTable, driverResponsesTable, driversTable } from '@/src/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { broadcastBookingUpdate } from '@/lib/sse';
+import { publishBookingResponse, MESSAGE_TYPES } from '@/lib/pubnub-booking';
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,22 +71,18 @@ export async function POST(request: NextRequest) {
         where: eq(driversTable.id, driverId)
       });
 
-      // Notify customer with complete driver information
-      broadcastBookingUpdate(deliveryRequest.customerId, {
-        type: 'bookingUpdate',
-        requestId,
-        updateType: 'DRIVER_ACCEPTED',
-        driver: {
-          id: driverId,
-          firstName: driver?.firstName,
-          lastName: driver?.lastName,
-          phoneNumber: driver?.phoneNumber,
-          carName: driver?.carName,
-          vehicleType: driver?.vehicleType,
-          profilePictureUrl: driver?.profilePictureUrl
-        }
-      });
-
+      // Notify customer with complete driver information via PubNub
+      await publishBookingResponse(deliveryRequest.customerId, {
+        bookingId: requestId,
+        driverId: driverId,
+        driverName: `${driver?.firstName} ${driver?.lastName}`,
+        driverPhone: driver?.phoneNumber || '', // Ensure this is never null
+        vehicleType: driver?.vehicleType || '',
+        carName: driver?.carName || '',
+        profilePictureUrl: driver?.profilePictureUrl || undefined, // Ensure this is undefined if null
+        wasDirectAssignment: deliveryRequest.assignedDriverId === driverId
+      }, MESSAGE_TYPES.BOOKING_ACCEPTED);
+      
       return NextResponse.json({
         success: true,
         message: 'Request accepted successfully',
@@ -94,7 +90,19 @@ export async function POST(request: NextRequest) {
       });
 
     } else {
-      // For rejection, just record the response
+      // For rejection, notify customer via PubNub
+      await publishBookingResponse(deliveryRequest.customerId, {
+        bookingId: requestId,
+        driverId: driverId,
+        driverName: '',
+        driverPhone: '',
+        vehicleType: '',
+        carName: '',
+        profilePictureUrl: '',
+        wasDirectAssignment: deliveryRequest.assignedDriverId === driverId,
+        rejected: true
+      }, MESSAGE_TYPES.BOOKING_REJECTED);
+
       return NextResponse.json({
         success: true,
         message: 'Request rejected',

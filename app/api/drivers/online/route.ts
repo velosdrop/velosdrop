@@ -1,9 +1,8 @@
-//app/api/drivers/online/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/src/db";
 import { driversTable } from "@/src/db/schema";
 import { eq, and, gt } from "drizzle-orm";
-import { broadcastDriverUpdate } from "@/lib/sse";
+import { publishDriverLocationUpdate } from "@/lib/pubnub-booking";
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,7 +28,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ✅ Add POST to toggle/update driver online status and broadcast changes
+// ✅ Updated POST to toggle/update driver online status with PubNub
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -52,13 +51,13 @@ export async function POST(request: NextRequest) {
 
     const updatedDriver = result[0];
 
-    // 🔴 Broadcast driver update in real time
-    broadcastDriverUpdate({
-      id: updatedDriver.id,
-      isOnline: updatedDriver.isOnline,
-      latitude: updatedDriver.latitude,
-      longitude: updatedDriver.longitude,
-    });
+    // 🔴 Broadcast driver update via PubNub
+    if (latitude && longitude) {
+      await publishDriverLocationUpdate(updatedDriver.id, {
+        latitude: updatedDriver.latitude || latitude,
+        longitude: updatedDriver.longitude || longitude
+      });
+    }
 
     return NextResponse.json({
       success: true,

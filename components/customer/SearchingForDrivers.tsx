@@ -1,6 +1,8 @@
+// components/customer/SearchingForDrivers.tsx
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPubNubClient, CHANNELS, MESSAGE_TYPES } from "@/lib/pubnub-booking";
 
 interface SearchingForDriversProps {
   initialFare: string;
@@ -31,9 +33,9 @@ interface Driver {
   longitude?: number;
 }
 
-export default function SearchingForDrivers({ 
-  initialFare, 
-  onFareChange, 
+export default function SearchingForDrivers({
+  initialFare,
+  onFareChange,
   onCancel,
   onConfirm,
   packageData,
@@ -52,35 +54,124 @@ export default function SearchingForDrivers({
   const [currentRequestId, setCurrentRequestId] = useState<number | null>(null);
   const [acceptedDriver, setAcceptedDriver] = useState<Driver | null>(null);
   const [acceptedDrivers, setAcceptedDrivers] = useState<Driver[]>([]);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // PubNub refs
+  const pubnubRef = useRef<any>(null);
+  const listenerRef = useRef<any>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Check request status using polling
+  // Initialize PubNub and set up listeners
   useEffect(() => {
-    if (!currentRequestId) return;
+    if (!customerId) return;
 
-    const checkRequestStatus = async () => {
-      try {
-        const response = await fetch(`/api/bookings/status?requestId=${currentRequestId}`);
-        const data = await response.json();
+    // Create PubNub client for this customer
+    pubnubRef.current = createPubNubClient(`customer_${customerId}`);
+    
+    // Set up message listener
+    listenerRef.current = {
+      message: (event: any) => {
+        console.log('PubNub message received:', event);
         
-        if (data.status === 'accepted' && data.driver) {
-          setBookingStatus('accepted');
-          setAcceptedDriver(data.driver);
-        } else if (data.status === 'expired') {
-          setBookingStatus('failed');
-          setError('No drivers accepted your request. Please try again.');
+        const { channel, message } = event;
+        
+        switch (message.type) {
+          case MESSAGE_TYPES.BOOKING_ACCEPTED:
+            handleBookingAccepted(message.data);
+            break;
+            
+          case MESSAGE_TYPES.BOOKING_REJECTED:
+            handleBookingRejected(message.data);
+            break;
+            
+          case MESSAGE_TYPES.DRIVER_LOCATION_UPDATE:
+            handleDriverLocationUpdate(message.data);
+            break;
         }
-      } catch (error) {
-        console.error('Error checking request status:', error);
+      },
+      status: (event: any) => {
+        console.log('PubNub status:', event);
+        if (event.category === 'PNConnectedCategory') {
+          console.log('✅ PubNub connected successfully');
+        } else if (event.category === 'PNDisconnectedCategory') {
+          console.log('❌ PubNub disconnected');
+        }
+      },
+      presence: (event: any) => {
+        console.log('Presence event:', event);
+        // Handle driver online/offline status
       }
     };
 
-    const interval = setInterval(checkRequestStatus, 2000);
+    pubnubRef.current.addListener(listenerRef.current);
+
+    // Subscribe to customer channel
+    pubnubRef.current.subscribe({
+      channels: [CHANNELS.customer(customerId)],
+      withPresence: true
+    });
+
+    console.log('✅ PubNub initialized for customer:', customerId);
+
+    return () => {
+      // Cleanup PubNub connection
+      if (pubnubRef.current && listenerRef.current) {
+        pubnubRef.current.removeListener(listenerRef.current);
+        pubnubRef.current.unsubscribeAll();
+        console.log('🧹 PubNub connection cleaned up');
+      }
+    };
+  }, [customerId]);
+
+  const handleBookingAccepted = (data: any) => {
+    console.log('Booking accepted via PubNub:', data);
+    setBookingStatus('accepted');
     
-    return () => clearInterval(interval);
-  }, [currentRequestId]);
+    // Create driver object from the data
+    const driverData: Driver = {
+      id: data.driverId,
+      firstName: data.driverName.split(' ')[0] || 'Driver',
+      lastName: data.driverName.split(' ')[1] || '',
+      phoneNumber: data.driverPhone,
+      vehicleType: data.vehicleType,
+      carName: data.carName,
+      profilePictureUrl: data.profilePictureUrl || '/default-driver.png',
+      distance: 0,
+      rating: 4.5,
+      isOnline: true,
+      lastLocation: null
+    };
+    
+    setAcceptedDriver(driverData);
+    setAcceptedDrivers([driverData]);
+  };
+
+  const handleBookingRejected = (data: any) => {
+    console.log('Booking rejected/expired via PubNub:', data);
+    if (data.expired) {
+      setBookingStatus('failed');
+      setError('No drivers accepted your request. Please try again.');
+    } else if (data.rejected) {
+      setBookingStatus('failed');
+      setError('The driver declined your request. Please select another driver.');
+      // Reset selected driver so customer can choose another
+      setSelectedDriver(null);
+    }
+  };
+
+  const handleDriverLocationUpdate = (data: any) => {
+    setDrivers(prevDrivers =>
+      prevDrivers.map(driver =>
+        driver.id === data.driverId
+          ? { 
+              ...driver, 
+              lastLocation: data.location,
+              latitude: data.location.latitude,
+              longitude: data.location.longitude
+            }
+          : driver
+      )
+    );
+  };
 
   const createBookingRequest = useCallback(async (selectedDriver: Driver | null = null) => {
     setBookingStatus('waiting');
@@ -93,7 +184,8 @@ export default function SearchingForDrivers({
         fare: parseFloat(fare),
         distance: packageData.routeDistance,
         packageDetails: packageData.packageDescription,
-        userLocation: userLocation
+        userLocation: userLocation,
+        ...(selectedDriver && { selectedDriverId: selectedDriver.id })
       };
 
       const response = await fetch('/api/bookings/create', {
@@ -109,13 +201,13 @@ export default function SearchingForDrivers({
       }
 
       const result = await response.json();
-      setCurrentRequestId(result.request.id); // Store the request ID
-      
+      setCurrentRequestId(result.request.id);
+
+      // FIXED: Don't automatically set status to 'accepted' when selecting a driver
+      // Wait for the driver to actually accept via PubNub
       if (selectedDriver) {
-        // Direct assignment (if customer selected a specific driver)
-        onConfirm(selectedDriver);
-      } else {
-        // Wait for driver to accept (handled by SSE above)
+        console.log('📤 Request sent to specific driver:', selectedDriver.firstName);
+        // Status remains 'waiting' until driver responds
       }
 
     } catch (error) {
@@ -123,7 +215,7 @@ export default function SearchingForDrivers({
       setBookingStatus('failed');
       setError('Failed to create booking request');
     }
-  }, [customerId, customerUsername, fare, packageData, userLocation, onConfirm]);
+  }, [customerId, customerUsername, fare, packageData, userLocation]);
 
   const fetchNearbyDrivers = useCallback(async () => {
     try {
@@ -131,146 +223,41 @@ export default function SearchingForDrivers({
         setError('Location data is not available. Please check your location settings.');
         return;
       }
-      
+
       console.log('Fetching nearby drivers with location:', userLocation);
       setError(null);
-      
+
       const response = await fetch(
         `/api/drivers/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=5`
       );
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
-      
+
       const nearbyDrivers = await response.json();
       console.log('Received nearby drivers:', nearbyDrivers);
-      
+
       const transformedDrivers = nearbyDrivers.map((driver: any) => ({
         ...driver,
         rating: driver.averageRating || driver.rating || 4.5,
         distance: driver.distance || 0
       }));
-      
+
       setDrivers(transformedDrivers);
     } catch (error) {
       console.error('Error fetching nearby drivers:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch nearby drivers');
     }
   }, [userLocation]);
-  
-  const setupRealTimeUpdates = useCallback(() => {
-    try {
-      // Clean up any existing connections
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-      
-      // Validate we have a customer ID
-      if (!customerId) {
-        setError('Customer ID not available for real-time updates');
-        return;
-      }
-      
-      // Create SSE connection with proper parameters - THIS IS THE FIX!
-      const eventSourceUrl = `/api/drivers/updates?customerId=${customerId}&type=customer&t=${Date.now()}`;
-      console.log('Connecting to SSE:', eventSourceUrl);
-      
-      const eventSource = new EventSource(eventSourceUrl);
-      eventSourceRef.current = eventSource;
-      
-      eventSource.onopen = () => {
-        console.log('✅ SSE connection opened for customer:', customerId);
-        setError(null);
-      };
-      
-      // Listen for specific events
-      eventSource.addEventListener('driverUpdate', (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('Received driver update:', data);
-          
-          if (data.type === 'LOCATION_UPDATE') {
-            setDrivers(prevDrivers => 
-              prevDrivers.map(driver => 
-                driver.id === data.driver.id 
-                  ? { ...driver, lastLocation: data.driver.lastLocation } 
-                  : driver
-              )
-            );
-          }
-        } catch (error) {
-          console.error('Error processing driver update:', error);
-        }
-      });
-      
-      eventSource.addEventListener('bookingUpdate', (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('Received booking update:', data);
-          
-          if (data.requestId === currentRequestId) {
-            if (data.updateType === 'DRIVER_ACCEPTED') {
-              setBookingStatus('accepted');
-              setAcceptedDriver(data.driver);
-              // ADD THIS LINE to update accepted drivers list
-              if (data.driver && !acceptedDrivers.some(d => d.id === data.driver.id)) {
-                setAcceptedDrivers(prev => [...prev, data.driver]);
-              }
-            } else if (data.updateType === 'REQUEST_EXPIRED') {
-              setBookingStatus('failed');
-              setError('No drivers accepted your request. Please try again.');
-            }
-          }
-        } catch (error) {
-          console.error('Error processing booking update:', error);
-        }
-      });
-      
-      eventSource.onerror = (error) => {
-        console.error('❌ EventSource error:', {
-          error,
-          readyState: eventSource.readyState,
-          url: eventSource.url
-        });
-        
-        setError('Real-time connection issue. Reconnecting...');
-        
-        // Clean up and reconnect
-        if (eventSourceRef.current) {
-          eventSourceRef.current.close();
-          eventSourceRef.current = null;
-        }
-        
-        reconnectTimeoutRef.current = setTimeout(() => {
-          console.log('🔄 Attempting to reconnect SSE...');
-          setupRealTimeUpdates();
-        }, 3000);
-      };
-      
-    } catch (error) {
-      console.error('Error setting up SSE:', error);
-      setError('Failed to set up real-time updates');
-      
-      reconnectTimeoutRef.current = setTimeout(() => {
-        setupRealTimeUpdates();
-      }, 3000);
-    }
-  }, [customerId, currentRequestId, acceptedDrivers]); 
 
+  // Simplified useEffect without SSE
   useEffect(() => {
     setIsVisible(true);
-    
+
     if (userLocation && userLocation.lat !== undefined && userLocation.lng !== undefined) {
       fetchNearbyDrivers();
-      setupRealTimeUpdates();
     } else {
       setError('Waiting for location data...');
     }
@@ -279,8 +266,9 @@ export default function SearchingForDrivers({
       setSearchProgress(prev => {
         if (prev >= 100) {
           clearInterval(progressInterval);
-          if (drivers.length > 0) {
-            createBookingRequest();
+          if (drivers.length > 0 && bookingStatus === 'searching') {
+            // Optionally auto-broadcast if no driver is selected after progress completes
+            // createBookingRequest();
           }
           return 100;
         }
@@ -289,19 +277,35 @@ export default function SearchingForDrivers({
     }, 50);
 
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-      
       clearInterval(progressInterval);
     };
-  }, [fetchNearbyDrivers, setupRealTimeUpdates, userLocation, createBookingRequest, drivers.length]);
+  }, [fetchNearbyDrivers, userLocation, drivers.length, bookingStatus]);
+
+  // Check request status using polling (fallback)
+  useEffect(() => {
+    if (!currentRequestId) return;
+
+    const checkRequestStatus = async () => {
+      try {
+        const response = await fetch(`/api/bookings/status?requestId=${currentRequestId}`);
+        const data = await response.json();
+
+        if (data.status === 'accepted' && data.driver) {
+          setBookingStatus('accepted');
+          setAcceptedDriver(data.driver);
+        } else if (data.status === 'expired') {
+          setBookingStatus('failed');
+          setError('No drivers accepted your request. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error checking request status:', error);
+      }
+    };
+
+    const interval = setInterval(checkRequestStatus, 2000);
+
+    return () => clearInterval(interval);
+  }, [currentRequestId]);
 
   const handleFareAdjust = (amount: number) => {
     const currentFare = parseFloat(fare);
@@ -322,7 +326,7 @@ export default function SearchingForDrivers({
     setIsUpdatingFare(true);
     console.log("Fare updated to:", fare);
     await fetchNearbyDrivers();
-    
+
     setTimeout(() => {
       setIsUpdatingFare(false);
     }, 1000);
@@ -330,6 +334,7 @@ export default function SearchingForDrivers({
 
   const handleSelectDriver = (driver: Driver) => {
     setSelectedDriver(driver.id);
+    // Call createBookingRequest with the selected driver - this sends notification to that driver
     createBookingRequest(driver);
   };
 
@@ -340,8 +345,8 @@ export default function SearchingForDrivers({
     setCurrentRequestId(null);
     setAcceptedDriver(null);
     setAcceptedDrivers([]);
+    setSelectedDriver(null); // Reset selected driver on retry
     fetchNearbyDrivers();
-    setupRealTimeUpdates();
   };
 
   const calculateEstimatedTime = (distance: number) => {
@@ -400,11 +405,11 @@ export default function SearchingForDrivers({
 
           <div className="text-center">
             <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
-              {bookingStatus === 'waiting' ? 'Waiting for Acceptance' : 
+              {bookingStatus === 'waiting' ? 'Waiting for Driver' :
                bookingStatus === 'accepted' ? 'Driver Accepted!' : 'Searching for Drivers'}
             </h2>
             <p className="text-purple-300 text-sm mt-1">
-              {bookingStatus === 'waiting' ? 'Your request has been sent to nearby drivers.' : 
+              {bookingStatus === 'waiting' ? 'Your request has been sent to the driver.' :
                bookingStatus === 'accepted' ? 'A driver has accepted your request!' : "We're finding the best matches for you"}
             </p>
           </div>
@@ -447,6 +452,37 @@ export default function SearchingForDrivers({
           </div>
         )}
 
+        {/* Waiting for Driver Response */}
+        {bookingStatus === 'waiting' && selectedDriver && (
+          <div className="bg-blue-900/20 border border-blue-700/50 rounded-2xl p-5 mb-6 backdrop-blur-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-blue-300 font-semibold text-lg">Request Sent!</h3>
+              <div className="w-6 h-6 bg-blue-500 rounded-full animate-pulse"></div>
+            </div>
+
+            <div className="flex items-center space-x-4">
+              <div className="w-16 h-16 bg-gray-800 rounded-full overflow-hidden">
+                <img
+                  src={drivers.find(d => d.id === selectedDriver)?.profilePictureUrl || '/default-driver.png'}
+                  alt="Driver"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239336f3' stroke-width='2'%3E%3Cpath d='M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'/%3E%3C/svg%3E";
+                  }}
+                />
+              </div>
+
+              <div className="flex-1">
+                <h4 className="text-white font-semibold">
+                  {drivers.find(d => d.id === selectedDriver)?.firstName} {drivers.find(d => d.id === selectedDriver)?.lastName}
+                </h4>
+                <p className="text-blue-300 text-sm">Waiting for driver to accept your request...</p>
+                <p className="text-gray-400 text-sm">They have 30 seconds to respond</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Accepted Driver Section */}
         {bookingStatus === 'accepted' && acceptedDriver && (
           <div className="bg-green-900/20 border border-green-700/50 rounded-2xl p-5 mb-6 backdrop-blur-sm">
@@ -454,11 +490,11 @@ export default function SearchingForDrivers({
               <h3 className="text-green-300 font-semibold text-lg">Driver Accepted!</h3>
               <div className="w-6 h-6 bg-green-500 rounded-full animate-pulse"></div>
             </div>
-            
+
             <div className="flex items-center space-x-4">
               <div className="w-16 h-16 bg-gray-800 rounded-full overflow-hidden">
-                <img 
-                  src={acceptedDriver.profilePictureUrl} 
+                <img
+                  src={acceptedDriver.profilePictureUrl}
                   alt={acceptedDriver.firstName}
                   className="w-full h-full object-cover"
                   onError={(e) => {
@@ -466,7 +502,7 @@ export default function SearchingForDrivers({
                   }}
                 />
               </div>
-              
+
               <div className="flex-1">
                 <h4 className="text-white font-semibold">
                   {acceptedDriver.firstName} {acceptedDriver.lastName}
@@ -476,7 +512,7 @@ export default function SearchingForDrivers({
                 <p className="text-gray-400 text-sm">Phone: {acceptedDriver.phoneNumber}</p>
               </div>
             </div>
-            
+
             <button
               onClick={() => onConfirm(acceptedDriver)}
               className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors"
@@ -494,7 +530,7 @@ export default function SearchingForDrivers({
               <span className="text-purple-400 text-sm font-bold">{searchProgress}%</span>
             </div>
             <div className="w-full bg-gray-800/50 rounded-full h-3 overflow-hidden">
-              <div 
+              <div
                 className="bg-gradient-to-r from-purple-600 via-pink-500 to-blue-500 h-3 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${searchProgress}%` }}
               >
@@ -514,17 +550,17 @@ export default function SearchingForDrivers({
                 </div>
               </div>
             </div>
-            
+
             <div className="flex justify-between items-center px-6">
               {[1, 2, 3, 4, 5].map((driver) => (
-                <div 
-                  key={driver} 
+                <div
+                  key={driver}
                   className={`w-14 h-14 bg-gradient-to-br from-purple-900 to-black rounded-full border-3 flex items-center justify-center transition-all duration-700 transform ${
-                    driver <= visibleDrivers.length 
-                      ? "border-purple-500 scale-110 shadow-2xl shadow-purple-500/40 rotate-0" 
+                    driver <= visibleDrivers.length
+                      ? "border-purple-500 scale-110 shadow-2xl shadow-purple-500/40 rotate-0"
                       : "border-gray-700 opacity-30 scale-90 -rotate-12"
                   }`}
-                  style={{ 
+                  style={{
                     transitionDelay: `${driver * 150}ms`,
                     animation: driver <= visibleDrivers.length ? "bounce 2s infinite" : "none"
                   }}
@@ -618,7 +654,7 @@ export default function SearchingForDrivers({
                 </button>
               </div>
 
-              <button 
+              <button
                 onClick={handleUpdateFare}
                 disabled={isUpdatingFare}
                 className="bg-gradient-to-r from-purple-700 to-blue-600 hover:from-purple-600 hover:to-blue-500 border border-purple-600/40 text-white font-medium text-sm px-4 py-2.5 rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
@@ -709,8 +745,8 @@ export default function SearchingForDrivers({
           </div>
         )}
 
-        {/* Available Drivers Section */}
-        {visibleDrivers.length > 0 && bookingStatus !== 'accepted' && (
+        {/* Available Drivers Section - Only show when not waiting for response */}
+        {visibleDrivers.length > 0 && bookingStatus === 'searching' && (
           <div className="bg-gray-800/30 border border-purple-900/40 rounded-2xl p-5 mb-6 backdrop-blur-sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-purple-300 font-semibold text-lg">Available Drivers</h3>
@@ -718,14 +754,14 @@ export default function SearchingForDrivers({
                 {visibleDrivers.length} nearby
               </span>
             </div>
-            
+
             <div className="space-y-4">
               {visibleDrivers.map((driver) => (
-                <div 
-                  key={driver.id} 
+                <div
+                  key={driver.id}
                   className={`flex items-center justify-between p-4 bg-gradient-to-r from-gray-800/50 to-gray-900/50 rounded-xl border-2 transition-all duration-300 cursor-pointer transform hover:scale-[1.02] ${
-                    selectedDriver === driver.id 
-                      ? "border-purple-500 bg-purple-900/20" 
+                    selectedDriver === driver.id
+                      ? "border-purple-500 bg-purple-900/20"
                       : "border-purple-900/30 hover:border-purple-700/50"
                   }`}
                   onClick={() => handleSelectDriver(driver)}
@@ -734,8 +770,8 @@ export default function SearchingForDrivers({
                     <div className="relative">
                       <div className="w-12 h-12 bg-gradient-to-br from-purple-900 to-black rounded-full flex items-center justify-center overflow-hidden border-2 border-purple-600/40">
                         {driver.profilePictureUrl ? (
-                          <img 
-                            src={driver.profilePictureUrl} 
+                          <img
+                            src={driver.profilePictureUrl}
                             alt={driver.firstName}
                             className="w-full h-full object-cover"
                             onError={(e) => {
@@ -840,10 +876,10 @@ export default function SearchingForDrivers({
             </svg>
             <span>Cancel Search</span>
           </button>
-          
+
           {visibleDrivers.length > 0 && bookingStatus === 'searching' && (
             <button
-              onClick={() => createBookingRequest(null)}
+              onClick={() => createBookingRequest(null)} // Broadcast to all
               className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-4 px-6 rounded-xl shadow-2xl shadow-purple-900/40 hover:shadow-purple-900/60 transition-all duration-300 transform hover:scale-[1.02] flex items-center justify-center space-x-2"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

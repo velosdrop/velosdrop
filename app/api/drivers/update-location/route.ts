@@ -1,9 +1,9 @@
-// app/api/driver/update-location/route.ts
+// app/api/drivers/update-location/route.ts
 import { db } from '@/src/db';
 import { driversTable } from '@/src/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
-import { broadcastDriverUpdate } from "@/lib/sse";
+import { publishDriverLocationUpdate } from "@/lib/pubnub-booking";
 
 export async function POST(request: Request) {
   const { driverId, location } = await request.json();
@@ -53,19 +53,29 @@ export async function POST(request: Request) {
       })
       .where(eq(driversTable.id, driverId));
 
-    // Fetch updated driver
+    // Fetch updated driver to ensure the update happened before broadcasting
     const updatedDriver = await db
       .select()
       .from(driversTable)
       .where(eq(driversTable.id, driverId))
       .limit(1);
 
-    // Broadcast location update
+    // Broadcast location update via PubNub - with error handling
     if (updatedDriver.length > 0) {
-      broadcastDriverUpdate({
-        type: 'LOCATION_UPDATE',
-        driver: updatedDriver[0],
-      });
+      try {
+        const publishResult = await publishDriverLocationUpdate(driverId, {
+          latitude,
+          longitude
+        });
+        
+        if (!publishResult.success) {
+          console.warn('PubNub location broadcast failed, but DB update succeeded:', publishResult.error);
+          // Continue - the DB update is what matters most
+        }
+      } catch (pubnubError) {
+        console.warn('PubNub location broadcast failed, but DB update succeeded:', pubnubError);
+        // Continue - the DB update is what matters most
+      }
     }
 
     return NextResponse.json({ success: true });
