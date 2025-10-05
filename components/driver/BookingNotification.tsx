@@ -1,11 +1,15 @@
+// components/driver/BookingNotification.tsx
 'use client';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiClock, FiMapPin, FiDollarSign, FiUser, FiX, FiPackage } from 'react-icons/fi';
+import { FiClock, FiMapPin, FiDollarSign, FiUser, FiX, FiPackage, FiPhone } from 'react-icons/fi';
 
 interface BookingRequest {
   id: number;
+  customerId: number;
   customerUsername: string;
+  customerPhoneNumber?: string;
+  customerProfilePictureUrl?: string;
   pickupLocation: string;
   dropoffLocation: string;
   fare: number;
@@ -33,6 +37,7 @@ export default function BookingNotification({
 }: BookingNotificationProps) {
   const [timeLeft, setTimeLeft] = useState(request.expiresIn);
   const [isVisible, setIsVisible] = useState(true);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     if (timeLeft <= 0) {
@@ -56,6 +61,10 @@ export default function BookingNotification({
   const handleReject = async () => {
     setIsVisible(false);
     onReject();
+  };
+
+  const handleImageError = () => {
+    setImageError(true);
   };
 
   if (!isVisible || !isConnected) return null;
@@ -90,14 +99,45 @@ export default function BookingNotification({
 
         {/* Content */}
         <div className="p-4">
-          {/* Customer Info */}
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-              <FiUser className="h-5 w-5 text-purple-600" />
+          {/* Enhanced Customer Info Section */}
+          <div className="flex items-center space-x-3 mb-4 p-3 bg-gray-50 rounded-lg">
+            <div className="relative">
+              {request.customerProfilePictureUrl && !imageError ? (
+                <img
+                  src={request.customerProfilePictureUrl}
+                  alt={request.customerUsername}
+                  className="w-12 h-12 rounded-full object-cover border-2 border-purple-200"
+                  onError={handleImageError}
+                />
+              ) : (
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                  {request.customerUsername.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
             </div>
-            <div>
-              <p className="font-semibold text-gray-900">{request.customerUsername}</p>
-              <p className="text-sm text-gray-600">Customer</p>
+            
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center space-x-2">
+                <p className="font-semibold text-gray-900 truncate">{request.customerUsername}</p>
+                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full font-medium">
+                  Verified
+                </span>
+              </div>
+              
+              {request.customerPhoneNumber && (
+                <div className="flex items-center space-x-1 mt-1">
+                  <FiPhone className="h-3 w-3 text-gray-500 flex-shrink-0" />
+                  <a 
+                    href={`tel:${request.customerPhoneNumber}`}
+                    className="text-sm text-gray-600 hover:text-purple-600 transition-colors truncate"
+                  >
+                    {request.customerPhoneNumber}
+                  </a>
+                </div>
+              )}
+              
+              <p className="text-xs text-gray-500 mt-1">Ready for pickup</p>
             </div>
           </div>
 
@@ -139,19 +179,21 @@ export default function BookingNotification({
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Enhanced Action Buttons */}
           <div className="flex space-x-3">
             <button
               onClick={handleReject}
-              className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+              className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors duration-200 border border-gray-300 flex items-center justify-center space-x-2"
             >
-              Reject
+              <FiX className="h-4 w-4" />
+              <span>Decline</span>
             </button>
             <button
               onClick={handleAccept}
-              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+              className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors duration-200 shadow-lg hover:shadow-green-200 flex items-center justify-center space-x-2"
             >
-              Accept
+              <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+              <span>Accept Delivery</span>
             </button>
           </div>
         </div>

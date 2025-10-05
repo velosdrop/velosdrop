@@ -31,7 +31,9 @@ interface LocationData {
 
 interface BookingRequest {
   id: number;
+  customerId: number;
   customerUsername: string;
+  customerProfilePictureUrl?: string;
   pickupLocation: string;
   dropoffLocation: string;
   fare: number;

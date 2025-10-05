@@ -54,10 +54,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get customer details
+    // Get customer details with ALL required fields for driver notification
     const customer = await db.query.customersTable.findFirst({
       where: eq(customersTable.id, customerId),
-      columns: { username: true, id: true }
+      columns: { 
+        id: true, 
+        username: true, 
+        phoneNumber: true,        // ADDED: For driver contact
+        profilePictureUrl: true   // ADDED: For driver display
+      }
     });
 
     if (!customer) {
@@ -112,6 +117,7 @@ export async function POST(request: NextRequest) {
           bookingId: deliveryRequest.id,
           customerId: customerId,
           customerUsername: customerUsername || customer.username,
+          customerProfilePictureUrl: customer.profilePictureUrl || '', 
           pickupLocation: pickupAddress,
           dropoffLocation: dropoffAddress,
           fare: parseFloat(fare),

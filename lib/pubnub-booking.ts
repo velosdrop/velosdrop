@@ -55,6 +55,7 @@ export interface BookingRequestMessage extends PubNubMessage {
     bookingId: number;
     customerId: number;
     customerUsername: string;
+    customerProfilePictureUrl: string;
     pickupLocation: string;
     dropoffLocation: string;
     fare: number;
