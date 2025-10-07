@@ -1,48 +1,69 @@
 // app/api/drivers/update-location/route.ts
 import { db } from '@/src/db';
-import { driversTable } from '@/src/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { driversTable, deliveryRequestsTable } from '@/src/db/schema';
+import { eq, sql, and, desc } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
-import { publishDriverLocationUpdate } from "@/lib/pubnub-booking";
+import { publishDriverLocationUpdate, getPubNubInstance, MESSAGE_TYPES } from "@/lib/pubnub-booking";
 
 export async function POST(request: Request) {
-  const { driverId, location } = await request.json();
-
-  if (!driverId || !location) {
-    return NextResponse.json(
-      { error: 'Missing required fields' },
-      { status: 400 }
-    );
-  }
-
-  // Ensure lat/lng exist
-  if (
-    typeof location !== 'object' ||
-    location.latitude === undefined ||
-    location.longitude === undefined
-  ) {
-    return NextResponse.json(
-      { error: 'Invalid location format' },
-      { status: 400 }
-    );
-  }
-
-  // Parse and validate lat/lng
-  const latitude = parseFloat(String(location.latitude));
-  const longitude = parseFloat(String(location.longitude));
-
-  if (isNaN(latitude) || isNaN(longitude)) {
-    return NextResponse.json(
-      { error: 'Latitude and longitude must be valid numbers' },
-      { status: 400 }
-    );
-  }
-
   try {
-    // Stringify the normalized location object
-    const locationString = JSON.stringify({ latitude, longitude });
+    const body = await request.json();
+    const { driverId, location, timestamp } = body;
 
-    // Update the DB (numbers guaranteed)
+    console.log('📍 Processing location update:', { driverId, location });
+
+    if (!driverId || !location) {
+      return NextResponse.json(
+        { error: 'Missing required fields: driverId and location are required' },
+        { status: 400 }
+      );
+    }
+
+    // Enhanced location validation
+    if (
+      typeof location !== 'object' ||
+      location.latitude === undefined ||
+      location.longitude === undefined
+    ) {
+      return NextResponse.json(
+        { error: 'Invalid location format. Must include latitude and longitude' },
+        { status: 400 }
+      );
+    }
+
+    // Parse and validate coordinates with better error handling
+    const latitude = parseFloat(String(location.latitude));
+    const longitude = parseFloat(String(location.longitude));
+
+    if (isNaN(latitude) || isNaN(longitude)) {
+      return NextResponse.json(
+        { error: 'Latitude and longitude must be valid numbers' },
+        { status: 400 }
+      );
+    }
+
+    // Validate coordinate ranges
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      return NextResponse.json(
+        { error: 'Invalid coordinate values. Latitude must be between -90 and 90, longitude between -180 and 180' },
+        { status: 400 }
+      );
+    }
+
+    // Create normalized location object
+    const normalizedLocation = {
+      latitude,
+      longitude,
+      accuracy: location.accuracy || null,
+      heading: location.heading || null,
+      speed: location.speed || null,
+      altitude: location.altitude || null,
+      timestamp: timestamp || new Date().toISOString()
+    };
+
+    const locationString = JSON.stringify(normalizedLocation);
+
+    // Update driver location in database
     await db
       .update(driversTable)
       .set({
@@ -53,36 +74,125 @@ export async function POST(request: Request) {
       })
       .where(eq(driversTable.id, driverId));
 
-    // Fetch updated driver to ensure the update happened before broadcasting
-    const updatedDriver = await db
-      .select()
-      .from(driversTable)
-      .where(eq(driversTable.id, driverId))
-      .limit(1);
+    console.log('✅ Driver location updated in database:', { driverId, latitude, longitude });
 
-    // Broadcast location update via PubNub - with error handling
-    if (updatedDriver.length > 0) {
+    // Find active delivery for this driver to notify customer
+    const activeDelivery = await db.query.deliveryRequestsTable.findFirst({
+      where: and(
+        eq(deliveryRequestsTable.assignedDriverId, driverId),
+        eq(deliveryRequestsTable.status, 'accepted')
+      ),
+      orderBy: [desc(deliveryRequestsTable.createdAt)]
+    });
+
+    // Broadcast location update to customer if there's an active delivery
+    if (activeDelivery) {
       try {
-        const publishResult = await publishDriverLocationUpdate(driverId, {
-          latitude,
-          longitude
+        const pubnub = getPubNubInstance();
+        
+        await pubnub.publish({
+          channel: `customer_${activeDelivery.customerId}`,
+          message: {
+            type: MESSAGE_TYPES.DRIVER_LOCATION_UPDATE,
+            data: {
+              driverId,
+              location: normalizedLocation,
+              deliveryId: activeDelivery.id,
+              timestamp: normalizedLocation.timestamp
+            }
+          }
         });
         
-        if (!publishResult.success) {
-          console.warn('PubNub location broadcast failed, but DB update succeeded:', publishResult.error);
-          // Continue - the DB update is what matters most
-        }
+        console.log('✅ Location broadcast to customer:', { customerId: activeDelivery.customerId });
       } catch (pubnubError) {
-        console.warn('PubNub location broadcast failed, but DB update succeeded:', pubnubError);
+        console.warn('⚠️ PubNub location broadcast failed, but DB update succeeded:', pubnubError);
         // Continue - the DB update is what matters most
       }
     }
 
-    return NextResponse.json({ success: true });
+    // Also broadcast to general drivers channel for potential fleet management
+    try {
+      await publishDriverLocationUpdate(driverId, normalizedLocation);
+      console.log('✅ Location broadcast to drivers channel');
+    } catch (broadcastError) {
+      console.warn('⚠️ Failed to broadcast to drivers channel:', broadcastError);
+    }
+
+    return NextResponse.json({ 
+      success: true,
+      message: 'Location updated successfully',
+      location: normalizedLocation,
+      hasActiveDelivery: !!activeDelivery
+    });
+
   } catch (error) {
-    console.error('Error updating driver location:', error);
+    console.error('❌ Error updating driver location:', error);
+    
     return NextResponse.json(
-      { error: 'Failed to update location' },
+      { 
+        error: 'Failed to update location',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// Optional: GET endpoint to retrieve driver's current location
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const driverId = searchParams.get('driverId');
+
+  if (!driverId) {
+    return NextResponse.json(
+      { error: 'Missing driverId parameter' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const driver = await db.query.driversTable.findFirst({
+      where: eq(driversTable.id, parseInt(driverId)),
+      columns: {
+        lastLocation: true,
+        latitude: true,
+        longitude: true,
+        updatedAt: true
+      }
+    });
+
+    if (!driver) {
+      return NextResponse.json(
+        { error: 'Driver not found' },
+        { status: 404 }
+      );
+    }
+
+    let locationData = null;
+    if (driver.lastLocation) {
+      try {
+        locationData = typeof driver.lastLocation === 'string' 
+          ? JSON.parse(driver.lastLocation) 
+          : driver.lastLocation;
+      } catch (parseError) {
+        console.warn('Failed to parse driver location:', parseError);
+      }
+    }
+
+    return NextResponse.json({
+      driverId: parseInt(driverId),
+      location: locationData,
+      coordinates: driver.latitude && driver.longitude ? {
+        latitude: driver.latitude,
+        longitude: driver.longitude
+      } : null,
+      lastUpdated: driver.updatedAt
+    });
+
+  } catch (error) {
+    console.error('Error retrieving driver location:', error);
+    return NextResponse.json(
+      { error: 'Failed to retrieve location' },
       { status: 500 }
     );
   }

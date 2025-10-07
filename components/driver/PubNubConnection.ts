@@ -41,11 +41,26 @@ export function usePubNubConnection(
           if (message.type === MESSAGE_TYPES.BOOKING_REQUEST) {
             console.log('🎯 Received booking request:', message);
             
+            // FIX: Map bookingId to id and ensure all required fields are present
             const newRequest = {
-              ...message.data,
-              status: 'pending',
-              expiresIn: Math.max(0, Math.floor((new Date(message.data.expiresAt).getTime() - Date.now()) / 1000))
+              id: message.data.bookingId, // Map bookingId to id for component compatibility
+              bookingId: message.data.bookingId, // Keep original for reference
+              customerId: message.data.customerId,
+              customerUsername: message.data.customerUsername,
+              customerProfilePictureUrl: message.data.customerProfilePictureUrl,
+              customerPhoneNumber: message.data.customerPhoneNumber,
+              pickupLocation: message.data.pickupLocation,
+              dropoffLocation: message.data.dropoffLocation,
+              fare: message.data.fare,
+              distance: message.data.distance,
+              expiresIn: Math.max(0, Math.floor((new Date(message.data.expiresAt).getTime() - Date.now()) / 1000)),
+              createdAt: new Date().toISOString(),
+              packageDetails: message.data.packageDetails,
+              isDirectAssignment: message.data.isDirectAssignment || false,
+              status: 'pending'
             };
+
+            console.log('📦 Processed booking request for notification:', newRequest);
 
             // Update state
             setBookingRequest(newRequest);
@@ -62,10 +77,22 @@ export function usePubNubConnection(
         status: (event: any) => {
           console.log('PubNub status:', event);
           if (event.category === 'PNConnectedCategory') {
+            console.log('✅ PubNub connected successfully');
             setIsConnected(true);
           } else if (event.category === 'PNDisconnectedCategory') {
+            console.log('❌ PubNub disconnected');
             setIsConnected(false);
+          } else if (event.category === 'PNNetworkDownCategory') {
+            console.log('🌐 Network connectivity issues');
+            setIsConnected(false);
+          } else if (event.category === 'PNNetworkUpCategory') {
+            console.log('🌐 Network restored');
+            setIsConnected(true);
           }
+        },
+        presence: (event: any) => {
+          console.log('Presence event:', event);
+          // Handle driver online/offline status if needed
         }
       };
 
@@ -92,6 +119,7 @@ export function usePubNubConnection(
     return () => {
       // Cleanup on unmount
       if (pubnubRef.current && listenerRef.current) {
+        console.log('🧹 Cleaning up PubNub connection for driver:', driverId);
         pubnubRef.current.removeListener(listenerRef.current);
         pubnubRef.current.unsubscribeAll();
       }

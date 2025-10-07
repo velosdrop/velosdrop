@@ -1,3 +1,4 @@
+//app/driver-dashboard/page.tsx
 'use client';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -454,16 +455,16 @@ export default function DriverDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
-      {bookingRequest && (
+      {bookingRequest && driverData?.id && (
         <BookingNotification
-          request={bookingRequest}
-          onAccept={() => handleBookingAccept()}
-          onReject={() => handleBookingReject()}
-          onExpire={handleBookingExpire}
-          isConnected={isConnected}
+             request={bookingRequest}
+             onAccept={() => handleBookingAccept()}
+             onReject={() => handleBookingReject()}
+             onExpire={handleBookingExpire}
+             isConnected={isConnected}
+             driverId={driverData.id} // This will always be a valid number
         />
-      )}
-
+        )}
       <button
         onClick={() => setSidebarOpen(true)}
         className="md:hidden fixed top-4 left-4 z-50 p-2 bg-purple-600 text-white rounded-lg shadow-lg"

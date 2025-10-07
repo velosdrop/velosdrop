@@ -1,3 +1,4 @@
+//components/driver/Map.tsx
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
@@ -23,6 +24,10 @@ interface MapProps {
       latitude: number;
     };
   };
+  activeDelivery?: {
+    pickupLocation: { longitude: number; latitude: number };
+    deliveryLocation: { longitude: number; latitude: number };
+  };
 }
 
 export default function Map({
@@ -32,12 +37,17 @@ export default function Map({
   onRemoved,
   driverId,
   isOnline = false,
-  driverData
+  driverData,
+  activeDelivery
 }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [locationGranted, setLocationGranted] = useState(false);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
+  const pickupMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const deliveryMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const [isTracking, setIsTracking] = useState(false);
+  const [lastLocation, setLastLocation] = useState<{ longitude: number; latitude: number } | null>(null);
 
   // Convert any coordinate format to LngLatLike
   const toLngLatLike = (location: { longitude: number; latitude: number }): [number, number] => {
@@ -84,12 +94,44 @@ export default function Map({
         <!-- 3D Details -->
         <path d="M38 18H10l2-4h24l2 4z" fill="#7b1fa2" fill-opacity="0.7"/>
         <path d="M12 18h24l-2-4h-20l-2 4z" fill="#9c27b0" fill-opacity="0.5"/>
+        
+        <!-- Pulsing effect when tracking -->
+        <circle cx="24" cy="24" r="22" fill="none" stroke="#10b981" stroke-width="2" stroke-opacity="0.5">
+          <animate attributeName="r" from="22" to="28" dur="1.5s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" from="0.7" to="0" dur="1.5s" repeatCount="indefinite"/>
+        </circle>
       </svg>
     `;
     return el;
   };
 
-  const updateDriverLocation = async (longitude: number, latitude: number) => {
+  const createPickupMarkerElement = () => {
+    const el = document.createElement('div');
+    el.className = 'pickup-marker';
+    el.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+        <circle cx="16" cy="16" r="14" fill="#10b981" stroke="#059669" stroke-width="2"/>
+        <circle cx="16" cy="16" r="6" fill="white" fill-opacity="0.9"/>
+        <text x="16" y="16" text-anchor="middle" dy="0.3em" font-size="8" font-weight="bold" fill="#059669">P</text>
+      </svg>
+    `;
+    return el;
+  };
+
+  const createDeliveryMarkerElement = () => {
+    const el = document.createElement('div');
+    el.className = 'delivery-marker';
+    el.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+        <circle cx="16" cy="16" r="14" fill="#ef4444" stroke="#dc2626" stroke-width="2"/>
+        <circle cx="16" cy="16" r="6" fill="white" fill-opacity="0.9"/>
+        <text x="16" y="16" text-anchor="middle" dy="0.3em" font-size="8" font-weight="bold" fill="#dc2626">D</text>
+      </svg>
+    `;
+    return el;
+  };
+
+  const updateDriverLocation = async (longitude: number, latitude: number, heading?: number) => {
     if (!driverId || !isOnline) return;
     
     try {
@@ -100,7 +142,12 @@ export default function Map({
         },
         body: JSON.stringify({
           driverId,
-          location: { longitude, latitude }
+          location: { 
+            longitude, 
+            latitude,
+            heading,
+            timestamp: new Date().toISOString()
+          }
         }),
       });
 
@@ -108,9 +155,106 @@ export default function Map({
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to update location');
       }
+      
+      console.log('📍 Driver location updated:', { longitude, latitude });
     } catch (error) {
       console.error('Error updating location:', error instanceof Error ? error.message : error);
     }
+  };
+
+  const addDeliveryRoute = async (pickup: [number, number], delivery: [number, number]) => {
+    if (!map.current) return;
+
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/driving/${pickup[0]},${pickup[1]};${delivery[0]},${delivery[1]}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
+      );
+      const data = await response.json();
+      
+      if (data.routes && data.routes.length > 0) {
+        // Remove existing route layer if it exists
+        if (map.current.getLayer('delivery-route')) {
+          map.current.removeLayer('delivery-route');
+        }
+        if (map.current.getSource('delivery-route')) {
+          map.current.removeSource('delivery-route');
+        }
+
+        // Add route source and layer
+        map.current.addSource('delivery-route', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: data.routes[0].geometry
+          }
+        });
+
+        map.current.addLayer({
+          id: 'delivery-route',
+          type: 'line',
+          source: 'delivery-route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#8b5cf6',
+            'line-width': 4,
+            'line-opacity': 0.7
+          }
+        });
+
+        // Fit map to show route and markers
+        const bounds = new mapboxgl.LngLatBounds()
+          .extend(pickup)
+          .extend(delivery);
+
+        if (lastLocation) {
+          bounds.extend([lastLocation.longitude, lastLocation.latitude]);
+        }
+
+        map.current.fitBounds(bounds, {
+          padding: 100,
+          maxZoom: 15,
+          duration: 1000
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching delivery route:', error);
+    }
+  };
+
+  const updateDeliveryMarkers = () => {
+    if (!map.current || !activeDelivery) return;
+
+    // Clear existing markers
+    if (pickupMarkerRef.current) {
+      pickupMarkerRef.current.remove();
+    }
+    if (deliveryMarkerRef.current) {
+      deliveryMarkerRef.current.remove();
+    }
+
+    // Add pickup marker
+    pickupMarkerRef.current = new mapboxgl.Marker({
+      element: createPickupMarkerElement()
+    })
+      .setLngLat([activeDelivery.pickupLocation.longitude, activeDelivery.pickupLocation.latitude])
+      .addTo(map.current);
+
+    // Add delivery marker
+    deliveryMarkerRef.current = new mapboxgl.Marker({
+      element: createDeliveryMarkerElement()
+    })
+      .setLngLat([activeDelivery.deliveryLocation.longitude, activeDelivery.deliveryLocation.latitude])
+      .addTo(map.current);
+
+    // Add route
+    addDeliveryRoute(
+      [activeDelivery.pickupLocation.longitude, activeDelivery.pickupLocation.latitude],
+      [activeDelivery.deliveryLocation.longitude, activeDelivery.deliveryLocation.latitude]
+    );
   };
 
   const getGeolocationErrorText = (code: number): string => {
@@ -126,34 +270,43 @@ export default function Map({
     }
   };
 
-  useEffect(() => {
+  const startLocationTracking = () => {
     if (!map.current || !locationGranted || !isOnline) return;
-  
-    const geolocate = new mapboxgl.GeolocateControl({
-      positionOptions: { enableHighAccuracy: true },
-      trackUserLocation: true,
-      showUserLocation: false,
-      showAccuracyCircle: false
-    });
-  
-    map.current.addControl(geolocate);
-  
+
+    console.log('📍 Starting location tracking for driver:', driverId);
+    setIsTracking(true);
+
     const onSuccess = (position: GeolocationPosition) => {
-      const { longitude, latitude } = position.coords;
+      const { longitude, latitude, heading } = position.coords;
+      const location = { longitude, latitude };
+      
+      setLastLocation(location);
       
       if (markerRef.current) {
         markerRef.current.setLngLat([longitude, latitude]);
+        
+        // Apply rotation if heading is available
+        if (heading !== null && heading !== undefined) {
+          markerRef.current.setRotation(heading);
+        }
       } else {
         markerRef.current = new mapboxgl.Marker({
-          element: createCarElement()
+          element: createCarElement(),
+          rotationAlignment: 'map',
+          pitchAlignment: 'map'
         })
           .setLngLat([longitude, latitude])
           .addTo(map.current!);
+
+        if (heading !== null && heading !== undefined) {
+          markerRef.current.setRotation(heading);
+        }
       }
-  
-      updateDriverLocation(longitude, latitude);
+
+      // FIXED: Convert null to undefined using nullish coalescing operator
+      updateDriverLocation(longitude, latitude, heading ?? undefined);
     };
-  
+
     const onError = (error: GeolocationPositionError) => {
       console.error('Geolocation error:', {
         code: error.code,
@@ -165,36 +318,50 @@ export default function Map({
       
       if (error.code === error.PERMISSION_DENIED) {
         setLocationGranted(false);
-      }
-      
-      if (driverData?.lastLocation) {
-        map.current?.flyTo({
-          center: toLngLatLike(driverData.lastLocation),
-          zoom: 15
-        });
+        setIsTracking(false);
       }
     };
-  
+
+    // Get initial position
     navigator.geolocation.getCurrentPosition(onSuccess, onError, {
       enableHighAccuracy: true,
       timeout: 10000,
       maximumAge: 0
     });
-  
+
+    // Start watching position
     const watchId = navigator.geolocation.watchPosition(
       onSuccess,
       onError,
-      { enableHighAccuracy: true, maximumAge: 10000 }
+      { 
+        enableHighAccuracy: true, 
+        maximumAge: 10000,
+        timeout: 15000
+      }
     );
-  
+
     return () => {
       navigator.geolocation.clearWatch(watchId);
       if (markerRef.current) {
         markerRef.current.remove();
         markerRef.current = null;
       }
+      setIsTracking(false);
     };
-  }, [locationGranted, isOnline, driverId, driverData?.lastLocation]);
+  };
+
+  useEffect(() => {
+    if (locationGranted && isOnline) {
+      const cleanup = startLocationTracking();
+      return cleanup;
+    }
+  }, [locationGranted, isOnline, driverId]);
+
+  useEffect(() => {
+    if (activeDelivery && map.current) {
+      updateDeliveryMarkers();
+    }
+  }, [activeDelivery]);
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
@@ -205,16 +372,22 @@ export default function Map({
 
     const mapInstance = new mapboxgl.Map({
       container: mapContainer.current,
-      style: 'mapbox://styles/murombo/cmdq9jyzw00hd01s87etkezgc',
+      style: 'mapbox://styles/mapbox/streets-v12',
       center: initialCenter,
       zoom: initialOptions.zoom || 12,
       ...initialOptions
     });
 
     mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    mapInstance.addControl(new mapboxgl.FullscreenControl(), 'top-right');
 
     mapInstance.on('load', () => {
       if (onLoaded) onLoaded(mapInstance);
+      
+      // Add delivery markers if active delivery exists
+      if (activeDelivery) {
+        updateDeliveryMarkers();
+      }
     });
 
     map.current = mapInstance;
@@ -224,13 +397,41 @@ export default function Map({
       if (onRemoved) onRemoved();
       map.current = null;
     };
-  }, [initialOptions, onLoaded, onRemoved, driverData?.lastLocation]);
+  }, [initialOptions, onLoaded, onRemoved, driverData?.lastLocation, activeDelivery]);
 
   return (
     <div className="relative h-full w-full">
       <LocationPermissionRequest 
         onGranted={() => setLocationGranted(true)}
       />
+      
+      {/* Tracking Status Overlay */}
+      {isTracking && (
+        <div className="absolute top-4 left-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+            <span className="text-sm font-medium">Live Tracking Active</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">Sharing location with customers</p>
+        </div>
+      )}
+
+      {/* Active Delivery Info */}
+      {activeDelivery && (
+        <div className="absolute top-4 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm max-w-xs">
+          <h3 className="font-semibold text-purple-400 mb-2">Active Delivery</h3>
+          <p className="text-sm">Follow the route to complete delivery</p>
+          <div className="flex items-center space-x-2 mt-2 text-xs">
+            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span>Pickup Location</span>
+          </div>
+          <div className="flex items-center space-x-2 mt-1 text-xs">
+            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+            <span>Delivery Location</span>
+          </div>
+        </div>
+      )}
+
       <div ref={mapContainer} style={style} className="h-full w-full" />
     </div>
   );

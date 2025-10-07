@@ -1,4 +1,4 @@
-// components/driver/BookingNotification.tsx
+//components/driver/BookingNotification.tsx
 'use client';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,6 +26,7 @@ interface BookingNotificationProps {
   onReject: () => void;
   onExpire: () => void;
   isConnected: boolean;
+  driverId: number;
 }
 
 export default function BookingNotification({ 
@@ -33,11 +34,39 @@ export default function BookingNotification({
   onAccept, 
   onReject, 
   onExpire,
-  isConnected 
+  isConnected,
+  driverId 
 }: BookingNotificationProps) {
   const [timeLeft, setTimeLeft] = useState(request.expiresIn);
   const [isVisible, setIsVisible] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Enhanced validation with detailed logging
+  useEffect(() => {
+    console.log('🔍 BookingNotification mounted with:', {
+      requestId: request.id,
+      driverId: driverId,
+      request: request
+    });
+
+    if (!driverId || driverId <= 0) {
+      console.error('❌ Invalid driverId provided to BookingNotification:', driverId);
+      setIsVisible(false);
+      onReject();
+      return;
+    }
+
+    // Check if request.id is valid
+    if (!request.id || isNaN(Number(request.id)) || Number(request.id) <= 0) {
+      console.error('❌ Invalid request.id provided:', request.id);
+      setErrorMessage('Invalid booking request. Please try again.');
+      setIsVisible(false);
+      onReject();
+      return;
+    }
+  }, [driverId, onReject, request, request.id]);
 
   useEffect(() => {
     if (timeLeft <= 0) {
@@ -54,20 +83,241 @@ export default function BookingNotification({
   }, [timeLeft, onExpire]);
 
   const handleAccept = async () => {
-    setIsVisible(false);
-    onAccept();
+    if (isProcessing) return;
+    
+    setIsProcessing(true);
+    setErrorMessage(null);
+    
+    try {
+      // Enhanced validation with type checking
+      const requestId = Number(request.id);
+      const driverIdNum = Number(driverId);
+      const customerId = Number(request.customerId);
+
+      console.log('🔍 Validation before sending:', {
+        rawRequestId: request.id,
+        parsedRequestId: requestId,
+        rawDriverId: driverId,
+        parsedDriverId: driverIdNum,
+        isNaNRequestId: isNaN(requestId),
+        isNaNDriverId: isNaN(driverIdNum)
+      });
+
+      // Validate data before sending - more comprehensive checks
+      if (isNaN(requestId) || requestId <= 0) {
+        const errorMsg = `Invalid Request ID: ${request.id} (parsed as: ${requestId})`;
+        console.error('❌ Request ID validation failed:', errorMsg);
+        setErrorMessage('Invalid booking request ID. Please try again.');
+        setIsProcessing(false);
+        return;
+      }
+
+      if (isNaN(driverIdNum) || driverIdNum <= 0) {
+        const errorMsg = `Invalid Driver ID: ${driverId} (parsed as: ${driverIdNum})`;
+        console.error('❌ Driver ID validation failed:', errorMsg);
+        setErrorMessage('Invalid driver ID. Please try again.');
+        setIsProcessing(false);
+        return;
+      }
+
+      // Create request data with explicit type checking
+      const requestData = {
+        requestId: requestId,
+        driverId: driverIdNum,
+        response: 'accepted' as const,
+        customerId: customerId
+      };
+
+      // Enhanced debugging logs
+      console.log('📤 Sending request data:', requestData);
+      console.log('📤 Data types:', {
+        requestId: typeof requestData.requestId,
+        driverId: typeof requestData.driverId,
+        response: typeof requestData.response,
+        customerId: typeof requestData.customerId
+      });
+
+      const response = await fetch('/api/bookings/respond', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+      });
+
+      const responseText = await response.text();
+      console.log('📥 Raw response:', responseText);
+      console.log('📥 Response status:', response.status);
+
+      if (response.ok) {
+        console.log('✅ Booking accepted successfully');
+        setIsVisible(false);
+        onAccept();
+        
+        // Start sharing location with customer
+        startLocationSharing(request.customerId);
+      } else {
+        let errorData;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch {
+          errorData = { error: responseText };
+        }
+        console.error('❌ Failed to accept booking:', errorData);
+        console.error('❌ Response status:', response.status);
+        
+        // Set user-friendly error message
+        setErrorMessage(errorData.error || 'Failed to accept booking. Please try again.');
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      console.error('❌ Network error accepting booking:', error);
+      setErrorMessage('Network error. Please check your connection and try again.');
+      setIsProcessing(false);
+    }
   };
 
   const handleReject = async () => {
-    setIsVisible(false);
-    onReject();
+    if (isProcessing) return;
+    
+    setIsProcessing(true);
+    setErrorMessage(null);
+    
+    try {
+      // Same validation as handleAccept
+      const requestId = Number(request.id);
+      const driverIdNum = Number(driverId);
+
+      if (isNaN(requestId) || requestId <= 0) {
+        console.error('❌ Invalid requestId in reject:', request.id);
+        setErrorMessage('Invalid booking request.');
+        setIsProcessing(false);
+        return;
+      }
+
+      const requestData = {
+        requestId: requestId,
+        driverId: driverIdNum,
+        response: 'rejected' as const,
+        customerId: Number(request.customerId)
+      };
+
+      console.log('📤 Sending rejection data:', requestData);
+
+      const response = await fetch('/api/bookings/respond', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+      });
+
+      const responseText = await response.text();
+      console.log('📥 Raw rejection response:', responseText);
+
+      if (response.ok) {
+        console.log('✅ Booking rejected successfully');
+        setIsVisible(false);
+        onReject();
+      } else {
+        let errorData;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch {
+          errorData = { error: responseText };
+        }
+        console.error('❌ Failed to reject booking:', errorData);
+        setErrorMessage(errorData.error || 'Failed to reject booking. Please try again.');
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      console.error('❌ Error rejecting booking:', error);
+      setErrorMessage('Network error. Please check your connection and try again.');
+      setIsProcessing(false);
+    }
+  };
+
+  // Function to start sharing driver location with customer
+  const startLocationSharing = (customerId: number) => {
+    if (!navigator.geolocation) {
+      console.error('❌ Geolocation is not supported by this browser');
+      return;
+    }
+
+    console.log('📍 Starting location sharing with customer:', customerId);
+
+    // Start watching position and share updates
+    const watchId = navigator.geolocation.watchPosition(
+      async (position) => {
+        const { longitude, latitude } = position.coords;
+        
+        try {
+          // Update driver location in database
+          await fetch('/api/drivers/update-location', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              driverId: driverId,
+              location: { 
+                longitude, 
+                latitude,
+                accuracy: position.coords.accuracy,
+                heading: position.coords.heading,
+                speed: position.coords.speed
+              },
+              timestamp: new Date().toISOString()
+            })
+          });
+
+          console.log('📍 Location updated:', { longitude, latitude });
+          
+        } catch (error) {
+          console.error('❌ Error updating location:', error);
+        }
+      },
+      (error) => {
+        console.error('❌ Error getting location:', {
+          code: error.code,
+          message: error.message,
+          PERMISSION_DENIED: error.PERMISSION_DENIED,
+          POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
+          TIMEOUT: error.TIMEOUT
+        });
+      },
+      { 
+        enableHighAccuracy: true,
+        maximumAge: 10000, // 10 seconds
+        timeout: 15000 // 15 seconds
+      }
+    );
+
+    // Store watchId for cleanup
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      console.log('🧹 Location sharing stopped');
+    };
   };
 
   const handleImageError = () => {
     setImageError(true);
   };
 
-  if (!isVisible || !isConnected) return null;
+  const handleCloseError = () => {
+    setErrorMessage(null);
+  };
+
+  // Don't render if request.id is invalid
+  if (!isVisible || !isConnected || !request.id || isNaN(Number(request.id))) {
+    console.log('🚫 Not rendering BookingNotification due to:', {
+      isVisible,
+      isConnected,
+      requestId: request.id,
+      isValidRequestId: !request.id || isNaN(Number(request.id))
+    });
+    return null;
+  }
 
   return (
     <AnimatePresence>
@@ -99,6 +349,34 @@ export default function BookingNotification({
 
         {/* Content */}
         <div className="p-4">
+          {/* Error Message Display */}
+          {errorMessage && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg relative">
+              <button
+                onClick={handleCloseError}
+                className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+              >
+                <FiX className="h-4 w-4" />
+              </button>
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-red-700">{errorMessage}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Debug info - remove in production */}
+          <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+            <p>Debug: Request ID: {request.id} (Type: {typeof request.id})</p>
+            <p>Driver ID: {driverId} (Type: {typeof driverId})</p>
+          </div>
+
           {/* Enhanced Customer Info Section */}
           <div className="flex items-center space-x-3 mb-4 p-3 bg-gray-50 rounded-lg">
             <div className="relative">
@@ -183,19 +461,39 @@ export default function BookingNotification({
           <div className="flex space-x-3">
             <button
               onClick={handleReject}
-              className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors duration-200 border border-gray-300 flex items-center justify-center space-x-2"
+              disabled={isProcessing}
+              className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors duration-200 border border-gray-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <FiX className="h-4 w-4" />
-              <span>Decline</span>
+              {isProcessing ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
+              ) : (
+                <FiX className="h-4 w-4" />
+              )}
+              <span>{isProcessing ? 'Processing...' : 'Decline'}</span>
             </button>
             <button
               onClick={handleAccept}
-              className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors duration-200 shadow-lg hover:shadow-green-200 flex items-center justify-center space-x-2"
+              disabled={isProcessing}
+              className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors duration-200 shadow-lg hover:shadow-green-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-              <span>Accept Delivery</span>
+              {isProcessing ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              ) : (
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+              )}
+              <span>{isProcessing ? 'Accepting...' : 'Accept Delivery'}</span>
             </button>
           </div>
+
+          {/* Processing Overlay */}
+          {isProcessing && (
+            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-xl">
+              <div className="bg-white p-4 rounded-lg flex items-center space-x-3">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+                <span className="text-gray-700 font-medium">Processing your response...</span>
+              </div>
+            </div>
+          )}
         </div>
       </motion.div>
     </AnimatePresence>

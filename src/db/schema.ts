@@ -1,3 +1,4 @@
+//src/db/schema.ts
 export type LocationData = {
   longitude: number;
   latitude: number;

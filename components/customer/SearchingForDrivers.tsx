@@ -1,8 +1,9 @@
-// components/customer/SearchingForDrivers.tsx
+//components/customer/SearchingForDrivers.tsx
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPubNubClient, CHANNELS, MESSAGE_TYPES } from "@/lib/pubnub-booking";
+import CustomerMap from "@/components/customer/CustomerMap";
 
 interface SearchingForDriversProps {
   initialFare: string;
@@ -55,10 +56,114 @@ export default function SearchingForDrivers({
   const [acceptedDriver, setAcceptedDriver] = useState<Driver | null>(null);
   const [acceptedDrivers, setAcceptedDrivers] = useState<Driver[]>([]);
   
+  // Enhanced states for real-time tracking
+  const [driverLocation, setDriverLocation] = useState<{ longitude: number; latitude: number } | null>(null);
+  const [isTrackingDriver, setIsTrackingDriver] = useState(false);
+  
   // PubNub refs
   const pubnubRef = useRef<any>(null);
   const listenerRef = useRef<any>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // Enhanced PubNub message handler
+  const handlePubNubMessage = (event: any) => {
+    console.log('PubNub message received:', event);
+    
+    const { channel, message } = event;
+    
+    switch (message.type) {
+      case MESSAGE_TYPES.BOOKING_ACCEPTED:
+        handleBookingAccepted(message.data);
+        break;
+        
+      case MESSAGE_TYPES.BOOKING_REJECTED:
+        handleBookingRejected(message.data);
+        break;
+        
+      case MESSAGE_TYPES.DRIVER_LOCATION_UPDATE:
+        handleDriverLocationUpdate(message.data);
+        break;
+    }
+  };
+
+  // Enhanced booking accepted handler
+  const handleBookingAccepted = (data: any) => {
+    console.log('Booking accepted via PubNub:', data);
+    setBookingStatus('accepted');
+    
+    const driverData: Driver = {
+      id: data.driverId,
+      firstName: data.driverName?.split(' ')[0] || 'Driver',
+      lastName: data.driverName?.split(' ')[1] || '',
+      phoneNumber: data.driverPhone || '',
+      vehicleType: data.vehicleType || 'car',
+      carName: data.carName || 'Vehicle',
+      profilePictureUrl: data.profilePictureUrl || '/default-driver.png',
+      distance: 0,
+      rating: 4.5,
+      isOnline: true,
+      lastLocation: null
+    };
+    
+    setAcceptedDriver(driverData);
+    setAcceptedDrivers([driverData]);
+    setIsTrackingDriver(true);
+    
+    // Start tracking driver location
+    startDriverTracking(data.driverId);
+  };
+
+  // Enhanced booking rejected handler with auto-retry
+  const handleBookingRejected = (data: any) => {
+    console.log('Booking rejected via PubNub:', data);
+    
+    if (data.expired) {
+      setBookingStatus('failed');
+      setError('No drivers accepted your request. Please try again.');
+    } else if (data.rejected) {
+      setBookingStatus('failed');
+      setError('The driver declined your request. Searching for new drivers...');
+      
+      // Auto-retry after 2 seconds
+      setTimeout(() => {
+        setError(null);
+        setBookingStatus('searching');
+        setSearchProgress(0);
+        setSelectedDriver(null);
+        
+        // Fetch new nearby drivers and retry
+        fetchNearbyDrivers().then(() => {
+          // Optionally re-broadcast to all drivers
+          createBookingRequest(null);
+        });
+      }, 2000);
+    }
+  };
+
+  // Handle driver location updates
+  const handleDriverLocationUpdate = (data: any) => {
+    if (data.driverId === acceptedDriver?.id) {
+      setDriverLocation(data.location);
+      updateDriverOnMap(data.location);
+    }
+  };
+
+  // Function to update map with driver position
+  const updateDriverOnMap = (location: { longitude: number; latitude: number }) => {
+    // This will depend on your map implementation
+    // For Mapbox/Google Maps, you'd update the driver marker position
+    console.log('Updating driver location on map:', location);
+    
+    // If you're using the CustomerMap component, you might want to pass the driver location as a prop
+    // and handle the marker update there
+  };
+
+  // Start tracking driver location
+  const startDriverTracking = (driverId: number) => {
+    // Subscribe to driver location updates
+    // This is already handled by your PubNub listener
+    console.log('Started tracking driver:', driverId);
+  };
 
   // Initialize PubNub and set up listeners
   useEffect(() => {
@@ -69,25 +174,7 @@ export default function SearchingForDrivers({
     
     // Set up message listener
     listenerRef.current = {
-      message: (event: any) => {
-        console.log('PubNub message received:', event);
-        
-        const { channel, message } = event;
-        
-        switch (message.type) {
-          case MESSAGE_TYPES.BOOKING_ACCEPTED:
-            handleBookingAccepted(message.data);
-            break;
-            
-          case MESSAGE_TYPES.BOOKING_REJECTED:
-            handleBookingRejected(message.data);
-            break;
-            
-          case MESSAGE_TYPES.DRIVER_LOCATION_UPDATE:
-            handleDriverLocationUpdate(message.data);
-            break;
-        }
-      },
+      message: handlePubNubMessage,
       status: (event: any) => {
         console.log('PubNub status:', event);
         if (event.category === 'PNConnectedCategory') {
@@ -121,57 +208,6 @@ export default function SearchingForDrivers({
       }
     };
   }, [customerId]);
-
-  const handleBookingAccepted = (data: any) => {
-    console.log('Booking accepted via PubNub:', data);
-    setBookingStatus('accepted');
-    
-    // Create driver object from the data
-    const driverData: Driver = {
-      id: data.driverId,
-      firstName: data.driverName.split(' ')[0] || 'Driver',
-      lastName: data.driverName.split(' ')[1] || '',
-      phoneNumber: data.driverPhone,
-      vehicleType: data.vehicleType,
-      carName: data.carName,
-      profilePictureUrl: data.profilePictureUrl || '/default-driver.png',
-      distance: 0,
-      rating: 4.5,
-      isOnline: true,
-      lastLocation: null
-    };
-    
-    setAcceptedDriver(driverData);
-    setAcceptedDrivers([driverData]);
-  };
-
-  const handleBookingRejected = (data: any) => {
-    console.log('Booking rejected/expired via PubNub:', data);
-    if (data.expired) {
-      setBookingStatus('failed');
-      setError('No drivers accepted your request. Please try again.');
-    } else if (data.rejected) {
-      setBookingStatus('failed');
-      setError('The driver declined your request. Please select another driver.');
-      // Reset selected driver so customer can choose another
-      setSelectedDriver(null);
-    }
-  };
-
-  const handleDriverLocationUpdate = (data: any) => {
-    setDrivers(prevDrivers =>
-      prevDrivers.map(driver =>
-        driver.id === data.driverId
-          ? { 
-              ...driver, 
-              lastLocation: data.location,
-              latitude: data.location.latitude,
-              longitude: data.location.longitude
-            }
-          : driver
-      )
-    );
-  };
 
   const createBookingRequest = useCallback(async (selectedDriver: Driver | null = null) => {
     setBookingStatus('waiting');
@@ -293,6 +329,7 @@ export default function SearchingForDrivers({
         if (data.status === 'accepted' && data.driver) {
           setBookingStatus('accepted');
           setAcceptedDriver(data.driver);
+          setIsTrackingDriver(true);
         } else if (data.status === 'expired') {
           setBookingStatus('failed');
           setError('No drivers accepted your request. Please try again.');
@@ -346,6 +383,8 @@ export default function SearchingForDrivers({
     setAcceptedDriver(null);
     setAcceptedDrivers([]);
     setSelectedDriver(null); // Reset selected driver on retry
+    setDriverLocation(null);
+    setIsTrackingDriver(false);
     fetchNearbyDrivers();
   };
 
@@ -483,33 +522,51 @@ export default function SearchingForDrivers({
           </div>
         )}
 
-        {/* Accepted Driver Section */}
+        {/* Driver Tracking Map Section - Show when driver is accepted */}
         {bookingStatus === 'accepted' && acceptedDriver && (
-          <div className="bg-green-900/20 border border-green-700/50 rounded-2xl p-5 mb-6 backdrop-blur-sm">
+          <div className="bg-gray-800/30 border border-green-700/50 rounded-2xl p-4 mb-6 backdrop-blur-sm">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-green-300 font-semibold text-lg">Driver Accepted!</h3>
-              <div className="w-6 h-6 bg-green-500 rounded-full animate-pulse"></div>
-            </div>
-
-            <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 bg-gray-800 rounded-full overflow-hidden">
-                <img
-                  src={acceptedDriver.profilePictureUrl}
-                  alt={acceptedDriver.firstName}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239336f3' stroke-width='2'%3E%3Cpath d='M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'/%3E%3C/svg%3E";
-                  }}
-                />
+              <h3 className="text-green-300 font-semibold text-lg">Driver is on the way! 🚗</h3>
+              <div className="flex items-center space-x-2 text-green-400">
+                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-sm">Live tracking</span>
               </div>
-
-              <div className="flex-1">
-                <h4 className="text-white font-semibold">
-                  {acceptedDriver.firstName} {acceptedDriver.lastName}
-                </h4>
-                <p className="text-green-300 text-sm">{acceptedDriver.carName}</p>
-                <p className="text-gray-400 text-sm">{acceptedDriver.vehicleType}</p>
-                <p className="text-gray-400 text-sm">Phone: {acceptedDriver.phoneNumber}</p>
+            </div>
+            
+            <div className="h-64 bg-gray-700/50 rounded-xl mb-4 flex items-center justify-center">
+            {driverLocation ? (
+  <CustomerMap
+    pickupLocation={{
+      longitude: userLocation.lng,
+      latitude: userLocation.lat,
+      address: packageData.pickupAddress
+    }}
+    deliveryLocation={{
+      longitude: userLocation.lng, // You might want to use actual delivery coords
+      latitude: userLocation.lat,
+      address: packageData.dropoffAddress
+    }}
+    driverLocation={driverLocation}
+    showRoute={true}
+    showCurrentLocation={true}
+    style={{ height: '100%', width: '100%', borderRadius: '0.5rem' }}
+  />
+) : (
+  <div className="text-center text-gray-400">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
+    <p>Waiting for driver location updates...</p>
+  </div>
+)}
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="text-center p-2 bg-gray-700/30 rounded-lg">
+                <p className="text-gray-400">Driver</p>
+                <p className="text-white font-semibold">{acceptedDriver.firstName} {acceptedDriver.lastName}</p>
+              </div>
+              <div className="text-center p-2 bg-gray-700/30 rounded-lg">
+                <p className="text-gray-400">Vehicle</p>
+                <p className="text-white font-semibold">{acceptedDriver.carName}</p>
               </div>
             </div>
 

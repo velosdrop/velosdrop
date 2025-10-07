@@ -19,9 +19,18 @@ interface CustomerMapProps {
   onRemoved?: () => void;
   pickupLocation?: { longitude: number; latitude: number; address?: string };
   deliveryLocation?: { longitude: number; latitude: number; address?: string };
+  driverLocation?: { longitude: number; latitude: number; heading?: number; speed?: number };
   showRoute?: boolean;
   showCurrentLocation?: boolean;
   onLocationUpdate?: (location: { longitude: number; latitude: number, address: string }) => void;
+}
+
+// Declare global marker variables
+declare global {
+  interface Window {
+    driverMarker?: mapboxgl.Marker;
+    routeSource?: mapboxgl.GeoJSONSource;
+  }
 }
 
 export default function CustomerMap({
@@ -31,6 +40,7 @@ export default function CustomerMap({
   onRemoved,
   pickupLocation,
   deliveryLocation,
+  driverLocation,
   showRoute = false,
   showCurrentLocation = true,
   onLocationUpdate
@@ -40,12 +50,13 @@ export default function CustomerMap({
   const pickupMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const deliveryMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const currentLocationMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const driverMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [currentLocation, setCurrentLocation] = useState<{ longitude: number; latitude: number } | null>(null);
   const [currentAddress, setCurrentAddress] = useState<string>('');
   const [isLocating, setIsLocating] = useState(false);
   const [routeData, setRouteData] = useState<any>(null);
-  
+  const [driverRouteData, setDriverRouteData] = useState<any>(null);
 
   // Get address from coordinates
   const getAddressFromCoords = async (lng: number, lat: number): Promise<string> => {
@@ -65,35 +76,41 @@ export default function CustomerMap({
   };
 
   // Fetch route between two points
-  const fetchRoute = async (pickup: [number, number], delivery: [number, number]) => {
+  const fetchRoute = async (start: [number, number], end: [number, number], routeId: string = 'route') => {
     try {
       const response = await fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/driving/${pickup[0]},${pickup[1]};${delivery[0]},${delivery[1]}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
+        `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
       );
       const data = await response.json();
       if (data.routes && data.routes.length > 0) {
-        setRouteData(data.routes[0]);
-        addRouteToMap(data.routes[0]);
+        if (routeId === 'route') {
+          setRouteData(data.routes[0]);
+        } else {
+          setDriverRouteData(data.routes[0]);
+        }
+        addRouteToMap(data.routes[0], routeId);
+        return data.routes[0];
       }
     } catch (error) {
       console.error('Error fetching route:', error);
     }
+    return null;
   };
 
   // Add route to map
-  const addRouteToMap = (route: any) => {
+  const addRouteToMap = (route: any, routeId: string = 'route') => {
     if (!map.current) return;
 
     // Remove existing route layer if it exists
-    if (map.current.getLayer('route')) {
-      map.current.removeLayer('route');
+    if (map.current.getLayer(routeId)) {
+      map.current.removeLayer(routeId);
     }
-    if (map.current.getSource('route')) {
-      map.current.removeSource('route');
+    if (map.current.getSource(routeId)) {
+      map.current.removeSource(routeId);
     }
 
     // Add route source and layer
-    map.current.addSource('route', {
+    map.current.addSource(routeId, {
       type: 'geojson',
       data: {
         type: 'Feature',
@@ -102,19 +119,26 @@ export default function CustomerMap({
       }
     });
 
+    const routeStyle = routeId === 'driver-route' ? {
+      'line-color': '#10b981',
+      'line-width': 6,
+      'line-opacity': 0.9,
+      'line-dasharray': [2, 2]
+    } : {
+      'line-color': '#8b5cf6',
+      'line-width': 4,
+      'line-opacity': 0.8
+    };
+
     map.current.addLayer({
-      id: 'route',
+      id: routeId,
       type: 'line',
-      source: 'route',
+      source: routeId,
       layout: {
         'line-join': 'round',
         'line-cap': 'round'
       },
-      paint: {
-        'line-color': '#8b5cf6',
-        'line-width': 4,
-        'line-opacity': 0.8
-      }
+      paint: routeStyle
     });
   };
 
@@ -183,6 +207,102 @@ export default function CustomerMap({
       </svg>
     `;
     return el;
+  };
+
+  const createDriverMarkerElement = () => {
+    const el = document.createElement('div');
+    el.className = 'driver-marker';
+    el.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+        <defs>
+          <linearGradient id="driverGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#8b5cf6" />
+            <stop offset="100%" stop-color="#7c3aed" />
+          </linearGradient>
+          <filter id="driverShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="1" dy="2" stdDeviation="2" flood-color="#5b21b6" flood-opacity="0.8"/>
+          </filter>
+        </defs>
+        
+        <!-- Car Body -->
+        <path d="M38 18H10c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h28c1.1 0 2-.9 2-2V20c0-1.1-.9-2-2-2z" 
+              fill="url(#driverGradient)" filter="url(#driverShadow)" stroke="#5b21b6" stroke-width="0.5"/>
+        
+        <!-- Windshield -->
+        <path d="M24 18l6-6h-12l6 6z" fill="#e1bee7" fill-opacity="0.8" stroke="#5b21b6" stroke-width="0.3"/>
+        
+        <!-- Side Windows -->
+        <rect x="12" y="18" width="4" height="6" rx="1" fill="#e1bee7" fill-opacity="0.6" stroke="#5b21b6" stroke-width="0.3"/>
+        <rect x="32" y="18" width="4" height="6" rx="1" fill="#e1bee7" fill-opacity="0.6" stroke="#5b21b6" stroke-width="0.3"/>
+        
+        <!-- Wheels -->
+        <circle cx="12" cy="32" r="4" fill="#212121" stroke="#424242" stroke-width="1.5"/>
+        <circle cx="36" cy="32" r="4" fill="#212121" stroke="#424242" stroke-width="1.5"/>
+        <circle cx="12" cy="32" r="2" fill="#757575" stroke="#9e9e9e" stroke-width="0.5"/>
+        <circle cx="36" cy="32" r="2" fill="#757575" stroke="#9e9e9e" stroke-width="0.5"/>
+        
+        <!-- Headlights -->
+        <circle cx="42" cy="24" r="2" fill="#ffeb3b" stroke="#fbc02d" stroke-width="0.5"/>
+        <circle cx="6" cy="24" r="2" fill="#ffeb3b" stroke="#fbc02d" stroke-width="0.5"/>
+        
+        <!-- Pulsing effect -->
+        <circle cx="24" cy="24" r="22" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-opacity="0.3">
+          <animate attributeName="r" from="22" to="28" dur="2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" from="0.5" to="0" dur="2s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+    `;
+    return el;
+  };
+
+  // Update driver marker position
+  const updateDriverMarker = (location: { longitude: number; latitude: number; heading?: number }) => {
+    if (!map.current) return;
+
+    // Remove existing driver marker
+    if (driverMarkerRef.current) {
+      driverMarkerRef.current.remove();
+    }
+
+    // Create and add new driver marker
+    driverMarkerRef.current = new mapboxgl.Marker({
+      element: createDriverMarkerElement(),
+      rotationAlignment: 'map',
+      pitchAlignment: 'map'
+    })
+      .setLngLat([location.longitude, location.latitude])
+      .addTo(map.current);
+
+    // Apply rotation if heading is available
+    if (location.heading !== undefined && driverMarkerRef.current) {
+      driverMarkerRef.current.setRotation(location.heading);
+    }
+
+    // If we have pickup location, calculate and show route from driver to pickup
+    if (pickupLocation) {
+      fetchRoute(
+        [location.longitude, location.latitude],
+        [pickupLocation.longitude, pickupLocation.latitude],
+        'driver-route'
+      );
+    }
+
+    // Fit map to show driver, pickup, and delivery locations
+    const bounds = new mapboxgl.LngLatBounds()
+      .extend([location.longitude, location.latitude]);
+
+    if (pickupLocation) {
+      bounds.extend([pickupLocation.longitude, pickupLocation.latitude]);
+    }
+    if (deliveryLocation) {
+      bounds.extend([deliveryLocation.longitude, deliveryLocation.latitude]);
+    }
+
+    map.current.fitBounds(bounds, {
+      padding: 100,
+      maxZoom: 15,
+      duration: 1000
+    });
   };
 
   // Update markers
@@ -281,15 +401,15 @@ export default function CustomerMap({
     }  
 
     setIsLocating(true);
-  navigator.geolocation.getCurrentPosition(
-    async (position) => {
-      const location = {
-        longitude: position.coords.longitude,
-        latitude: position.coords.latitude
-      };
-      
-      setCurrentLocation(location);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const location = {
+          longitude: position.coords.longitude,
+          latitude: position.coords.latitude
+        };
         
+        setCurrentLocation(location);
+          
         // Get address from coordinates
         const address = await getAddressFromCoords(location.longitude, location.latitude);
         setCurrentAddress(address);
@@ -316,6 +436,13 @@ export default function CustomerMap({
       }
     );
   };
+
+  // Effect for driver location updates
+  useEffect(() => {
+    if (driverLocation && map.current) {
+      updateDriverMarker(driverLocation);
+    }
+  }, [driverLocation]);
 
   useEffect(() => {
     if (!MAPBOX_TOKEN) {
@@ -386,7 +513,7 @@ export default function CustomerMap({
       <div className="h-full w-full flex items-center justify-center bg-gray-800 rounded-2xl">
         <div className="text-center text-white">
           <div className="text-2xl mb-2">🌍</div>
-          <p className="text-lg font-semib极">Map Configuration Required</p>
+          <p className="text-lg font-semibold">Map Configuration Required</p>
           <p className="text-sm text-gray-400 mt-1">
             Please add NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN to your environment variables
           </p>
@@ -430,9 +557,25 @@ export default function CustomerMap({
         </div>
       )}
       
+      {/* Driver Info Overlay */}
+      {driverLocation && (
+        <div className="absolute top-4 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
+          <h3 className="font-semibold text-green-400 mb-2">Driver Location</h3>
+          <p className="text-sm">Live tracking active</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {driverLocation.latitude.toFixed(6)}, {driverLocation.longitude.toFixed(6)}
+          </p>
+          {driverLocation.speed && (
+            <p className="text-xs text-gray-400">
+              Speed: {(driverLocation.speed * 3.6).toFixed(1)} km/h
+            </p>
+          )}
+        </div>
+      )}
+      
       {/* Route Info Overlay */}
       {routeData && pickupLocation && deliveryLocation && (
-        <div className="absolute top-4 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
+        <div className="absolute bottom-20 left-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
           <h3 className="font-semibold text-purple-400 mb-2">Delivery Route</h3>
           <p className="text-sm">Distance: {(routeData.distance / 1000).toFixed(1)} km</p>
           <p className="text-sm">Duration: {Math.round(routeData.duration / 60)} min</p>

@@ -1,4 +1,4 @@
-// lib/pubnub-booking.ts
+//lib/pubnub-booking.ts
 import { pubnub } from './pubnub';
 
 // Channel naming conventions
@@ -17,6 +17,9 @@ export const CHANNELS = {
   
   // Location channels
   driverLocations: 'driver_locations',
+  
+  // General drivers broadcast channel
+  drivers: 'drivers',
 } as const;
 
 // Message types
@@ -32,6 +35,10 @@ export const MESSAGE_TYPES = {
   DRIVER_LOCATION_UPDATE: 'driver_location_update',
   BOOKING_STATUS_UPDATE: 'booking_status_update',
   DRIVER_ONLINE_STATUS: 'driver_online_status',
+  
+  // Add the missing message types for driver notifications
+  REQUEST_ACCEPTED: 'request_accepted',
+  REQUEST_REBROADCAST: 'request_rebroadcast',
 } as const;
 
 // PubNub message interface
@@ -86,6 +93,11 @@ export interface BookingResponseMessage extends PubNubMessage {
 // Create PubNub client instance
 export const createPubNubClient = (userId: string) => {
   return pubnub; // Return the shared instance
+};
+
+// Export the getPubNubInstance function that was missing
+export const getPubNubInstance = () => {
+  return pubnub;
 };
 
 // Publish functions
@@ -175,4 +187,60 @@ export const publishDriverLocationUpdate = async (
     // Don't throw the error - just return failure
     return { success: false, error };
   }
+};
+
+// Additional publish functions for driver notifications
+export const publishToDriversChannel = async (
+  messageData: any,
+  messageType: string
+) => {
+  const message: PubNubPublishMessage = {
+    type: messageType,
+    data: messageData,
+  };
+
+  try {
+    await pubnub.publish({
+      channel: CHANNELS.drivers,
+      message,
+    });
+
+    console.log(`Message published to drivers channel: ${messageType}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Error publishing to drivers channel:', error);
+    return { success: false, error };
+  }
+};
+
+// Helper function to publish request accepted notification to other drivers
+export const publishRequestAccepted = async (
+  requestId: number,
+  driverId: number
+) => {
+  return await publishToDriversChannel(
+    {
+      requestId,
+      driverId,
+      acceptedAt: new Date().toISOString()
+    },
+    MESSAGE_TYPES.REQUEST_ACCEPTED
+  );
+};
+
+// Helper function to publish request rebroadcast notification
+export const publishRequestRebroadcast = async (
+  requestId: number,
+  rejectedBy: number,
+  availableFor: number
+) => {
+  return await publishToDriversChannel(
+    {
+      requestId,
+      reason: 'driver_rejected',
+      rejectedBy,
+      availableFor
+    },
+    MESSAGE_TYPES.REQUEST_REBROADCAST
+  );
 };
