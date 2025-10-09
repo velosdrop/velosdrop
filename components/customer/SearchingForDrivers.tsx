@@ -65,7 +65,7 @@ export default function SearchingForDrivers({
   const listenerRef = useRef<any>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Enhanced PubNub message handler
+  // Enhanced PubNub message handler with additional message types
   const handlePubNubMessage = (event: any) => {
     console.log('PubNub message received:', event);
     
@@ -82,6 +82,17 @@ export default function SearchingForDrivers({
         
       case MESSAGE_TYPES.DRIVER_LOCATION_UPDATE:
         handleDriverLocationUpdate(message.data);
+        break;
+        
+      // Add new cases for general booking updates
+      case 'booking_expired':
+      case 'booking_cancelled':
+        handleBookingFailed(message.data);
+        break;
+
+      // Add case for continue search messages
+      case 'CONTINUE_SEARCH':
+        handleContinueSearch(message.data);
         break;
     }
   };
@@ -100,9 +111,10 @@ export default function SearchingForDrivers({
       carName: data.carName || 'Vehicle',
       profilePictureUrl: data.profilePictureUrl || '/default-driver.png',
       distance: 0,
-      rating: 4.5,
+      rating: data.rating || data.averageRating || 4.5,
       isOnline: true,
-      lastLocation: null
+      lastLocation: null,
+      totalRatings: data.totalRatings || 0
     };
     
     setAcceptedDriver(driverData);
@@ -113,30 +125,50 @@ export default function SearchingForDrivers({
     startDriverTracking(data.driverId);
   };
 
-  // Enhanced booking rejected handler with auto-retry
+  // Enhanced booking rejected handler with better auto-retry
   const handleBookingRejected = (data: any) => {
     console.log('Booking rejected via PubNub:', data);
     
+    // Show appropriate message based on rejection reason
     if (data.expired) {
       setBookingStatus('failed');
       setError('No drivers accepted your request. Please try again.');
     } else if (data.rejected) {
-      setBookingStatus('failed');
-      setError('The driver declined your request. Searching for new drivers...');
+      // Keep the status as 'searching' to continue looking for drivers
+      setBookingStatus('searching');
+      setError(data.message || 'Driver declined. Searching for new drivers...');
       
-      // Auto-retry after 2 seconds
+      // Enhanced auto-retry with better logic
       setTimeout(() => {
         setError(null);
-        setBookingStatus('searching');
-        setSearchProgress(0);
-        setSelectedDriver(null);
         
-        // Fetch new nearby drivers and retry
-        fetchNearbyDrivers().then(() => {
-          // Optionally re-broadcast to all drivers
-          createBookingRequest(null);
-        });
+        // Only fetch new drivers if we don't have any selected driver waiting
+        if (!selectedDriver) {
+          fetchNearbyDrivers(true).then((newDrivers) => {
+            if (newDrivers && newDrivers.length > 0) {
+              // Auto-broadcast to new drivers
+              createBookingRequest(null);
+            }
+          });
+        }
       }, 2000);
+    }
+  };
+
+  // New handler for general booking failures
+  const handleBookingFailed = (data: any) => {
+    setBookingStatus('failed');
+    setError(data.message || 'Booking request failed. Please try again.');
+    setSelectedDriver(null); // Reset any selected driver
+  };
+
+  // New handler for continue search messages
+  const handleContinueSearch = (data: any) => {
+    console.log('Continue search requested:', data);
+    if (bookingStatus === 'waiting') {
+      setBookingStatus('searching');
+      setError(null);
+      fetchNearbyDrivers(true);
     }
   };
 
@@ -165,7 +197,51 @@ export default function SearchingForDrivers({
     console.log('Started tracking driver:', driverId);
   };
 
-  // Initialize PubNub and set up listeners
+  // Enhanced fetchNearbyDrivers function with retry support
+  const fetchNearbyDrivers = useCallback(async (isRetry = false) => {
+    try {
+      if (!userLocation || userLocation.lat === undefined || userLocation.lng === undefined) {
+        setError('Location data is not available. Please check your location settings.');
+        return;
+      }
+
+      console.log(`${isRetry ? '🔄 Retrying' : '🔍 Fetching'} nearby drivers with location:`, userLocation);
+      setError(null);
+
+      const response = await fetch(
+        `/api/drivers/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=5&excludeResponded=true`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch drivers: ${response.status}`);
+      }
+
+      const nearbyDrivers = await response.json();
+      console.log('Received nearby drivers:', nearbyDrivers);
+
+      const transformedDrivers = nearbyDrivers.map((driver: any) => ({
+        ...driver,
+        rating: driver.averageRating || driver.rating || 4.5,
+        distance: driver.distance || 0
+      }));
+
+      setDrivers(transformedDrivers);
+      
+      // If this is a retry and we found new drivers, auto-broadcast
+      if (isRetry && transformedDrivers.length > 0) {
+        console.log('🔄 Auto-broadcasting to new drivers after rejection');
+        createBookingRequest(null);
+      }
+      
+      return transformedDrivers;
+    } catch (error) {
+      console.error('Error fetching nearby drivers:', error);
+      setError(error instanceof Error ? error.message : 'Failed to fetch nearby drivers');
+      return [];
+    }
+  }, [userLocation]);
+
+  // Enhanced PubNub initialization with additional channels
   useEffect(() => {
     if (!customerId) return;
 
@@ -191,13 +267,20 @@ export default function SearchingForDrivers({
 
     pubnubRef.current.addListener(listenerRef.current);
 
-    // Subscribe to customer channel
+    // Enhanced subscription to multiple channels
+    const channels = [CHANNELS.customer(customerId)];
+    if (currentRequestId) {
+      channels.push(`booking_${currentRequestId}`);
+      channels.push(`customer_${customerId}_updates`);
+      channels.push(`search_${customerId}`);
+    }
+
     pubnubRef.current.subscribe({
-      channels: [CHANNELS.customer(customerId)],
+      channels: channels,
       withPresence: true
     });
 
-    console.log('✅ PubNub initialized for customer:', customerId);
+    console.log('✅ PubNub initialized for customer:', customerId, 'channels:', channels);
 
     return () => {
       // Cleanup PubNub connection
@@ -207,7 +290,7 @@ export default function SearchingForDrivers({
         console.log('🧹 PubNub connection cleaned up');
       }
     };
-  }, [customerId]);
+  }, [customerId, currentRequestId]); // Added currentRequestId dependency
 
   const createBookingRequest = useCallback(async (selectedDriver: Driver | null = null) => {
     setBookingStatus('waiting');
@@ -252,41 +335,6 @@ export default function SearchingForDrivers({
       setError('Failed to create booking request');
     }
   }, [customerId, customerUsername, fare, packageData, userLocation]);
-
-  const fetchNearbyDrivers = useCallback(async () => {
-    try {
-      if (!userLocation || userLocation.lat === undefined || userLocation.lng === undefined) {
-        setError('Location data is not available. Please check your location settings.');
-        return;
-      }
-
-      console.log('Fetching nearby drivers with location:', userLocation);
-      setError(null);
-
-      const response = await fetch(
-        `/api/drivers/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=5`
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const nearbyDrivers = await response.json();
-      console.log('Received nearby drivers:', nearbyDrivers);
-
-      const transformedDrivers = nearbyDrivers.map((driver: any) => ({
-        ...driver,
-        rating: driver.averageRating || driver.rating || 4.5,
-        distance: driver.distance || 0
-      }));
-
-      setDrivers(transformedDrivers);
-    } catch (error) {
-      console.error('Error fetching nearby drivers:', error);
-      setError(error instanceof Error ? error.message : 'Failed to fetch nearby drivers');
-    }
-  }, [userLocation]);
 
   // Simplified useEffect without SSE
   useEffect(() => {
@@ -343,6 +391,22 @@ export default function SearchingForDrivers({
 
     return () => clearInterval(interval);
   }, [currentRequestId]);
+
+  // Temporary debug function - remove after testing
+  const debugPubNubFlow = () => {
+    console.log('🔍 PubNub Connection Debug:');
+    console.log('- Customer ID:', customerId);
+    console.log('- Current Request ID:', currentRequestId);
+    console.log('- Booking Status:', bookingStatus);
+    console.log('- Selected Driver:', selectedDriver);
+    console.log('- Drivers Available:', drivers.length);
+    
+    // Test if we can manually trigger a retry
+    if (bookingStatus === 'searching' && drivers.length === 0) {
+      console.log('🔄 Manually triggering driver fetch...');
+      fetchNearbyDrivers(true);
+    }
+  };
 
   const handleFareAdjust = (amount: number) => {
     const currentFare = parseFloat(fare);
@@ -534,29 +598,29 @@ export default function SearchingForDrivers({
             </div>
             
             <div className="h-64 bg-gray-700/50 rounded-xl mb-4 flex items-center justify-center">
-            {driverLocation ? (
-  <CustomerMap
-    pickupLocation={{
-      longitude: userLocation.lng,
-      latitude: userLocation.lat,
-      address: packageData.pickupAddress
-    }}
-    deliveryLocation={{
-      longitude: userLocation.lng, // You might want to use actual delivery coords
-      latitude: userLocation.lat,
-      address: packageData.dropoffAddress
-    }}
-    driverLocation={driverLocation}
-    showRoute={true}
-    showCurrentLocation={true}
-    style={{ height: '100%', width: '100%', borderRadius: '0.5rem' }}
-  />
-) : (
-  <div className="text-center text-gray-400">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
-    <p>Waiting for driver location updates...</p>
-  </div>
-)}
+              {driverLocation ? (
+                <CustomerMap
+                  pickupLocation={{
+                    longitude: userLocation.lng,
+                    latitude: userLocation.lat,
+                    address: packageData.pickupAddress
+                  }}
+                  deliveryLocation={{
+                    longitude: userLocation.lng, // You might want to use actual delivery coords
+                    latitude: userLocation.lat,
+                    address: packageData.dropoffAddress
+                  }}
+                  driverLocation={driverLocation}
+                  showRoute={true}
+                  showCurrentLocation={true}
+                  style={{ height: '100%', width: '100%', borderRadius: '0.5rem' }}
+                />
+              ) : (
+                <div className="text-center text-gray-400">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
+                  <p>Waiting for driver location updates...</p>
+                </div>
+              )}
             </div>
             
             <div className="grid grid-cols-2 gap-4 text-sm">

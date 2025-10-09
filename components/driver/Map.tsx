@@ -48,10 +48,62 @@ export default function Map({
   const deliveryMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const [isTracking, setIsTracking] = useState(false);
   const [lastLocation, setLastLocation] = useState<{ longitude: number; latitude: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [currentAddress, setCurrentAddress] = useState<string>('');
 
   // Convert any coordinate format to LngLatLike
   const toLngLatLike = (location: { longitude: number; latitude: number }): [number, number] => {
     return [location.longitude, location.latitude];
+  };
+
+  // Get address from coordinates
+  const getAddressFromCoords = async (lng: number, lat: number): Promise<string> => {
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=address,place,neighborhood,locality`
+      );
+      const data = await response.json();
+      if (data.features && data.features.length > 0) {
+        return data.features[0].place_name;
+      }
+      return 'Address not found';
+    } catch (error) {
+      console.error('Error getting address:', error);
+      return 'Unable to get address';
+    }
+  };
+
+  // Fly to user's current location
+  const flyToCurrentLocation = () => {
+    if (!map.current || !lastLocation) return;
+
+    setIsLocating(true);
+    
+    map.current.flyTo({
+      center: [lastLocation.longitude, lastLocation.latitude],
+      zoom: 16,
+      bearing: 0,
+      speed: 1.2,
+      curve: 1,
+      easing: (t) => t,
+      essential: true
+    });
+
+    // Reset locating state after animation
+    setTimeout(() => setIsLocating(false), 1500);
+  };
+
+  // Auto-zoom to driver location when tracking starts
+  const zoomToDriverLocation = (longitude: number, latitude: number) => {
+    if (!map.current) return;
+
+    map.current.flyTo({
+      center: [longitude, latitude],
+      zoom: 16,
+      speed: 0.8,
+      curve: 1,
+      essential: true
+    });
   };
 
   const createCarElement = () => {
@@ -276,11 +328,20 @@ export default function Map({
     console.log('📍 Starting location tracking for driver:', driverId);
     setIsTracking(true);
 
-    const onSuccess = (position: GeolocationPosition) => {
+    const onSuccess = async (position: GeolocationPosition) => {
       const { longitude, latitude, heading } = position.coords;
       const location = { longitude, latitude };
       
       setLastLocation(location);
+      
+      // Auto-zoom to driver location on first position update
+      if (!lastLocation) {
+        zoomToDriverLocation(longitude, latitude);
+      }
+      
+      // Get address for current location
+      const address = await getAddressFromCoords(longitude, latitude);
+      setCurrentAddress(address);
       
       if (markerRef.current) {
         markerRef.current.setLngLat([longitude, latitude]);
@@ -416,9 +477,28 @@ export default function Map({
         </div>
       )}
 
+      {/* Current Location Info */}
+      {lastLocation && (
+        <div className="absolute top-4 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm max-w-xs">
+          <h3 className="font-semibold text-purple-400 mb-2">Your Location</h3>
+          {currentAddress && (
+            <p className="text-sm mb-1">{currentAddress}</p>
+          )}
+          <p className="text-xs text-gray-400">
+            {lastLocation.latitude.toFixed(6)}, {lastLocation.longitude.toFixed(6)}
+          </p>
+          {isLocating && (
+            <div className="flex items-center mt-2 text-purple-400 text-xs">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-400 mr-2"></div>
+              Updating location...
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Active Delivery Info */}
       {activeDelivery && (
-        <div className="absolute top-4 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm max-w-xs">
+        <div className="absolute top-24 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm max-w-xs">
           <h3 className="font-semibold text-purple-400 mb-2">Active Delivery</h3>
           <p className="text-sm">Follow the route to complete delivery</p>
           <div className="flex items-center space-x-2 mt-2 text-xs">
@@ -428,6 +508,31 @@ export default function Map({
           <div className="flex items-center space-x-2 mt-1 text-xs">
             <div className="w-2 h-2 bg-red-500 rounded-full"></div>
             <span>Delivery Location</span>
+          </div>
+        </div>
+      )}
+
+      {/* Find My Location Button - Bottom Right Corner */}
+      {locationGranted && lastLocation && (
+        <button
+          onClick={flyToCurrentLocation}
+          disabled={isLocating}
+          className="absolute bottom-4 right-4 z-10 bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          title="Find my location"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+      )}
+
+      {/* Location Accuracy Indicator */}
+      {isTracking && (
+        <div className="absolute bottom-4 left-4 z-10 bg-black/80 text-white p-2 rounded-lg backdrop-blur-sm">
+          <div className="flex items-center space-x-2">
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            <span className="text-xs">High Accuracy GPS</span>
           </div>
         </div>
       )}
