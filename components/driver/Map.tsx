@@ -50,6 +50,7 @@ export default function Map({
   const [lastLocation, setLastLocation] = useState<{ longitude: number; latitude: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [currentAddress, setCurrentAddress] = useState<string>('');
+  const [driverToPickupRouteData, setDriverToPickupRouteData] = useState<any>(null);
 
   // Convert any coordinate format to LngLatLike
   const toLngLatLike = (location: { longitude: number; latitude: number }): [number, number] => {
@@ -104,6 +105,60 @@ export default function Map({
       curve: 1,
       essential: true
     });
+  };
+
+  // Add driver to pickup route
+  const addDriverToPickupRoute = async (driverLocation: { longitude: number; latitude: number }, pickupLocation: { longitude: number; latitude: number }) => {
+    if (!map.current) return;
+
+    try {
+      console.log('📍 Calculating driver to pickup route');
+      const response = await fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/driving/${driverLocation.longitude},${driverLocation.latitude};${pickupLocation.longitude},${pickupLocation.latitude}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
+      );
+      const data = await response.json();
+      
+      if (data.routes && data.routes.length > 0) {
+        // Remove existing driver route layer if it exists
+        if (map.current.getLayer('driver-to-pickup-route')) {
+          map.current.removeLayer('driver-to-pickup-route');
+        }
+        if (map.current.getSource('driver-to-pickup-route')) {
+          map.current.removeSource('driver-to-pickup-route');
+        }
+
+        // Add driver route source and layer
+        map.current.addSource('driver-to-pickup-route', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: data.routes[0].geometry
+          }
+        });
+
+        map.current.addLayer({
+          id: 'driver-to-pickup-route',
+          type: 'line',
+          source: 'driver-to-pickup-route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#f59e0b',
+            'line-width': 5,
+            'line-opacity': 0.8,
+            'line-dasharray': [1, 1]
+          }
+        });
+
+        setDriverToPickupRouteData(data.routes[0]);
+        console.log('📍 Driver to pickup route calculated and displayed');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching driver to pickup route:', error);
+    }
   };
 
   const createCarElement = () => {
@@ -307,6 +362,11 @@ export default function Map({
       [activeDelivery.pickupLocation.longitude, activeDelivery.pickupLocation.latitude],
       [activeDelivery.deliveryLocation.longitude, activeDelivery.deliveryLocation.latitude]
     );
+
+    // Add driver to pickup route if we have current location
+    if (lastLocation) {
+      addDriverToPickupRoute(lastLocation, activeDelivery.pickupLocation);
+    }
   };
 
   const getGeolocationErrorText = (code: number): string => {
@@ -362,6 +422,11 @@ export default function Map({
         if (heading !== null && heading !== undefined) {
           markerRef.current.setRotation(heading);
         }
+      }
+
+      // Update driver to pickup route if we have active delivery
+      if (activeDelivery) {
+        addDriverToPickupRoute(location, activeDelivery.pickupLocation);
       }
 
       // FIXED: Convert null to undefined using nullish coalescing operator
@@ -423,6 +488,14 @@ export default function Map({
       updateDeliveryMarkers();
     }
   }, [activeDelivery]);
+
+  // Update driver to pickup route when location changes with active delivery
+  useEffect(() => {
+    if (activeDelivery && lastLocation && map.current) {
+      console.log('🔄 Updating driver to pickup route with current location');
+      addDriverToPickupRoute(lastLocation, activeDelivery.pickupLocation);
+    }
+  }, [lastLocation, activeDelivery]);
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
@@ -509,6 +582,16 @@ export default function Map({
             <div className="w-2 h-2 bg-red-500 rounded-full"></div>
             <span>Delivery Location</span>
           </div>
+          {driverToPickupRouteData && (
+            <div className="mt-2 pt-2 border-t border-gray-600">
+              <p className="text-xs text-yellow-400">
+                ETA to pickup: {Math.round(driverToPickupRouteData.duration / 60)} min
+              </p>
+              <p className="text-xs text-gray-400">
+                Distance: {(driverToPickupRouteData.distance / 1000).toFixed(1)} km
+              </p>
+            </div>
+          )}
         </div>
       )}
 

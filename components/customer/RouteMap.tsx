@@ -1,3 +1,4 @@
+//components/customer/RouteMap.tsx
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';

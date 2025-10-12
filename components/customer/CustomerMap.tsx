@@ -1,4 +1,4 @@
-// components/customer/CustomerMap.tsx (updated to show routes)
+//components/customer/CustomerMap.tsx
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
@@ -19,10 +19,10 @@ interface CustomerMapProps {
   onRemoved?: () => void;
   pickupLocation?: { longitude: number; latitude: number; address?: string };
   deliveryLocation?: { longitude: number; latitude: number; address?: string };
-  driverLocation?: { longitude: number; latitude: number; heading?: number; speed?: number };
+  driverLocation?: { longitude: number; latitude: number; heading?: number; speed?: number } | null;
   showRoute?: boolean;
   showCurrentLocation?: boolean;
-  onLocationUpdate?: (location: { longitude: number; latitude: number, address: string }) => void;
+  onLocationUpdate?: (location: { longitude: number; latitude: number; address: string }) => void;
 }
 
 // Declare global marker variables
@@ -43,7 +43,7 @@ export default function CustomerMap({
   driverLocation,
   showRoute = false,
   showCurrentLocation = true,
-  onLocationUpdate
+  onLocationUpdate,
 }: CustomerMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -51,12 +51,14 @@ export default function CustomerMap({
   const deliveryMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const currentLocationMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const driverMarkerRef = useRef<mapboxgl.Marker | null>(null);
+
   const [mapError, setMapError] = useState<string | null>(null);
   const [currentLocation, setCurrentLocation] = useState<{ longitude: number; latitude: number } | null>(null);
   const [currentAddress, setCurrentAddress] = useState<string>('');
   const [isLocating, setIsLocating] = useState(false);
   const [routeData, setRouteData] = useState<any>(null);
-  const [driverRouteData, setDriverRouteData] = useState<any>(null);
+  const [driverToPickupRouteData, setDriverToPickupRouteData] = useState<any>(null);
+  const [isMapReady, setIsMapReady] = useState(false);
 
   // Get address from coordinates
   const getAddressFromCoords = async (lng: number, lat: number): Promise<string> => {
@@ -65,84 +67,73 @@ export default function CustomerMap({
         `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=address,place,neighborhood,locality`
       );
       const data = await response.json();
-      if (data.features && data.features.length > 0) {
-        return data.features[0].place_name;
-      }
-      return 'Address not found';
+      return data.features?.[0]?.place_name || 'Address not found';
     } catch (error) {
       console.error('Error getting address:', error);
       return 'Unable to get address';
     }
   };
 
+  // Add route to map - More efficient update logic
+  const addRouteToMap = (route: any, routeId: string) => {
+    if (!map.current || !map.current.isStyleLoaded()) {
+      map.current?.once('styledata', () => addRouteToMap(route, routeId));
+      return;
+    }
+
+    const source = map.current.getSource(routeId) as mapboxgl.GeoJSONSource;
+    if (source) {
+      // If source exists, just update its data
+      source.setData({
+        type: 'Feature',
+        properties: {},
+        geometry: route.geometry,
+      });
+    } else {
+      // Otherwise, add a new source and layer
+      map.current.addSource(routeId, {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: route.geometry,
+        },
+      });
+
+      const routePaintStyle =
+        routeId === 'driver-to-pickup-route'
+          ? { 'line-color': '#f59e0b', 'line-width': 5, 'line-opacity': 0.8, 'line-dasharray': [1, 1] }
+          : { 'line-color': '#8b5cf6', 'line-width': 4, 'line-opacity': 0.8 };
+
+      map.current.addLayer({
+        id: routeId,
+        type: 'line',
+        source: routeId,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: routePaintStyle,
+      });
+    }
+  };
+
   // Fetch route between two points
-  const fetchRoute = async (start: [number, number], end: [number, number], routeId: string = 'route') => {
+  const fetchRoute = async (start: [number, number], end: [number, number], routeId: string) => {
     try {
       const response = await fetch(
         `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
       );
       const data = await response.json();
-      if (data.routes && data.routes.length > 0) {
-        if (routeId === 'route') {
-          setRouteData(data.routes[0]);
-        } else {
-          setDriverRouteData(data.routes[0]);
-        }
-        addRouteToMap(data.routes[0], routeId);
-        return data.routes[0];
+      if (data.routes?.[0]) {
+        const route = data.routes[0];
+        if (routeId === 'route') setRouteData(route);
+        else if (routeId === 'driver-to-pickup-route') setDriverToPickupRouteData(route);
+        addRouteToMap(route, routeId);
       }
     } catch (error) {
-      console.error('Error fetching route:', error);
+      console.error(`Error fetching route for ${routeId}:`, error);
     }
-    return null;
   };
 
-  // Add route to map
-  const addRouteToMap = (route: any, routeId: string = 'route') => {
-    if (!map.current) return;
-
-    // Remove existing route layer if it exists
-    if (map.current.getLayer(routeId)) {
-      map.current.removeLayer(routeId);
-    }
-    if (map.current.getSource(routeId)) {
-      map.current.removeSource(routeId);
-    }
-
-    // Add route source and layer
-    map.current.addSource(routeId, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: route.geometry
-      }
-    });
-
-    const routeStyle = routeId === 'driver-route' ? {
-      'line-color': '#10b981',
-      'line-width': 6,
-      'line-opacity': 0.9,
-      'line-dasharray': [2, 2]
-    } : {
-      'line-color': '#8b5cf6',
-      'line-width': 4,
-      'line-opacity': 0.8
-    };
-
-    map.current.addLayer({
-      id: routeId,
-      type: 'line',
-      source: routeId,
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: routeStyle
-    });
-  };
-
-  // Create markers
+  // Create marker elements (your original functions, no changes needed)
   const createPickupMarkerElement = () => {
     const el = document.createElement('div');
     el.className = 'pickup-marker';
@@ -223,29 +214,16 @@ export default function CustomerMap({
             <feDropShadow dx="1" dy="2" stdDeviation="2" flood-color="#5b21b6" flood-opacity="0.8"/>
           </filter>
         </defs>
-        
-        <!-- Car Body -->
-        <path d="M38 18H10c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h28c1.1 0 2-.9 2-2V20c0-1.1-.9-2-2-2z" 
-              fill="url(#driverGradient)" filter="url(#driverShadow)" stroke="#5b21b6" stroke-width="0.5"/>
-        
-        <!-- Windshield -->
+        <path d="M38 18H10c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h28c1.1 0 2-.9 2-2V20c0-1.1-.9-2-2-2z" fill="url(#driverGradient)" filter="url(#driverShadow)" stroke="#5b21b6" stroke-width="0.5"/>
         <path d="M24 18l6-6h-12l6 6z" fill="#e1bee7" fill-opacity="0.8" stroke="#5b21b6" stroke-width="0.3"/>
-        
-        <!-- Side Windows -->
         <rect x="12" y="18" width="4" height="6" rx="1" fill="#e1bee7" fill-opacity="0.6" stroke="#5b21b6" stroke-width="0.3"/>
         <rect x="32" y="18" width="4" height="6" rx="1" fill="#e1bee7" fill-opacity="0.6" stroke="#5b21b6" stroke-width="0.3"/>
-        
-        <!-- Wheels -->
         <circle cx="12" cy="32" r="4" fill="#212121" stroke="#424242" stroke-width="1.5"/>
         <circle cx="36" cy="32" r="4" fill="#212121" stroke="#424242" stroke-width="1.5"/>
         <circle cx="12" cy="32" r="2" fill="#757575" stroke="#9e9e9e" stroke-width="0.5"/>
         <circle cx="36" cy="32" r="2" fill="#757575" stroke="#9e9e9e" stroke-width="0.5"/>
-        
-        <!-- Headlights -->
         <circle cx="42" cy="24" r="2" fill="#ffeb3b" stroke="#fbc02d" stroke-width="0.5"/>
         <circle cx="6" cy="24" r="2" fill="#ffeb3b" stroke="#fbc02d" stroke-width="0.5"/>
-        
-        <!-- Pulsing effect -->
         <circle cx="24" cy="24" r="22" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-opacity="0.3">
           <animate attributeName="r" from="22" to="28" dur="2s" repeatCount="indefinite"/>
           <animate attributeName="opacity" from="0.5" to="0" dur="2s" repeatCount="indefinite"/>
@@ -255,259 +233,185 @@ export default function CustomerMap({
     return el;
   };
 
-  // Update driver marker position
-  const updateDriverMarker = (location: { longitude: number; latitude: number; heading?: number }) => {
-    if (!map.current) return;
-
-    // Remove existing driver marker
-    if (driverMarkerRef.current) {
-      driverMarkerRef.current.remove();
-    }
-
-    // Create and add new driver marker
-    driverMarkerRef.current = new mapboxgl.Marker({
-      element: createDriverMarkerElement(),
-      rotationAlignment: 'map',
-      pitchAlignment: 'map'
-    })
-      .setLngLat([location.longitude, location.latitude])
-      .addTo(map.current);
-
-    // Apply rotation if heading is available
-    if (location.heading !== undefined && driverMarkerRef.current) {
-      driverMarkerRef.current.setRotation(location.heading);
-    }
-
-    // If we have pickup location, calculate and show route from driver to pickup
-    if (pickupLocation) {
-      fetchRoute(
-        [location.longitude, location.latitude],
-        [pickupLocation.longitude, pickupLocation.latitude],
-        'driver-route'
-      );
-    }
-
-    // Fit map to show driver, pickup, and delivery locations
-    const bounds = new mapboxgl.LngLatBounds()
-      .extend([location.longitude, location.latitude]);
-
-    if (pickupLocation) {
-      bounds.extend([pickupLocation.longitude, pickupLocation.latitude]);
-    }
-    if (deliveryLocation) {
-      bounds.extend([deliveryLocation.longitude, deliveryLocation.latitude]);
-    }
-
-    map.current.fitBounds(bounds, {
-      padding: 100,
-      maxZoom: 15,
-      duration: 1000
-    });
-  };
-
-  // Update markers
-  const updateMarkers = () => {
-    if (!map.current) return;
-
-    // Clear existing markers
-    if (pickupMarkerRef.current) {
-      pickupMarkerRef.current.remove();
-      pickupMarkerRef.current = null;
-    }
-    if (deliveryMarkerRef.current) {
-      deliveryMarkerRef.current.remove();
-      deliveryMarkerRef.current = null;
-    }
-
-    // Add pickup marker if location provided
-    if (pickupLocation) {
-      pickupMarkerRef.current = new mapboxgl.Marker({
-        element: createPickupMarkerElement()
-      })
-        .setLngLat([pickupLocation.longitude, pickupLocation.latitude])
-        .addTo(map.current);
-    }
-
-    // Add delivery marker if location provided
-    if (deliveryLocation) {
-      deliveryMarkerRef.current = new mapboxgl.Marker({
-        element: createDeliveryMarkerElement()
-      })
-        .setLngLat([deliveryLocation.longitude, deliveryLocation.latitude])
-        .addTo(map.current);
-    }
-
-    // Fit map to show both markers and route if both are present
-    if (pickupLocation && deliveryLocation) {
-      const bounds = new mapboxgl.LngLatBounds()
-        .extend([pickupLocation.longitude, pickupLocation.latitude])
-        .extend([deliveryLocation.longitude, deliveryLocation.latitude]);
-      
-      map.current.fitBounds(bounds, {
-        padding: 100,
-        maxZoom: 15
-      });
-
-      // Fetch and show route
-      if (showRoute) {
-        fetchRoute(
-          [pickupLocation.longitude, pickupLocation.latitude],
-          [deliveryLocation.longitude, deliveryLocation.latitude]
-        );
-      }
-    } else if (pickupLocation) {
-      map.current.flyTo({
-        center: [pickupLocation.longitude, pickupLocation.latitude],
-        zoom: 14
-      });
-    } else if (deliveryLocation) {
-      map.current.flyTo({
-        center: [deliveryLocation.longitude, deliveryLocation.latitude],
-        zoom: 14
-      });
-    }
-  };
-
-  // Update current location marker
-  const updateCurrentLocationMarker = (location: { longitude: number; latitude: number }) => {
-    if (!map.current) return;
-
-    // Clear existing marker
-    if (currentLocationMarkerRef.current) {
-      currentLocationMarkerRef.current.remove();
-      currentLocationMarkerRef.current = null;
-    }
-
-    // Add new marker
-    currentLocationMarkerRef.current = new mapboxgl.Marker({
-      element: createCurrentLocationMarkerElement()
-    })
-      .setLngLat([location.longitude, location.latitude])
-      .addTo(map.current);
-
-    // Center map on current location with street-level zoom
-    map.current.flyTo({
-      center: [location.longitude, location.latitude],
-      zoom: 16,
-      essential: true
-    });
-  };
-
-  // Get user's current location
+  // Get and update current location
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
       setMapError('Geolocation is not supported by your browser');
       return;
-    }  
-
+    }
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const location = {
-          longitude: position.coords.longitude,
-          latitude: position.coords.latitude
-        };
-        
-        setCurrentLocation(location);
-          
-        // Get address from coordinates
-        const address = await getAddressFromCoords(location.longitude, location.latitude);
+        const { longitude, latitude } = position.coords;
+        setCurrentLocation({ longitude, latitude });
+        const address = await getAddressFromCoords(longitude, latitude);
         setCurrentAddress(address);
-        
-        // Update marker
-        updateCurrentLocationMarker(location);
-        
-        // Callback if provided
-        if (onLocationUpdate) {
-          onLocationUpdate({ ...location, address });
+        if (onLocationUpdate) onLocationUpdate({ longitude, latitude, address });
+
+        if (map.current) {
+          if (currentLocationMarkerRef.current) {
+            currentLocationMarkerRef.current.setLngLat([longitude, latitude]);
+          } else {
+            currentLocationMarkerRef.current = new mapboxgl.Marker({
+              element: createCurrentLocationMarkerElement(),
+            })
+              .setLngLat([longitude, latitude])
+              .addTo(map.current);
+          }
+          map.current.flyTo({ center: [longitude, latitude], zoom: 16 });
         }
-        
         setIsLocating(false);
       },
       (error) => {
         console.error('Error getting location:', error);
-        setMapError('Unable to get your location. Please check location permissions.');
+        setMapError('Unable to get your location. Please check permissions.');
         setIsLocating(false);
       },
-      { 
-        enableHighAccuracy: true, 
-        timeout: 10000, 
-        maximumAge: 0
-      }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
-  // Effect for driver location updates
+  // ✅ FIX: Map initialization now runs only ONCE.
   useEffect(() => {
-    if (driverLocation && map.current) {
-      updateDriverMarker(driverLocation);
-    }
-  }, [driverLocation]);
-
-  useEffect(() => {
+    if (map.current || !mapContainer.current) return; // Initialize only once
     if (!MAPBOX_TOKEN) {
-      setMapError('Mapbox token is missing. Please check your environment variables.');
+      setMapError('Mapbox token is missing.');
       return;
     }
 
-    if (map.current || !mapContainer.current) return;
+    const mapInstance = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: initialOptions.center || [31.033, -17.827], // Default to Harare
+      zoom: initialOptions.zoom || 12,
+      ...initialOptions,
+    });
+    
+    map.current = mapInstance;
 
-    try {
-      const mapInstance = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/streets-v12',
-        center: initialOptions.center || [31.033, -17.827],
-        zoom: initialOptions.zoom || 12,
-        ...initialOptions
-      });
+    mapInstance.on('load', () => {
+      console.log('✅ Map loaded and ready');
+      mapInstance.resize(); // Ensure map fits container
+      setIsMapReady(true);
+      if (onLoaded) onLoaded(mapInstance);
+      if (showCurrentLocation) getCurrentLocation();
+    });
 
-      mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
-      mapInstance.addControl(new mapboxgl.FullscreenControl(), 'top-right');
-      mapInstance.addControl(new mapboxgl.GeolocateControl({
-        positionOptions: {
-          enableHighAccuracy: true
-        },
+    mapInstance.on('error', (e) => {
+      console.error('Mapbox error:', e);
+      setMapError('Failed to load the map.');
+    });
+    
+    // Add controls after initialization
+    mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    mapInstance.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+    mapInstance.addControl(new mapboxgl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
         trackUserLocation: true,
         showUserLocation: true,
         showUserHeading: true
-      }), 'top-right');
+      }), 'top-right'
+    );
 
-      mapInstance.on('load', () => {
-        if (onLoaded) onLoaded(mapInstance);
-        
-        // Update markers with any provided locations
-        updateMarkers();
-        
-        // Get current location when map loads if enabled
-        if (showCurrentLocation) {
-          getCurrentLocation();
-        }
-      });
+    return () => {
+      console.log('Cleaning up map instance.');
+      mapInstance.remove();
+      map.current = null;
+      setIsMapReady(false);
+      if (onRemoved) onRemoved();
+    };
+  }, []); // <-- CRITICAL FIX: Empty dependency array ensures this runs only once on mount.
 
-      mapInstance.on('error', (e) => {
-        console.error('Mapbox error:', e);
-        setMapError('Failed to load map. Please check your Internet Connection.');
-      });
-
-      map.current = mapInstance;
-
-      return () => {
-        mapInstance.remove();
-        if (onRemoved) onRemoved();
-        map.current = null;
-      };
-    } catch (error) {
-      console.error('Error initializing map:', error);
-      setMapError('Failed to initialize map.');
-    }
-  }, [initialOptions, onLoaded, onRemoved, showCurrentLocation]);
-
+  // ✅ FIX: This effect now waits for the map to be ready before updating markers and routes.
   useEffect(() => {
-    if (map.current && map.current.isStyleLoaded()) {
-      updateMarkers();
-    }
-  }, [pickupLocation, deliveryLocation, showRoute]);
+    if (!isMapReady || !map.current) return;
 
+    // Update Pickup Marker
+    if (pickupLocation) {
+      const { longitude, latitude } = pickupLocation;
+      if (pickupMarkerRef.current) {
+        pickupMarkerRef.current.setLngLat([longitude, latitude]);
+      } else {
+        pickupMarkerRef.current = new mapboxgl.Marker({ element: createPickupMarkerElement() })
+          .setLngLat([longitude, latitude])
+          .addTo(map.current);
+      }
+    }
+
+    // Update Delivery Marker
+    if (deliveryLocation) {
+      const { longitude, latitude } = deliveryLocation;
+      if (deliveryMarkerRef.current) {
+        deliveryMarkerRef.current.setLngLat([longitude, latitude]);
+      } else {
+        deliveryMarkerRef.current = new mapboxgl.Marker({ element: createDeliveryMarkerElement() })
+          .setLngLat([longitude, latitude])
+          .addTo(map.current);
+      }
+    }
+
+    // Update Pickup-to-Delivery Route and Bounds
+    if (pickupLocation && deliveryLocation) {
+      if (showRoute) {
+        fetchRoute(
+          [pickupLocation.longitude, pickupLocation.latitude],
+          [deliveryLocation.longitude, deliveryLocation.latitude],
+          'route'
+        );
+      }
+      // Only fit bounds if a driver isn't also being displayed (driver effect will handle bounds)
+      if (!driverLocation) {
+        const bounds = new mapboxgl.LngLatBounds()
+          .extend([pickupLocation.longitude, pickupLocation.latitude])
+          .extend([deliveryLocation.longitude, deliveryLocation.latitude]);
+        map.current.fitBounds(bounds, { padding: 100, maxZoom: 15, duration: 1000 });
+      }
+    }
+  }, [pickupLocation, deliveryLocation, showRoute, isMapReady]);
+
+  // ✅ FIX: This effect now waits for the map to be ready before updating the driver's location.
+  useEffect(() => {
+    if (!isMapReady || !map.current || !driverLocation) return;
+
+    const { longitude, latitude, heading } = driverLocation;
+
+    // Update Driver Marker
+    if (driverMarkerRef.current) {
+      driverMarkerRef.current.setLngLat([longitude, latitude]);
+    } else {
+      driverMarkerRef.current = new mapboxgl.Marker({
+        element: createDriverMarkerElement(),
+        rotationAlignment: 'map',
+        pitchAlignment: 'map',
+      })
+        .setLngLat([longitude, latitude])
+        .addTo(map.current);
+    }
+    if (heading !== undefined) {
+      driverMarkerRef.current.setRotation(heading);
+    }
+
+    // Update Driver-to-Pickup Route
+    if (pickupLocation) {
+      fetchRoute(
+        [longitude, latitude],
+        [pickupLocation.longitude, pickupLocation.latitude],
+        'driver-to-pickup-route'
+      );
+    }
+
+    // Fit map to show all points including the driver
+    const bounds = new mapboxgl.LngLatBounds();
+    bounds.extend([longitude, latitude]);
+    if (pickupLocation) bounds.extend([pickupLocation.longitude, pickupLocation.latitude]);
+    if (deliveryLocation) bounds.extend([deliveryLocation.longitude, deliveryLocation.latitude]);
+
+    if (!bounds.isEmpty()) {
+      map.current.fitBounds(bounds, { padding: 100, maxZoom: 15, duration: 1000 });
+    }
+  }, [driverLocation, isMapReady]);
+
+  // JSX for rendering the map and overlays (no changes here)
   if (!MAPBOX_TOKEN) {
     return (
       <div className="h-full w-full flex items-center justify-center bg-gray-800 rounded-2xl">
@@ -536,13 +440,19 @@ export default function CustomerMap({
 
   return (
     <div className="relative h-full w-full">
-      {/* Location Info Overlay */}
+      {!isMapReady && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-800/80 rounded-2xl">
+          <div className="text-center text-white">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-2"></div>
+            <p className="text-sm">Loading Map...</p>
+          </div>
+        </div>
+      )}
+
       {(currentLocation || currentAddress) && (
         <div className="absolute top-4 left-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm max-w-xs">
           <h3 className="font-semibold text-purple-400 mb-2">Your Location</h3>
-          {currentAddress && (
-            <p className="text-sm mb-1">{currentAddress}</p>
-          )}
+          {currentAddress && <p className="text-sm mb-1">{currentAddress}</p>}
           {currentLocation && (
             <p className="text-xs text-gray-400">
               {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
@@ -556,8 +466,7 @@ export default function CustomerMap({
           )}
         </div>
       )}
-      
-      {/* Driver Info Overlay */}
+
       {driverLocation && (
         <div className="absolute top-4 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
           <h3 className="font-semibold text-green-400 mb-2">Driver Location</h3>
@@ -572,17 +481,23 @@ export default function CustomerMap({
           )}
         </div>
       )}
-      
-      {/* Route Info Overlay */}
-      {routeData && pickupLocation && deliveryLocation && (
+
+      {routeData && (
         <div className="absolute bottom-20 left-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
           <h3 className="font-semibold text-purple-400 mb-2">Delivery Route</h3>
           <p className="text-sm">Distance: {(routeData.distance / 1000).toFixed(1)} km</p>
           <p className="text-sm">Duration: {Math.round(routeData.duration / 60)} min</p>
         </div>
       )}
-      
-      {/* Locate Button */}
+
+      {driverToPickupRouteData && (
+        <div className="absolute bottom-20 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
+          <h3 className="font-semibold text-yellow-400 mb-2">Driver to Pickup</h3>
+          <p className="text-sm">Distance: {(driverToPickupRouteData.distance / 1000).toFixed(1)} km</p>
+          <p className="text-sm">ETA: {Math.round(driverToPickupRouteData.duration / 60)} min</p>
+        </div>
+      )}
+
       <button
         onClick={getCurrentLocation}
         disabled={isLocating}

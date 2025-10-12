@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiClock, FiMapPin, FiDollarSign, FiUser, FiX, FiPackage, FiPhone } from 'react-icons/fi';
+import { createPubNubClient } from '@/lib/pubnub-booking';
 
 interface BookingRequest {
   id: number;
@@ -42,6 +43,16 @@ export default function BookingNotification({
   const [imageError, setImageError] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pubnub, setPubnub] = useState<any>(null);
+  const [locationWatchId, setLocationWatchId] = useState<number | null>(null);
+
+  // Initialize PubNub
+  useEffect(() => {
+    if (driverId) {
+      const pubnubClient = createPubNubClient(`driver_${driverId}`);
+      setPubnub(pubnubClient);
+    }
+  }, [driverId]);
 
   // Enhanced validation with detailed logging
   useEffect(() => {
@@ -81,6 +92,16 @@ export default function BookingNotification({
 
     return () => clearInterval(timer);
   }, [timeLeft, onExpire]);
+
+  // Cleanup location tracking on unmount
+  useEffect(() => {
+    return () => {
+      if (locationWatchId) {
+        navigator.geolocation.clearWatch(locationWatchId);
+        console.log('🧹 Location tracking cleaned up');
+      }
+    };
+  }, [locationWatchId]);
 
   const handleAccept = async () => {
     if (isProcessing) return;
@@ -237,68 +258,97 @@ export default function BookingNotification({
     }
   };
 
-  // Function to start sharing driver location with customer
-  const startLocationSharing = (customerId: number) => {
-    if (!navigator.geolocation) {
-      console.error('❌ Geolocation is not supported by this browser');
-      return;
-    }
+  // Function to start sharing driver location with customer via PubNub
+  // In BookingNotification.tsx - Replace the current startLocationSharing function
+const startLocationSharing = async (customerId: number) => {
+  if (!navigator.geolocation) {
+    console.error('❌ Geolocation is not supported by this browser');
+    return;
+  }
 
-    console.log('📍 Starting location sharing with customer:', customerId);
+  console.log('📍 Starting location sharing with customer:', customerId);
+  
+  // Use the pubnub state, not pubnubRef
+  if (!pubnub) {
+    console.error('❌ PubNub client not initialized');
+    return;
+  }
 
-    // Start watching position and share updates
-    const watchId = navigator.geolocation.watchPosition(
-      async (position) => {
-        const { longitude, latitude } = position.coords;
-        
-        try {
-          // Update driver location in database
-          await fetch('/api/drivers/update-location', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
+  // Start watching position and share updates
+  const watchId = navigator.geolocation.watchPosition(
+    async (position) => {
+      const { longitude, latitude, heading, speed } = position.coords;
+      
+      try {
+        // Update driver location in database
+        await fetch('/api/drivers/update-location', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            driverId: driverId,
+            location: { 
+              longitude, 
+              latitude,
+              accuracy: position.coords.accuracy,
+              heading: heading || null,
+              speed: speed || null
             },
-            body: JSON.stringify({
-              driverId: driverId,
-              location: { 
-                longitude, 
-                latitude,
-                accuracy: position.coords.accuracy,
-                heading: position.coords.heading,
-                speed: position.coords.speed
-              },
-              timestamp: new Date().toISOString()
-            })
-          });
-
-          console.log('📍 Location updated:', { longitude, latitude });
-          
-        } catch (error) {
-          console.error('❌ Error updating location:', error);
-        }
-      },
-      (error) => {
-        console.error('❌ Error getting location:', {
-          code: error.code,
-          message: error.message,
-          PERMISSION_DENIED: error.PERMISSION_DENIED,
-          POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
-          TIMEOUT: error.TIMEOUT
+            timestamp: new Date().toISOString()
+          })
         });
-      },
-      { 
-        enableHighAccuracy: true,
-        maximumAge: 10000, // 10 seconds
-        timeout: 15000 // 15 seconds
-      }
-    );
 
-    // Store watchId for cleanup
-    return () => {
+        console.log('📍 Location updated in database:', { longitude, latitude });
+        
+        // ✅ FIXED: PUBLISH LOCATION TO CUSTOMER VIA PUBNUB
+        try {
+          await pubnub.publish({
+            channel: `customer_${customerId}`, // Customer's personal channel
+            message: {
+              type: 'DRIVER_LOCATION_UPDATE',
+              data: {
+                driverId: driverId,
+                location: { 
+                  longitude, 
+                  latitude,
+                  heading: heading || null,
+                  speed: speed || null
+                },
+                timestamp: new Date().toISOString(),
+                messageId: `loc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` // Unique ID
+              }
+            }
+          });
+          console.log('📡 Location published to customer via PubNub:', { longitude, latitude });
+        } catch (pubnubError) {
+          console.error('❌ PubNub publish error:', pubnubError);
+        }
+        
+      } catch (error) {
+        console.error('❌ Error updating/publishing location:', error);
+      }
+    },
+    (error) => {
+      console.error('❌ Error getting location:', error);
+    },
+    { 
+      enableHighAccuracy: true,
+      maximumAge: 10000,
+      timeout: 15000
+    }
+  );
+
+  setLocationWatchId(watchId);
+  console.log('📍 Location tracking started with watchId:', watchId);
+
+  return () => {
+    if (watchId) {
       navigator.geolocation.clearWatch(watchId);
       console.log('🧹 Location sharing stopped');
-    };
+    }
   };
+};
 
   const handleImageError = () => {
     setImageError(true);
@@ -375,6 +425,7 @@ export default function BookingNotification({
           <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
             <p>Debug: Request ID: {request.id} (Type: {typeof request.id})</p>
             <p>Driver ID: {driverId} (Type: {typeof driverId})</p>
+            <p>PubNub: {pubnub ? '✅ Connected' : '❌ Disconnected'}</p>
           </div>
 
           {/* Enhanced Customer Info Section */}

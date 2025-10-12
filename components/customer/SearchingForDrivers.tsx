@@ -57,7 +57,13 @@ export default function SearchingForDrivers({
   const [acceptedDrivers, setAcceptedDrivers] = useState<Driver[]>([]);
   
   // Enhanced states for real-time tracking
-  const [driverLocation, setDriverLocation] = useState<{ longitude: number; latitude: number } | null>(null);
+  const [driverLocation, setDriverLocation] = useState<{ 
+    longitude: number; 
+    latitude: number; 
+    heading?: number; 
+    speed?: number 
+  } | null>(null);
+
   const [isTrackingDriver, setIsTrackingDriver] = useState(false);
   
   // PubNub refs
@@ -65,37 +71,83 @@ export default function SearchingForDrivers({
   const listenerRef = useRef<any>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Enhanced PubNub message handler with additional message types
-  const handlePubNubMessage = (event: any) => {
-    console.log('PubNub message received:', event);
+  // Enhanced driver location update handler with map integration
+// Enhanced driver location update handler with map integration
+const handleDriverLocationUpdate = useCallback((data: any) => {
+  console.log('📍 Processing driver location update:', data);
+  
+  if (!data || !data.driverId || !data.location) {
+    console.error('❌ Invalid location data:', data);
+    return;
+  }
+  
+  // Check if this update is for our accepted driver
+  if (data.driverId === acceptedDriver?.id) {
+    console.log('✅ Location update for accepted driver:', data.driverId);
+    
+    // Update driver location state with proper typing that matches CustomerMapProps
+    setDriverLocation({
+      longitude: data.location.longitude,
+      latitude: data.location.latitude,
+      heading: data.location.heading,
+      speed: data.location.speed
+    });
+    setIsTrackingDriver(true);
+    
+    console.log('🗺️ Driver location state updated:', data.location);
+  } else {
+    console.log('📍 Location update for different driver:', data.driverId);
+  }
+}, [acceptedDriver?.id]);
+
+  // Enhanced PubNub message handler with duplicate prevention and better logging
+  const handlePubNubMessage = useCallback((event: any) => {
+    console.log('📍 PubNub message received:', event);
     
     const { channel, message } = event;
     
+    // Add message ID tracking to prevent duplicates
+    if (!message.messageId) {
+      console.warn('⚠️ Message missing ID, may be duplicate');
+    }
+    
     switch (message.type) {
       case MESSAGE_TYPES.BOOKING_ACCEPTED:
+        console.log('✅ Booking accepted message processed');
         handleBookingAccepted(message.data);
         break;
         
       case MESSAGE_TYPES.BOOKING_REJECTED:
+        console.log('❌ Booking rejected message processed');
         handleBookingRejected(message.data);
         break;
         
       case MESSAGE_TYPES.DRIVER_LOCATION_UPDATE:
-        handleDriverLocationUpdate(message.data);
+      case 'DRIVER_LOCATION_UPDATE': // Handle both cases explicitly
+        console.log('📍 Processing driver location update:', message.data);
+        // Ensure this is being called with proper data validation
+        if (message.data && message.data.driverId && message.data.location) {
+          handleDriverLocationUpdate(message.data);
+        } else {
+          console.warn('⚠️ Malformed location update:', message.data);
+        }
         break;
         
-      // Add new cases for general booking updates
       case 'booking_expired':
       case 'booking_cancelled':
+        console.log('📛 Booking failed message:', message.data);
         handleBookingFailed(message.data);
         break;
 
-      // Add case for continue search messages
       case 'CONTINUE_SEARCH':
+        console.log('🔄 Continue search message received');
         handleContinueSearch(message.data);
         break;
+
+      default:
+        console.log('📨 Unhandled message type:', message.type, message);
     }
-  };
+  }, [handleDriverLocationUpdate]);
 
   // Enhanced booking accepted handler
   const handleBookingAccepted = (data: any) => {
@@ -121,8 +173,7 @@ export default function SearchingForDrivers({
     setAcceptedDrivers([driverData]);
     setIsTrackingDriver(true);
     
-    // Start tracking driver location
-    startDriverTracking(data.driverId);
+    console.log('🚗 Started tracking driver:', data.driverId);
   };
 
   // Enhanced booking rejected handler with better auto-retry
@@ -172,31 +223,6 @@ export default function SearchingForDrivers({
     }
   };
 
-  // Handle driver location updates
-  const handleDriverLocationUpdate = (data: any) => {
-    if (data.driverId === acceptedDriver?.id) {
-      setDriverLocation(data.location);
-      updateDriverOnMap(data.location);
-    }
-  };
-
-  // Function to update map with driver position
-  const updateDriverOnMap = (location: { longitude: number; latitude: number }) => {
-    // This will depend on your map implementation
-    // For Mapbox/Google Maps, you'd update the driver marker position
-    console.log('Updating driver location on map:', location);
-    
-    // If you're using the CustomerMap component, you might want to pass the driver location as a prop
-    // and handle the marker update there
-  };
-
-  // Start tracking driver location
-  const startDriverTracking = (driverId: number) => {
-    // Subscribe to driver location updates
-    // This is already handled by your PubNub listener
-    console.log('Started tracking driver:', driverId);
-  };
-
   // Enhanced fetchNearbyDrivers function with retry support
   const fetchNearbyDrivers = useCallback(async (isRetry = false) => {
     try {
@@ -241,18 +267,22 @@ export default function SearchingForDrivers({
     }
   }, [userLocation]);
 
-  // Enhanced PubNub initialization with additional channels
+  // Enhanced PubNub initialization with proper cleanup
   useEffect(() => {
-    if (!customerId) return;
+    if (!customerId) {
+      console.log('⏳ Waiting for customer ID');
+      return;
+    }
 
     // Create PubNub client for this customer
-    pubnubRef.current = createPubNubClient(`customer_${customerId}`);
+    const pubnubInstance = createPubNubClient(`customer_${customerId}`);
+    pubnubRef.current = pubnubInstance;
     
     // Set up message listener
-    listenerRef.current = {
+    const listenerInstance = {
       message: handlePubNubMessage,
       status: (event: any) => {
-        console.log('PubNub status:', event);
+        console.log('📡 PubNub status:', event.category);
         if (event.category === 'PNConnectedCategory') {
           console.log('✅ PubNub connected successfully');
         } else if (event.category === 'PNDisconnectedCategory') {
@@ -260,22 +290,31 @@ export default function SearchingForDrivers({
         }
       },
       presence: (event: any) => {
-        console.log('Presence event:', event);
+        console.log('👥 Presence event:', event);
         // Handle driver online/offline status
       }
     };
 
-    pubnubRef.current.addListener(listenerRef.current);
+    listenerRef.current = listenerInstance;
+
+    // Remove any existing listeners first to prevent duplicates
+    pubnubInstance.removeListener(listenerInstance);
+    pubnubInstance.addListener(listenerInstance);
 
     // Enhanced subscription to multiple channels
-    const channels = [CHANNELS.customer(customerId)];
+    const channels = [
+      CHANNELS.customer(customerId),
+      `customer_${customerId}_location_updates`, // Add dedicated location channel
+      `driver_location_${customerId}` // Add specific location channel
+    ];
+    
     if (currentRequestId) {
       channels.push(`booking_${currentRequestId}`);
       channels.push(`customer_${customerId}_updates`);
       channels.push(`search_${customerId}`);
     }
 
-    pubnubRef.current.subscribe({
+    pubnubInstance.subscribe({
       channels: channels,
       withPresence: true
     });
@@ -283,14 +322,14 @@ export default function SearchingForDrivers({
     console.log('✅ PubNub initialized for customer:', customerId, 'channels:', channels);
 
     return () => {
-      // Cleanup PubNub connection
-      if (pubnubRef.current && listenerRef.current) {
-        pubnubRef.current.removeListener(listenerRef.current);
-        pubnubRef.current.unsubscribeAll();
-        console.log('🧹 PubNub connection cleaned up');
+      // Proper cleanup to prevent memory leaks and duplicate handlers
+      console.log('🧹 Cleaning up PubNub connection');
+      if (pubnubInstance && listenerInstance) {
+        pubnubInstance.removeListener(listenerInstance);
+        pubnubInstance.unsubscribeAll();
       }
     };
-  }, [customerId, currentRequestId]); // Added currentRequestId dependency
+  }, [customerId, currentRequestId, handlePubNubMessage]);
 
   const createBookingRequest = useCallback(async (selectedDriver: Driver | null = null) => {
     setBookingStatus('waiting');
@@ -392,22 +431,6 @@ export default function SearchingForDrivers({
     return () => clearInterval(interval);
   }, [currentRequestId]);
 
-  // Temporary debug function - remove after testing
-  const debugPubNubFlow = () => {
-    console.log('🔍 PubNub Connection Debug:');
-    console.log('- Customer ID:', customerId);
-    console.log('- Current Request ID:', currentRequestId);
-    console.log('- Booking Status:', bookingStatus);
-    console.log('- Selected Driver:', selectedDriver);
-    console.log('- Drivers Available:', drivers.length);
-    
-    // Test if we can manually trigger a retry
-    if (bookingStatus === 'searching' && drivers.length === 0) {
-      console.log('🔄 Manually triggering driver fetch...');
-      fetchNearbyDrivers(true);
-    }
-  };
-
   const handleFareAdjust = (amount: number) => {
     const currentFare = parseFloat(fare);
     const newFare = Math.max(2.00, currentFare + amount).toFixed(2);
@@ -447,7 +470,7 @@ export default function SearchingForDrivers({
     setAcceptedDriver(null);
     setAcceptedDrivers([]);
     setSelectedDriver(null); // Reset selected driver on retry
-    setDriverLocation(null);
+    setDriverLocation(null); // This now matches the type
     setIsTrackingDriver(false);
     fetchNearbyDrivers();
   };
@@ -598,29 +621,22 @@ export default function SearchingForDrivers({
             </div>
             
             <div className="h-64 bg-gray-700/50 rounded-xl mb-4 flex items-center justify-center">
-              {driverLocation ? (
-                <CustomerMap
-                  pickupLocation={{
-                    longitude: userLocation.lng,
-                    latitude: userLocation.lat,
-                    address: packageData.pickupAddress
-                  }}
-                  deliveryLocation={{
-                    longitude: userLocation.lng, // You might want to use actual delivery coords
-                    latitude: userLocation.lat,
-                    address: packageData.dropoffAddress
-                  }}
-                  driverLocation={driverLocation}
-                  showRoute={true}
-                  showCurrentLocation={true}
-                  style={{ height: '100%', width: '100%', borderRadius: '0.5rem' }}
-                />
-              ) : (
-                <div className="text-center text-gray-400">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
-                  <p>Waiting for driver location updates...</p>
-                </div>
-              )}
+              <CustomerMap
+                pickupLocation={{
+                  longitude: userLocation.lng,
+                  latitude: userLocation.lat,
+                  address: packageData.pickupAddress
+                }}
+                deliveryLocation={{
+                  longitude: userLocation.lng, // You might want to use actual delivery coords
+                  latitude: userLocation.lat,
+                  address: packageData.dropoffAddress
+                }}
+                driverLocation={driverLocation}
+                showRoute={true}
+                showCurrentLocation={true}
+                style={{ height: '100%', width: '100%', borderRadius: '0.5rem' }}
+              />
             </div>
             
             <div className="grid grid-cols-2 gap-4 text-sm">
@@ -633,8 +649,19 @@ export default function SearchingForDrivers({
                 <p className="text-white font-semibold">{acceptedDriver.carName}</p>
               </div>
             </div>
-
-            <button
+            {isTrackingDriver && driverLocation && (
+                     <div className="mt-3 p-2 bg-green-900/20 rounded-lg text-center">
+                                     <p className="text-green-400 text-sm">📍 Driver location tracking active</p>
+                                     <p className="text-green-300 text-xs">Real-time updates enabled</p>
+            {driverLocation.heading && (
+                                    <p className="text-green-300 text-xs">Heading: {driverLocation.heading}°</p>
+             )}
+           {driverLocation.speed && (
+                                    <p className="text-green-300 text-xs">Speed: {(driverLocation.speed * 3.6).toFixed(1)} km/h</p>
+             )}
+          </div>
+)}
+     <button
               onClick={() => onConfirm(acceptedDriver)}
               className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors"
             >
