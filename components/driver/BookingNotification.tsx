@@ -1,8 +1,8 @@
 //components/driver/BookingNotification.tsx
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiClock, FiMapPin, FiDollarSign, FiUser, FiX, FiPackage, FiPhone } from 'react-icons/fi';
+import { FiClock, FiMapPin, FiDollarSign, FiUser, FiX, FiPackage, FiPhone, FiCopy } from 'react-icons/fi';
 import { createPubNubClient } from '@/lib/pubnub-booking';
 
 interface BookingRequest {
@@ -19,6 +19,9 @@ interface BookingRequest {
   createdAt: string;
   packageDetails?: string;
   isDirectAssignment?: boolean;
+  pickupCoords?: { longitude: number; latitude: number };
+  dropoffCoords?: { longitude: number; latitude: number };
+  recipientPhoneNumber?: string; 
 }
 
 interface BookingNotificationProps {
@@ -45,12 +48,15 @@ export default function BookingNotification({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pubnub, setPubnub] = useState<any>(null);
   const [locationWatchId, setLocationWatchId] = useState<number | null>(null);
+  const [copiedNumber, setCopiedNumber] = useState<string | null>(null);
+  const pubnubRef = useRef<any>(null);
 
   // Initialize PubNub
   useEffect(() => {
     if (driverId) {
       const pubnubClient = createPubNubClient(`driver_${driverId}`);
       setPubnub(pubnubClient);
+      pubnubRef.current = pubnubClient;
     }
   }, [driverId]);
 
@@ -59,7 +65,8 @@ export default function BookingNotification({
     console.log('🔍 BookingNotification mounted with:', {
       requestId: request.id,
       driverId: driverId,
-      request: request
+      request: request,
+      recipientPhoneNumber: request.recipientPhoneNumber
     });
 
     if (!driverId || driverId <= 0) {
@@ -69,7 +76,6 @@ export default function BookingNotification({
       return;
     }
 
-    // Check if request.id is valid
     if (!request.id || isNaN(Number(request.id)) || Number(request.id) <= 0) {
       console.error('❌ Invalid request.id provided:', request.id);
       setErrorMessage('Invalid booking request. Please try again.');
@@ -103,6 +109,225 @@ export default function BookingNotification({
     };
   }, [locationWatchId]);
 
+  // Copy phone number to clipboard
+  const copyToClipboard = async (phoneNumber: string) => {
+    try {
+      await navigator.clipboard.writeText(phoneNumber);
+      setCopiedNumber(phoneNumber);
+      setTimeout(() => setCopiedNumber(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy phone number:', err);
+    }
+  };
+
+  // Format phone number for display
+  const formatPhoneNumber = (phone: string) => {
+    // Remove all non-numeric characters
+    const cleaned = phone.replace(/\D/g, '');
+    
+    // Format based on length
+    if (cleaned.length === 10) {
+      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+    } else if (cleaned.length === 11 && cleaned.startsWith('1')) {
+      return `+1 (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+    }
+    
+    return phone; // Return original if format doesn't match
+  };
+
+  // Extract phone numbers from package description and make them clickable
+  const renderPackageDescriptionWithClickablePhones = (description: string) => {
+    if (!description) return description;
+    
+    // Regular expression to match phone numbers in various formats
+    const phoneRegex = /(\+?\d{1,4}?[-.\s]?\(?\d{1,3}?\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9})/g;
+    
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = phoneRegex.exec(description)) !== null) {
+      // Add text before the phone number
+      if (match.index > lastIndex) {
+        parts.push(description.slice(lastIndex, match.index));
+      }
+
+      const phoneNumber = match[0];
+      
+      // Add clickable phone number
+      parts.push(
+        <a
+          key={match.index}
+          href={`tel:${phoneNumber.replace(/\D/g, '')}`}
+          className="inline-flex items-center space-x-1 bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded-md mx-1 transition-colors duration-200 border border-blue-200"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <FiPhone className="h-3 w-3 flex-shrink-0" />
+          <span className="font-medium">{phoneNumber}</span>
+          <span className="text-xs bg-blue-200 text-blue-700 px-1 rounded">Call</span>
+        </a>
+      );
+
+      lastIndex = match.index + phoneNumber.length;
+    }
+
+    // Add remaining text after last phone number
+    if (lastIndex < description.length) {
+      parts.push(description.slice(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : description;
+  };
+
+  // Enhanced real-time tracking function
+  const startRealTimeTracking = async (customerId: number, pickupLocation: string, dropoffLocation: string) => {
+    if (!navigator.geolocation) {
+      console.error('❌ Geolocation is not supported by this browser');
+      return;
+    }
+
+    console.log('📍 Starting real-time tracking for customer:', customerId);
+    
+    const currentPubNub = pubnubRef.current;
+    if (!currentPubNub) {
+      console.error('❌ PubNub client not initialized');
+      return;
+    }
+
+    // Geocode addresses to coordinates
+    const geocodeAddress = async (address: string): Promise<{ longitude: number; latitude: number } | null> => {
+      try {
+        const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+        const response = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${MAPBOX_TOKEN}`
+        );
+        const data = await response.json();
+        if (data.features && data.features.length > 0) {
+          return {
+            longitude: data.features[0].center[0],
+            latitude: data.features[0].center[1]
+          };
+        }
+        return null;
+      } catch (error) {
+        console.error('Error geocoding address:', error);
+        return null;
+      }
+    };
+
+    const pickupCoords = await geocodeAddress(pickupLocation);
+    const dropoffCoords = await geocodeAddress(dropoffLocation);
+
+    // Helper function to calculate route
+    const calculateRoute = async (start: { longitude: number; latitude: number }, end: { longitude: number; latitude: number }) => {
+      try {
+        const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+        const response = await fetch(
+          `https://api.mapbox.com/directions/v5/mapbox/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
+        );
+        const data = await response.json();
+        return data.routes?.[0] || null;
+      } catch (error) {
+        console.error('Error calculating route:', error);
+        return null;
+      }
+    };
+
+    // Start watching position and share updates
+    const watchId = navigator.geolocation.watchPosition(
+      async (position) => {
+        const { longitude, latitude, heading, speed } = position.coords;
+        const driverLocation = { longitude, latitude };
+        
+        try {
+          // Update driver location in database
+          await fetch('/api/drivers/update-location', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              driverId: driverId,
+              location: { 
+                longitude, 
+                latitude,
+                accuracy: position.coords.accuracy,
+                heading: heading || null,
+                speed: speed || null
+              },
+              timestamp: new Date().toISOString()
+            })
+          });
+
+          console.log('📍 Location updated in database:', { longitude, latitude });
+          
+          // Calculate route and ETA to pickup
+          let routeData = null;
+          let eta = null;
+          
+          if (pickupCoords) {
+            routeData = await calculateRoute(driverLocation, pickupCoords);
+            if (routeData) {
+              eta = Math.round(routeData.duration / 60);
+            }
+          }
+          
+          // PUBLISH LOCATION AND ROUTE DATA TO CUSTOMER
+          try {
+            await currentPubNub.publish({
+              channel: `customer_${customerId}`,
+              message: {
+                type: 'DRIVER_LOCATION_UPDATE',
+                data: {
+                  driverId: driverId,
+                  location: { 
+                    longitude, 
+                    latitude,
+                    heading: heading || null,
+                    speed: speed || null
+                  },
+                  route: routeData,
+                  eta: eta,
+                  timestamp: new Date().toISOString(),
+                  messageId: `loc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+                }
+              }
+            });
+            console.log('📡 Location and route data published to customer:', { 
+              longitude, 
+              latitude, 
+              eta,
+              hasRoute: !!routeData 
+            });
+          } catch (pubnubError) {
+            console.error('❌ PubNub publish error:', pubnubError);
+          }
+          
+        } catch (error) {
+          console.error('❌ Error updating/publishing location:', error);
+        }
+      },
+      (error) => {
+        console.error('❌ Error getting location:', error);
+      },
+      { 
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 10000
+      }
+    );
+
+    setLocationWatchId(watchId);
+    console.log('📍 Real-time tracking started with watchId:', watchId);
+
+    return () => {
+      if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+        console.log('🧹 Real-time tracking stopped');
+      }
+    };
+  };
+
   const handleAccept = async () => {
     if (isProcessing) return;
     
@@ -110,7 +335,6 @@ export default function BookingNotification({
     setErrorMessage(null);
     
     try {
-      // Enhanced validation with type checking
       const requestId = Number(request.id);
       const driverIdNum = Number(driverId);
       const customerId = Number(request.customerId);
@@ -121,10 +345,10 @@ export default function BookingNotification({
         rawDriverId: driverId,
         parsedDriverId: driverIdNum,
         isNaNRequestId: isNaN(requestId),
-        isNaNDriverId: isNaN(driverIdNum)
+        isNaNDriverId: isNaN(driverIdNum),
+        recipientPhoneNumber: request.recipientPhoneNumber
       });
 
-      // Validate data before sending - more comprehensive checks
       if (isNaN(requestId) || requestId <= 0) {
         const errorMsg = `Invalid Request ID: ${request.id} (parsed as: ${requestId})`;
         console.error('❌ Request ID validation failed:', errorMsg);
@@ -141,7 +365,6 @@ export default function BookingNotification({
         return;
       }
 
-      // Create request data with explicit type checking
       const requestData = {
         requestId: requestId,
         driverId: driverIdNum,
@@ -149,14 +372,7 @@ export default function BookingNotification({
         customerId: customerId
       };
 
-      // Enhanced debugging logs
       console.log('📤 Sending request data:', requestData);
-      console.log('📤 Data types:', {
-        requestId: typeof requestData.requestId,
-        driverId: typeof requestData.driverId,
-        response: typeof requestData.response,
-        customerId: typeof requestData.customerId
-      });
 
       const response = await fetch('/api/bookings/respond', {
         method: 'POST',
@@ -175,8 +391,7 @@ export default function BookingNotification({
         setIsVisible(false);
         onAccept();
         
-        // Start sharing location with customer
-        startLocationSharing(request.customerId);
+        startRealTimeTracking(request.customerId, request.pickupLocation, request.dropoffLocation);
       } else {
         let errorData;
         try {
@@ -187,7 +402,6 @@ export default function BookingNotification({
         console.error('❌ Failed to accept booking:', errorData);
         console.error('❌ Response status:', response.status);
         
-        // Set user-friendly error message
         setErrorMessage(errorData.error || 'Failed to accept booking. Please try again.');
         setIsProcessing(false);
       }
@@ -205,7 +419,6 @@ export default function BookingNotification({
     setErrorMessage(null);
     
     try {
-      // Same validation as handleAccept
       const requestId = Number(request.id);
       const driverIdNum = Number(driverId);
 
@@ -258,98 +471,6 @@ export default function BookingNotification({
     }
   };
 
-  // Function to start sharing driver location with customer via PubNub
-  // In BookingNotification.tsx - Replace the current startLocationSharing function
-const startLocationSharing = async (customerId: number) => {
-  if (!navigator.geolocation) {
-    console.error('❌ Geolocation is not supported by this browser');
-    return;
-  }
-
-  console.log('📍 Starting location sharing with customer:', customerId);
-  
-  // Use the pubnub state, not pubnubRef
-  if (!pubnub) {
-    console.error('❌ PubNub client not initialized');
-    return;
-  }
-
-  // Start watching position and share updates
-  const watchId = navigator.geolocation.watchPosition(
-    async (position) => {
-      const { longitude, latitude, heading, speed } = position.coords;
-      
-      try {
-        // Update driver location in database
-        await fetch('/api/drivers/update-location', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            driverId: driverId,
-            location: { 
-              longitude, 
-              latitude,
-              accuracy: position.coords.accuracy,
-              heading: heading || null,
-              speed: speed || null
-            },
-            timestamp: new Date().toISOString()
-          })
-        });
-
-        console.log('📍 Location updated in database:', { longitude, latitude });
-        
-        // ✅ FIXED: PUBLISH LOCATION TO CUSTOMER VIA PUBNUB
-        try {
-          await pubnub.publish({
-            channel: `customer_${customerId}`, // Customer's personal channel
-            message: {
-              type: 'DRIVER_LOCATION_UPDATE',
-              data: {
-                driverId: driverId,
-                location: { 
-                  longitude, 
-                  latitude,
-                  heading: heading || null,
-                  speed: speed || null
-                },
-                timestamp: new Date().toISOString(),
-                messageId: `loc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` // Unique ID
-              }
-            }
-          });
-          console.log('📡 Location published to customer via PubNub:', { longitude, latitude });
-        } catch (pubnubError) {
-          console.error('❌ PubNub publish error:', pubnubError);
-        }
-        
-      } catch (error) {
-        console.error('❌ Error updating/publishing location:', error);
-      }
-    },
-    (error) => {
-      console.error('❌ Error getting location:', error);
-    },
-    { 
-      enableHighAccuracy: true,
-      maximumAge: 10000,
-      timeout: 15000
-    }
-  );
-
-  setLocationWatchId(watchId);
-  console.log('📍 Location tracking started with watchId:', watchId);
-
-  return () => {
-    if (watchId) {
-      navigator.geolocation.clearWatch(watchId);
-      console.log('🧹 Location sharing stopped');
-    }
-  };
-};
-
   const handleImageError = () => {
     setImageError(true);
   };
@@ -376,7 +497,7 @@ const startLocationSharing = async (customerId: number) => {
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 300 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="fixed top-4 right-4 z-50 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden"
+        className="fixed top-4 right-4 z-50 w-full max-w-sm sm:max-w-md bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden mx-2 sm:mx-0"
       >
         {/* Header with countdown */}
         <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-4 text-white">
@@ -398,7 +519,7 @@ const startLocationSharing = async (customerId: number) => {
         </div>
 
         {/* Content */}
-        <div className="p-4">
+        <div className="p-4 max-h-[80vh] overflow-y-auto">
           {/* Error Message Display */}
           {errorMessage && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg relative">
@@ -420,13 +541,6 @@ const startLocationSharing = async (customerId: number) => {
               </div>
             </div>
           )}
-
-          {/* Debug info - remove in production */}
-          <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
-            <p>Debug: Request ID: {request.id} (Type: {typeof request.id})</p>
-            <p>Driver ID: {driverId} (Type: {typeof driverId})</p>
-            <p>PubNub: {pubnub ? '✅ Connected' : '❌ Disconnected'}</p>
-          </div>
 
           {/* Enhanced Customer Info Section */}
           <div className="flex items-center space-x-3 mb-4 p-3 bg-gray-50 rounded-lg">
@@ -459,10 +573,18 @@ const startLocationSharing = async (customerId: number) => {
                   <FiPhone className="h-3 w-3 text-gray-500 flex-shrink-0" />
                   <a 
                     href={`tel:${request.customerPhoneNumber}`}
-                    className="text-sm text-gray-600 hover:text-purple-600 transition-colors truncate"
+                    className="text-sm text-blue-600 hover:text-blue-800 transition-colors truncate font-medium flex items-center space-x-1"
                   >
-                    {request.customerPhoneNumber}
+                    <span>{formatPhoneNumber(request.customerPhoneNumber)}</span>
+                    <span className="text-xs bg-blue-100 text-blue-600 px-1 rounded">Call</span>
                   </a>
+                  <button
+                    onClick={() => copyToClipboard(request.customerPhoneNumber!)}
+                    className="p-1 hover:bg-gray-200 rounded transition-colors"
+                    title="Copy phone number"
+                  >
+                    <FiCopy className={`h-3 w-3 ${copiedNumber === request.customerPhoneNumber ? 'text-green-500' : 'text-gray-400'}`} />
+                  </button>
                 </div>
               )}
               
@@ -472,76 +594,157 @@ const startLocationSharing = async (customerId: number) => {
 
           {/* Trip Details */}
           <div className="space-y-3 mb-4">
-            {/* Package Details */}
+            {/* Package Details with Clickable Phone Numbers */}
             {request.packageDetails && (
-              <div className="flex items-start space-x-3">
-                <FiPackage className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="flex items-start space-x-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex-shrink-0">
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                    <FiPackage className="h-5 w-5 text-blue-600" />
+                  </div>
+                </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">Package Details</p>
-                  <p className="text-sm text-gray-600">{request.packageDetails}</p>
+                  <p className="text-sm font-medium text-gray-900 mb-2">Package Details</p>
+                  <div className="text-sm text-gray-600 whitespace-pre-wrap">
+                    {renderPackageDescriptionWithClickablePhones(request.packageDetails)}
+                  </div>
+                  <p className="text-xs text-blue-600 mt-2 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Phone numbers are clickable for quick calling
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            {/* Recipient Phone Number - Enhanced with click-to-call */}
+            {request.recipientPhoneNumber && (
+              <div className="flex items-start space-x-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <div className="flex-shrink-0">
+                  <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                    <FiPhone className="h-5 w-5 text-orange-600" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 mb-1">Recipient's Phone</p>
+                  <div className="flex items-center space-x-2">
+                    <a 
+                      href={`tel:${request.recipientPhoneNumber}`}
+                      className="text-lg font-semibold text-orange-600 hover:text-orange-700 transition-colors truncate flex items-center space-x-2"
+                    >
+                      <span>{formatPhoneNumber(request.recipientPhoneNumber)}</span>
+                      <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-medium whitespace-nowrap">
+                        Tap to Call
+                      </span>
+                    </a>
+                    <button
+                      onClick={() => copyToClipboard(request.recipientPhoneNumber!)}
+                      className="p-1 hover:bg-orange-100 rounded transition-colors flex-shrink-0"
+                      title="Copy phone number"
+                    >
+                      <FiCopy className={`h-4 w-4 ${copiedNumber === request.recipientPhoneNumber ? 'text-green-500' : 'text-orange-400'}`} />
+                    </button>
+                  </div>
+                  <p className="text-xs text-orange-600 mt-1 font-medium">Package recipient - Call before delivery</p>
+                  {copiedNumber === request.recipientPhoneNumber && (
+                    <p className="text-xs text-green-600 mt-1 animate-pulse">✓ Copied to clipboard!</p>
+                  )}
                 </div>
               </div>
             )}
 
-            <div className="flex items-start space-x-3">
-              <FiMapPin className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+            {/* Pickup Location */}
+            <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+              <div className="flex-shrink-0">
+                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                  <FiMapPin className="h-5 w-5 text-green-600" />
+                </div>
+              </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">Pickup</p>
-                <p className="text-sm text-gray-600 truncate">{request.pickupLocation}</p>
+                <p className="text-sm font-medium text-gray-900 mb-1">Pickup Location</p>
+                <p className="text-sm text-gray-600">{request.pickupLocation}</p>
               </div>
             </div>
 
-            <div className="flex items-start space-x-3">
-              <FiMapPin className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+            {/* Dropoff Location */}
+            <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+              <div className="flex-shrink-0">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <FiMapPin className="h-5 w-5 text-red-600" />
+                </div>
+              </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">Dropoff</p>
-                <p className="text-sm text-gray-600 truncate">{request.dropoffLocation}</p>
+                <p className="text-sm font-medium text-gray-900 mb-1">Dropoff Location</p>
+                <p className="text-sm text-gray-600">{request.dropoffLocation}</p>
               </div>
             </div>
 
-            <div className="flex items-center space-x-3">
-              <FiDollarSign className="h-5 w-5 text-yellow-600 flex-shrink-0" />
+            {/* Fare and Distance */}
+            <div className="flex items-center space-x-3 p-3 bg-yellow-50 rounded-lg">
+              <div className="flex-shrink-0">
+                <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                  <FiDollarSign className="h-5 w-5 text-yellow-600" />
+                </div>
+              </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">Fare</p>
-                <p className="text-sm text-gray-600">${request.fare.toFixed(2)} • {request.distance} km</p>
+                <p className="text-sm font-medium text-gray-900">Delivery Fare</p>
+                <p className="text-lg font-bold text-gray-900">${request.fare.toFixed(2)}</p>
+                <p className="text-sm text-gray-600">{request.distance} km • {Math.round(request.distance / 0.621371)} mi</p>
               </div>
             </div>
           </div>
 
           {/* Enhanced Action Buttons */}
-          <div className="flex space-x-3">
+          <div className="flex space-x-3 pt-4 border-t border-gray-200">
             <button
               onClick={handleReject}
               disabled={isProcessing}
-              className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors duration-200 border border-gray-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-4 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-all duration-200 border border-gray-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
             >
               {isProcessing ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-700"></div>
               ) : (
-                <FiX className="h-4 w-4" />
+                <FiX className="h-5 w-5" />
               )}
-              <span>{isProcessing ? 'Processing...' : 'Decline'}</span>
+              <span className="text-base">{isProcessing ? 'Processing...' : 'Decline'}</span>
             </button>
             <button
               onClick={handleAccept}
               disabled={isProcessing}
-              className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors duration-200 shadow-lg hover:shadow-green-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-green-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
             >
               {isProcessing ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
               ) : (
-                <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
               )}
-              <span>{isProcessing ? 'Accepting...' : 'Accept Delivery'}</span>
+              <span className="text-base">{isProcessing ? 'Accepting...' : 'Accept'}</span>
             </button>
           </div>
 
+          {/* Copy Success Toast */}
+          {copiedNumber && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50"
+            >
+              <div className="flex items-center space-x-2">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-sm font-medium">Phone number copied to clipboard!</span>
+              </div>
+            </motion.div>
+          )}
+
           {/* Processing Overlay */}
           {isProcessing && (
-            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-xl">
-              <div className="bg-white p-4 rounded-lg flex items-center space-x-3">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
-                <span className="text-gray-700 font-medium">Processing your response...</span>
+            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-xl backdrop-blur-sm">
+              <div className="bg-white p-6 rounded-xl flex items-center space-x-3 shadow-2xl">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                <span className="text-gray-700 font-semibold">Processing your response...</span>
               </div>
             </div>
           )}

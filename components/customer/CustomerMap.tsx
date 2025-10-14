@@ -19,18 +19,18 @@ interface CustomerMapProps {
   onRemoved?: () => void;
   pickupLocation?: { longitude: number; latitude: number; address?: string };
   deliveryLocation?: { longitude: number; latitude: number; address?: string };
-  driverLocation?: { longitude: number; latitude: number; heading?: number; speed?: number } | null;
+  driverLocation?: { 
+    longitude: number; 
+    latitude: number; 
+    heading?: number; 
+    speed?: number;
+    route?: any;
+    eta?: number;
+  } | null;
   showRoute?: boolean;
   showCurrentLocation?: boolean;
   onLocationUpdate?: (location: { longitude: number; latitude: number; address: string }) => void;
-}
-
-// Declare global marker variables
-declare global {
-  interface Window {
-    driverMarker?: mapboxgl.Marker;
-    routeSource?: mapboxgl.GeoJSONSource;
-  }
+  customerId?: number;
 }
 
 export default function CustomerMap({
@@ -44,6 +44,7 @@ export default function CustomerMap({
   showRoute = false,
   showCurrentLocation = true,
   onLocationUpdate,
+  customerId
 }: CustomerMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -59,6 +60,125 @@ export default function CustomerMap({
   const [routeData, setRouteData] = useState<any>(null);
   const [driverToPickupRouteData, setDriverToPickupRouteData] = useState<any>(null);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [driverEta, setDriverEta] = useState<number | null>(null);
+  const [pubnub, setPubnub] = useState<any>(null);
+
+  // NEW: Initialize PubNub for real-time updates
+  useEffect(() => {
+    if (customerId) {
+      // Import and initialize PubNub client
+      const initializePubNub = async () => {
+        const { createPubNubClient } = await import('@/lib/pubnub-booking');
+        setPubnub(createPubNubClient(`customer_${customerId}`));
+      };
+      initializePubNub();
+    }
+  }, [customerId]);
+
+  // NEW: Subscribe to driver location updates
+  useEffect(() => {
+    if (!pubnub || !isMapReady) return;
+
+    pubnub.subscribe({
+      channels: [`customer_${customerId}`]
+    });
+
+    const listener = {
+      message: (event: any) => {
+        if (event.message.type === 'DRIVER_LOCATION_UPDATE') {
+          const { location, route, eta } = event.message.data;
+          
+          // Update driver location
+          if (location && map.current) {
+            updateDriverMarker(location);
+            
+            // Update real-time route if provided
+            if (route) {
+              updateRealTimeRoute(route);
+            }
+            
+            // Update ETA
+            if (eta) {
+              setDriverEta(eta);
+            }
+          }
+        }
+      }
+    };
+
+    pubnub.addListener(listener);
+
+    return () => {
+      pubnub.removeListener(listener);
+      pubnub.unsubscribeAll();
+    };
+  }, [pubnub, isMapReady, customerId]);
+
+  // NEW: Update real-time route on customer map
+  const updateRealTimeRoute = (route: any) => {
+    if (!map.current || !map.current.isStyleLoaded()) return;
+
+    const sourceId = 'realtime-driver-route';
+    const layerId = 'realtime-driver-route';
+
+    // Remove existing layer and source
+    if (map.current.getLayer(layerId)) {
+      map.current.removeLayer(layerId);
+    }
+    if (map.current.getSource(sourceId)) {
+      map.current.removeSource(sourceId);
+    }
+
+    // Add new route
+    map.current.addSource(sourceId, {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        properties: {},
+        geometry: route.geometry
+      }
+    });
+
+    map.current.addLayer({
+      id: layerId,
+      type: 'line',
+      source: sourceId,
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
+      paint: {
+        'line-color': '#10b981',
+        'line-width': 5,
+        'line-opacity': 0.8,
+        'line-dasharray': [0.5, 0.5]
+      }
+    });
+  };
+
+  // NEW: Update driver marker with real-time location
+  const updateDriverMarker = (location: { longitude: number; latitude: number; heading?: number }) => {
+    if (!map.current) return;
+
+    if (driverMarkerRef.current) {
+      driverMarkerRef.current.setLngLat([location.longitude, location.latitude]);
+      if (location.heading !== undefined) {
+        driverMarkerRef.current.setRotation(location.heading);
+      }
+    } else {
+      driverMarkerRef.current = new mapboxgl.Marker({
+        element: createDriverMarkerElement(),
+        rotationAlignment: 'map',
+        pitchAlignment: 'map',
+      })
+        .setLngLat([location.longitude, location.latitude])
+        .addTo(map.current);
+
+      if (location.heading !== undefined) {
+        driverMarkerRef.current.setRotation(location.heading);
+      }
+    }
+  };
 
   // Get address from coordinates
   const getAddressFromCoords = async (lng: number, lat: number): Promise<string> => {
@@ -133,7 +253,7 @@ export default function CustomerMap({
     }
   };
 
-  // Create marker elements (your original functions, no changes needed)
+  // Create marker elements
   const createPickupMarkerElement = () => {
     const el = document.createElement('div');
     el.className = 'pickup-marker';
@@ -271,9 +391,9 @@ export default function CustomerMap({
     );
   };
 
-  // ✅ FIX: Map initialization now runs only ONCE.
+  // Map initialization
   useEffect(() => {
-    if (map.current || !mapContainer.current) return; // Initialize only once
+    if (map.current || !mapContainer.current) return;
     if (!MAPBOX_TOKEN) {
       setMapError('Mapbox token is missing.');
       return;
@@ -282,7 +402,7 @@ export default function CustomerMap({
     const mapInstance = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
-      center: initialOptions.center || [31.033, -17.827], // Default to Harare
+      center: initialOptions.center || [31.033, -17.827],
       zoom: initialOptions.zoom || 12,
       ...initialOptions,
     });
@@ -291,7 +411,7 @@ export default function CustomerMap({
 
     mapInstance.on('load', () => {
       console.log('✅ Map loaded and ready');
-      mapInstance.resize(); // Ensure map fits container
+      mapInstance.resize();
       setIsMapReady(true);
       if (onLoaded) onLoaded(mapInstance);
       if (showCurrentLocation) getCurrentLocation();
@@ -320,9 +440,9 @@ export default function CustomerMap({
       setIsMapReady(false);
       if (onRemoved) onRemoved();
     };
-  }, []); // <-- CRITICAL FIX: Empty dependency array ensures this runs only once on mount.
+  }, []);
 
-  // ✅ FIX: This effect now waits for the map to be ready before updating markers and routes.
+  // Update markers and routes when map is ready
   useEffect(() => {
     if (!isMapReady || !map.current) return;
 
@@ -359,7 +479,6 @@ export default function CustomerMap({
           'route'
         );
       }
-      // Only fit bounds if a driver isn't also being displayed (driver effect will handle bounds)
       if (!driverLocation) {
         const bounds = new mapboxgl.LngLatBounds()
           .extend([pickupLocation.longitude, pickupLocation.latitude])
@@ -369,27 +488,14 @@ export default function CustomerMap({
     }
   }, [pickupLocation, deliveryLocation, showRoute, isMapReady]);
 
-  // ✅ FIX: This effect now waits for the map to be ready before updating the driver's location.
+  // Update driver location and routes
   useEffect(() => {
     if (!isMapReady || !map.current || !driverLocation) return;
 
-    const { longitude, latitude, heading } = driverLocation;
+    const { longitude, latitude, heading, route, eta } = driverLocation;
 
     // Update Driver Marker
-    if (driverMarkerRef.current) {
-      driverMarkerRef.current.setLngLat([longitude, latitude]);
-    } else {
-      driverMarkerRef.current = new mapboxgl.Marker({
-        element: createDriverMarkerElement(),
-        rotationAlignment: 'map',
-        pitchAlignment: 'map',
-      })
-        .setLngLat([longitude, latitude])
-        .addTo(map.current);
-    }
-    if (heading !== undefined) {
-      driverMarkerRef.current.setRotation(heading);
-    }
+    updateDriverMarker({ longitude, latitude, heading });
 
     // Update Driver-to-Pickup Route
     if (pickupLocation) {
@@ -398,6 +504,16 @@ export default function CustomerMap({
         [pickupLocation.longitude, pickupLocation.latitude],
         'driver-to-pickup-route'
       );
+    }
+
+    // Update real-time route if provided
+    if (route) {
+      updateRealTimeRoute(route);
+    }
+
+    // Update ETA
+    if (eta) {
+      setDriverEta(eta);
     }
 
     // Fit map to show all points including the driver
@@ -411,7 +527,6 @@ export default function CustomerMap({
     }
   }, [driverLocation, isMapReady]);
 
-  // JSX for rendering the map and overlays (no changes here)
   if (!MAPBOX_TOKEN) {
     return (
       <div className="h-full w-full flex items-center justify-center bg-gray-800 rounded-2xl">
@@ -479,6 +594,23 @@ export default function CustomerMap({
               Speed: {(driverLocation.speed * 3.6).toFixed(1)} km/h
             </p>
           )}
+          {/* NEW: Driver ETA Display */}
+          {driverEta && (
+            <div className="mt-2 pt-2 border-t border-gray-600">
+              <p className="text-sm text-green-400 font-semibold">
+                ETA: {driverEta} minutes
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* NEW: Real-time Route ETA Display */}
+      {driverEta && (
+        <div className="absolute top-24 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
+          <h3 className="font-semibold text-green-400 mb-1">Driver ETA</h3>
+          <p className="text-lg font-bold">{driverEta} minutes</p>
+          <p className="text-xs text-gray-400">until arrival</p>
         </div>
       )}
 

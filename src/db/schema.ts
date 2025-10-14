@@ -76,6 +76,7 @@ export const deliveryRequestsTable = sqliteTable('delivery_requests', {
   fare: real('fare').notNull(),
   distance: real('distance').notNull(),
   packageDetails: text('package_details'),
+  recipientPhoneNumber: text('recipient_phone_number'),
   status: text('status').default('pending').notNull(), // pending, accepted, rejected, completed, expired
   assignedDriverId: integer('assigned_driver_id').references(() => driversTable.id), 
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),

@@ -1,3 +1,4 @@
+//components/customer/BookingPanel.tsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -252,6 +253,14 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
     setCurrentStep("booking");
   };
 
+  // ADDED: Handle fare confirmation
+  const handleConfirmFare = (fare: string) => {
+    console.log('Fare confirmed:', fare);
+    // You can handle the fare confirmation here
+    // For example, you might want to close the panel or show a success message
+    onClose(); // Close the panel after fare confirmation
+  };
+
   const handleSubmitBooking = (e: React.FormEvent) => {
     e.preventDefault();
     handlePackageDetailsClick();
@@ -269,6 +278,7 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
         routeDistance={routeDistance}
         onBack={handleBackToBooking}
         onClose={onClose}
+        onConfirmFare={handleConfirmFare} // ADDED: This prop was missing
       />
     );
   }

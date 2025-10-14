@@ -55,7 +55,7 @@ export type PubNubPublishMessage = Omit<PubNubMessage, 'timestamp' | 'senderId'>
   [key: string]: any;
 };
 
-// Booking request message
+// Booking request message - UPDATED: Add recipientPhoneNumber to the interface
 export interface BookingRequestMessage extends PubNubMessage {
   type: typeof MESSAGE_TYPES.BOOKING_REQUEST;
   data: {
@@ -63,6 +63,8 @@ export interface BookingRequestMessage extends PubNubMessage {
     customerId: number;
     customerUsername: string;
     customerProfilePictureUrl: string;
+    customerPhoneNumber?: string;
+    recipientPhoneNumber?: string; // Ensure this is properly defined
     pickupLocation: string;
     dropoffLocation: string;
     fare: number;
@@ -100,14 +102,18 @@ export const getPubNubInstance = () => {
   return pubnub;
 };
 
-// Publish functions
+// Publish functions - UPDATED: Ensure recipientPhoneNumber is included in published data
 export const publishBookingRequest = async (
   driverIds: number[],
   bookingData: BookingRequestMessage['data']
 ) => {
   const message: PubNubPublishMessage = {
     type: MESSAGE_TYPES.BOOKING_REQUEST,
-    data: bookingData,
+    data: {
+      ...bookingData,
+      // Explicitly include recipientPhoneNumber to ensure it's not omitted
+      recipientPhoneNumber: bookingData.recipientPhoneNumber || ''
+    },
   };
 
   try {
@@ -128,7 +134,10 @@ export const publishBookingRequest = async (
       await Promise.all(publishPromises);
     }
 
-    console.log(`Booking request published to ${driverIds.length} drivers`);
+    console.log(`Booking request published to ${driverIds.length} drivers`, {
+      recipientPhoneNumber: bookingData.recipientPhoneNumber, // Debug log
+      bookingData: bookingData
+    });
     return { success: true };
   } catch (error) {
     console.error('Error publishing booking request:', error);

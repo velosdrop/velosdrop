@@ -9,7 +9,7 @@ import { driversTable } from '@/src/db/schema';
 import {
   FiMenu, FiX, FiTruck, FiDollarSign, FiUser, FiCamera,
   FiUpload, FiStar, FiMap, FiBell, FiPackage, FiSearch,
-  FiClock, FiNavigation, FiCheckCircle, FiXCircle, FiMapPin
+  FiClock, FiNavigation, FiCheckCircle, FiXCircle, FiMapPin, FiPhone, FiCopy
 } from 'react-icons/fi';
 import dynamic from 'next/dynamic';
 import LocationPermissionRequest from '@/components/driver/LocationPermissionRequest';
@@ -34,6 +34,7 @@ interface BookingRequest {
   id: number;
   customerId: number;
   customerUsername: string;
+  customerPhoneNumber?: string;
   customerProfilePictureUrl?: string;
   pickupLocation: string;
   dropoffLocation: string;
@@ -44,6 +45,9 @@ interface BookingRequest {
   status: 'pending' | 'accepted' | 'rejected' | 'expired';
   packageDetails?: string;
   isDirectAssignment?: boolean;
+  pickupCoords?: { longitude: number; latitude: number };
+  dropoffCoords?: { longitude: number; latitude: number };
+  recipientPhoneNumber?: string;
 }
 
 function ConnectionStatus({ isConnected, isOnline }: { isConnected: boolean; isOnline: boolean }) {
@@ -66,6 +70,59 @@ function ConnectionStatus({ isConnected, isOnline }: { isConnected: boolean; isO
   );
 }
 
+// Format phone number for display
+const formatPhoneNumber = (phone: string) => {
+  const cleaned = phone.replace(/\D/g, '');
+  
+  if (cleaned.length === 10) {
+    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+  } else if (cleaned.length === 11 && cleaned.startsWith('1')) {
+    return `+1 (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+  }
+  
+  return phone;
+};
+
+// Extract phone numbers from package description and make them clickable
+const renderPackageDescriptionWithClickablePhones = (description: string) => {
+  if (!description) return description;
+  
+  const phoneRegex = /(\+?\d{1,4}?[-.\s]?\(?\d{1,3}?\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9})/g;
+  
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = phoneRegex.exec(description)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(description.slice(lastIndex, match.index));
+    }
+
+    const phoneNumber = match[0];
+    
+    parts.push(
+      <a
+        key={match.index}
+        href={`tel:${phoneNumber.replace(/\D/g, '')}`}
+        className="inline-flex items-center space-x-1 bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded-md mx-1 transition-colors duration-200 border border-blue-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <FiPhone className="h-3 w-3 flex-shrink-0" />
+        <span className="font-medium">{phoneNumber}</span>
+        <span className="text-xs bg-blue-200 text-blue-700 px-1 rounded">Call</span>
+      </a>
+    );
+
+    lastIndex = match.index + phoneNumber.length;
+  }
+
+  if (lastIndex < description.length) {
+    parts.push(description.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : description;
+};
+
 export default function DriverDashboard() {
   const router = useRouter();
   const [driverData, setDriverData] = useState<Driver | null>(null);
@@ -81,6 +138,7 @@ export default function DriverDashboard() {
   const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>([]);
   const [bookingRequest, setBookingRequest] = useState<BookingRequest | null>(null);
   const [hasNewNotification, setHasNewNotification] = useState(false);
+  const [copiedNumber, setCopiedNumber] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [ratings] = useState({
     average: 4.5,
@@ -246,6 +304,17 @@ export default function DriverDashboard() {
     }
   }, [isOnline, driverData?.id, isConnected]);
 
+  // Copy phone number to clipboard
+  const copyToClipboard = async (phoneNumber: string) => {
+    try {
+      await navigator.clipboard.writeText(phoneNumber);
+      setCopiedNumber(phoneNumber);
+      setTimeout(() => setCopiedNumber(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy phone number:', err);
+    }
+  };
+
   const handleBookingAccept = async (requestId?: number) => {
     const requestToAccept = requestId
       ? bookingRequests.find(req => req.id === requestId)
@@ -264,6 +333,7 @@ export default function DriverDashboard() {
         }),
       });
       if (response.ok) {
+        // Update both notification and list to keep them synchronized
         if (bookingRequest?.id === requestToAccept.id) {
             setBookingRequest(null);
         }
@@ -307,6 +377,7 @@ export default function DriverDashboard() {
         }),
       });
       if (response.ok) {
+        // Update both notification and list to keep them synchronized
         if (bookingRequest?.id === requestToReject.id) {
            setBookingRequest(null);
         }
@@ -457,14 +528,15 @@ export default function DriverDashboard() {
     <div className="min-h-screen bg-gray-100 flex">
       {bookingRequest && driverData?.id && (
         <BookingNotification
-             request={bookingRequest}
-             onAccept={() => handleBookingAccept()}
-             onReject={() => handleBookingReject()}
-             onExpire={handleBookingExpire}
-             isConnected={isConnected}
-             driverId={driverData.id} // This will always be a valid number
+          request={bookingRequest}
+          onAccept={() => handleBookingAccept()}
+          onReject={() => handleBookingReject()}
+          onExpire={handleBookingExpire}
+          isConnected={isConnected}
+          driverId={driverData.id}
         />
-        )}
+      )}
+      
       <button
         onClick={() => setSidebarOpen(true)}
         className="md:hidden fixed top-4 left-4 z-50 p-2 bg-purple-600 text-white rounded-lg shadow-lg"
@@ -752,7 +824,7 @@ export default function DriverDashboard() {
               <div className="relative">
                 <FiBell className="h-6 w-6 text-purple-600 animate-pulse" />
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
-              </div>
+            </div>
             )}
             <span className={`mr-3 text-sm font-medium ${isOnline ? 'text-purple-600' : 'text-gray-600'}`}>
               {isOnline ? 'Online - Available' : 'Offline'}
@@ -982,94 +1054,218 @@ export default function DriverDashboard() {
               {bookingRequests.length > 0 ? (
                 <div className="space-y-4">
                   {bookingRequests.map((request) => (
-                    <div key={request.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-2">
-                          <FiUser className="h-4 w-4 text-purple-600" />
-                          <div>
-                            <span className="font-medium text-gray-900">{request.customerUsername}</span>
-                            {request.isDirectAssignment && (
-                              <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">
-                                Direct Request
-                              </span>
-                            )}
+                    <div key={request.id} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                      {/* Header with countdown */}
+                      <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-4 text-white">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-bold text-lg">Delivery Request</h3>
+                          <div className="flex items-center space-x-2">
+                            <FiClock className="h-4 w-4" />
+                            <span className="font-mono">{request.expiresIn}s</span>
                           </div>
                         </div>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          request.status === 'pending' ? 'bg-blue-100 text-blue-800' :
-                          request.status === 'accepted' ? 'bg-green-100 text-green-800' :
-                          request.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-                        </span>
-                      </div>
-                      <div className="space-y-2 mb-4">
-                        {request.packageDetails && (
-                          <div className="flex items-start space-x-3">
-                            <FiPackage className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                            <div>
-                              <p className="text-sm font-medium text-gray-900">Package Details</p>
-                              <p className="text-sm text-gray-600">{request.packageDetails}</p>
-                            </div>
+                        {request.isDirectAssignment && (
+                          <div className="mt-2 flex items-center">
+                            <span className="px-2 py-1 bg-purple-800 text-white text-xs font-medium rounded-full">
+                              Direct Request
+                            </span>
+                            <span className="ml-2 text-sm text-purple-200">Customer selected you specifically</span>
                           </div>
                         )}
-                        <div className="flex items-start space-x-3">
-                          <FiMapPin className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">Pickup</p>
-                            <p className="text-sm text-gray-600">{request.pickupLocation}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-start space-x-3">
-                          <FiMapPin className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">Dropoff</p>
-                            <p className="text-sm text-gray-600">{request.dropoffLocation}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <FiDollarSign className="h-4 w-4 text-yellow-500 flex-shrink-0" />
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">Fare</p>
-                            <p className="text-sm text-gray-600">${request.fare.toFixed(2)} • {request.distance} km</p>
-                          </div>
-                        </div>
                       </div>
-                      {request.status === 'pending' && (
-                        <div className="flex space-x-3">
-                          <button
-                            onClick={() => handleBookingReject(request.id)}
-                            className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
-                          >
-                            Reject
-                          </button>
-                          <button
-                            onClick={() => handleBookingAccept(request.id)}
-                            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
-                          >
-                            Accept
-                          </button>
+
+                      {/* Content */}
+                      <div className="p-4">
+                        {/* Enhanced Customer Info Section - NOW INCLUDES PHONE NUMBER */}
+                        <div className="flex items-center space-x-3 mb-4 p-3 bg-gray-50 rounded-lg">
+                          <div className="relative">
+                            {request.customerProfilePictureUrl ? (
+                              <img
+                                src={request.customerProfilePictureUrl}
+                                alt={request.customerUsername}
+                                className="w-12 h-12 rounded-full object-cover border-2 border-purple-200"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                                {request.customerUsername.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center space-x-2">
+                              <p className="font-semibold text-gray-900 truncate">{request.customerUsername}</p>
+                              <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full font-medium">
+                                Verified
+                              </span>
+                            </div>
+                            
+                            {/* CUSTOMER PHONE NUMBER - ADDED HERE */}
+                            {request.customerPhoneNumber && (
+                              <div className="flex items-center space-x-1 mt-1">
+                                <FiPhone className="h-3 w-3 text-gray-500 flex-shrink-0" />
+                                <a 
+                                  href={`tel:${request.customerPhoneNumber}`}
+                                  className="text-sm text-blue-600 hover:text-blue-800 transition-colors truncate font-medium flex items-center space-x-1"
+                                >
+                                  <span>{formatPhoneNumber(request.customerPhoneNumber)}</span>
+                                  <span className="text-xs bg-blue-100 text-blue-600 px-1 rounded">Call</span>
+                                </a>
+                                <button
+                                  onClick={() => copyToClipboard(request.customerPhoneNumber!)}
+                                  className="p-1 hover:bg-gray-200 rounded transition-colors"
+                                  title="Copy phone number"
+                                >
+                                  <FiCopy className={`h-3 w-3 ${copiedNumber === request.customerPhoneNumber ? 'text-green-500' : 'text-gray-400'}`} />
+                                </button>
+                              </div>
+                            )}
+                            
+                            <p className="text-xs text-gray-500 mt-1">Ready for pickup</p>
+                          </div>
                         </div>
-                      )}
-                      {request.status === 'accepted' && (
-                        <div className="flex items-center text-green-600">
-                          <FiCheckCircle className="mr-2" />
-                          <span className="font-medium">Request Accepted</span>
+
+                        {/* Trip Details */}
+                        <div className="space-y-3 mb-4">
+                          {/* Package Details with Clickable Phone Numbers */}
+                          {request.packageDetails && (
+                            <div className="flex items-start space-x-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <div className="flex-shrink-0">
+                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                  <FiPackage className="h-5 w-5 text-blue-600" />
+                                </div>
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900 mb-2">Package Details</p>
+                                <div className="text-sm text-gray-600 whitespace-pre-wrap">
+                                  {renderPackageDescriptionWithClickablePhones(request.packageDetails)}
+                                </div>
+                                <p className="text-xs text-blue-600 mt-2 flex items-center">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Phone numbers are clickable for quick calling
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Recipient Phone Number - Enhanced with click-to-call */}
+                          {request.recipientPhoneNumber && (
+                            <div className="flex items-start space-x-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                              <div className="flex-shrink-0">
+                                <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                                  <FiPhone className="h-5 w-5 text-orange-600" />
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 mb-1">Recipient's Phone</p>
+                                <div className="flex items-center space-x-2">
+                                  <a 
+                                    href={`tel:${request.recipientPhoneNumber}`}
+                                    className="text-lg font-semibold text-orange-600 hover:text-orange-700 transition-colors truncate flex items-center space-x-2"
+                                  >
+                                    <span>{formatPhoneNumber(request.recipientPhoneNumber)}</span>
+                                    <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-medium whitespace-nowrap">
+                                      Tap to Call
+                                    </span>
+                                  </a>
+                                  <button
+                                    onClick={() => copyToClipboard(request.recipientPhoneNumber!)}
+                                    className="p-1 hover:bg-orange-100 rounded transition-colors flex-shrink-0"
+                                    title="Copy phone number"
+                                  >
+                                    <FiCopy className={`h-4 w-4 ${copiedNumber === request.recipientPhoneNumber ? 'text-green-500' : 'text-orange-400'}`} />
+                                  </button>
+                                </div>
+                                <p className="text-xs text-orange-600 mt-1 font-medium">Package recipient - Call before delivery</p>
+                                {copiedNumber === request.recipientPhoneNumber && (
+                                  <p className="text-xs text-green-600 mt-1 animate-pulse">✓ Copied to clipboard!</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Pickup Location */}
+                          <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+                            <div className="flex-shrink-0">
+                              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                                <FiMapPin className="h-5 w-5 text-green-600" />
+                              </div>
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900 mb-1">Pickup Location</p>
+                              <p className="text-sm text-gray-600">{request.pickupLocation}</p>
+                            </div>
+                          </div>
+
+                          {/* Dropoff Location */}
+                          <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+                            <div className="flex-shrink-0">
+                              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                                <FiMapPin className="h-5 w-5 text-red-600" />
+                              </div>
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900 mb-1">Dropoff Location</p>
+                              <p className="text-sm text-gray-600">{request.dropoffLocation}</p>
+                            </div>
+                          </div>
+
+                          {/* Fare and Distance */}
+                          <div className="flex items-center space-x-3 p-3 bg-yellow-50 rounded-lg">
+                            <div className="flex-shrink-0">
+                              <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                                <FiDollarSign className="h-5 w-5 text-yellow-600" />
+                              </div>
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900">Delivery Fare</p>
+                              <p className="text-lg font-bold text-gray-900">${request.fare.toFixed(2)}</p>
+                              <p className="text-sm text-gray-600">{request.distance} km • {Math.round(request.distance / 0.621371)} mi</p>
+                            </div>
+                          </div>
                         </div>
-                      )}
-                      {request.status === 'rejected' && (
-                        <div className="flex items-center text-red-600">
-                          <FiXCircle className="mr-2" />
-                          <span className="font-medium">Request Rejected</span>
-                        </div>
-                      )}
-                      {request.status === 'expired' && (
-                        <div className="flex items-center text-gray-500">
-                          <FiClock className="mr-2" />
-                          <span className="font-medium">Request Expired</span>
-                        </div>
-                      )}
+
+                        {/* Action Buttons */}
+                        {request.status === 'pending' && (
+                          <div className="flex space-x-3 pt-4 border-t border-gray-200">
+                            <button
+                              onClick={() => handleBookingReject(request.id)}
+                              className="flex-1 px-4 py-4 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-all duration-200 border border-gray-300 flex items-center justify-center space-x-2"
+                            >
+                              <FiX className="h-5 w-5" />
+                              <span className="text-base">Decline</span>
+                            </button>
+                            <button
+                              onClick={() => handleBookingAccept(request.id)}
+                              className="flex-1 px-4 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-green-200 flex items-center justify-center space-x-2"
+                            >
+                              <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+                              <span className="text-base">Accept</span>
+                            </button>
+                          </div>
+                        )}
+                        {request.status === 'accepted' && (
+                          <div className="flex items-center justify-center text-green-600 py-4">
+                            <FiCheckCircle className="mr-2 h-5 w-5" />
+                            <span className="font-semibold">Request Accepted</span>
+                          </div>
+                        )}
+                        {request.status === 'rejected' && (
+                          <div className="flex items-center justify-center text-red-600 py-4">
+                            <FiXCircle className="mr-2 h-5 w-5" />
+                            <span className="font-semibold">Request Rejected</span>
+                          </div>
+                        )}
+                        {request.status === 'expired' && (
+                          <div className="flex items-center justify-center text-gray-500 py-4">
+                            <FiClock className="mr-2 h-5 w-5" />
+                            <span className="font-semibold">Request Expired</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

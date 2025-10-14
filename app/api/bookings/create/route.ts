@@ -32,10 +32,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('Booking request received:', body);
     
-    // Updated field names to match what the frontend is sending
+    // Updated field names to match what the frontend is sending - ADD recipientPhone
     const { 
       customerId, 
       customerUsername,
+      recipientPhone,       // NOW INCLUDED: Recipient's phone number
       pickupAddress,       // Changed from pickupLocation
       dropoffAddress,      // Changed from dropoffLocation
       fare, 
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     // Updated validation to match new field names
     if (!customerId || !pickupAddress || !dropoffAddress || !fare || !userLocation) {
-      console.log('Missing required fields:', { customerId, pickupAddress, dropoffAddress, fare, userLocation });
+      console.log('Missing required fields:', { customerId,  pickupAddress, dropoffAddress, fare, userLocation });
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create delivery request
+    // Create delivery request - ADD recipientPhone to database insert
     const expiresAt = new Date(Date.now() + 30000);
     
     // Map frontend field names to database field names
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
       fare: parseFloat(fare),
       distance: parseFloat(distance),
       packageDetails: packageDetails || '',
+      recipientPhoneNumber: recipientPhone || '', // ADD THIS LINE: Store recipient phone in database
       expiresAt: expiresAt.toISOString(),
       status: 'pending',
       // NEW: If a specific driver is selected, assign it directly
@@ -110,22 +112,30 @@ export async function POST(request: NextRequest) {
       driverIdsToNotify = driverIds;
     }
 
-    // Publish booking request via PubNub
+    // Publish booking request via PubNub - ADD recipientPhone to notification data
     if (driverIdsToNotify.length > 0) {
       try {
-        const publishResult = await publishBookingRequest(driverIdsToNotify, {
+        // Create the booking data object with all required fields
+        const bookingData = {
           bookingId: deliveryRequest.id,
           customerId: customerId,
           customerUsername: customerUsername || customer.username,
           customerProfilePictureUrl: customer.profilePictureUrl || '', 
+          customerPhoneNumber: customer.phoneNumber || '', // Include customer phone
           pickupLocation: pickupAddress,
           dropoffLocation: dropoffAddress,
           fare: parseFloat(fare),
           distance: parseFloat(distance),
           expiresAt: expiresAt.toISOString(),
           packageDetails: packageDetails || '',
-          isDirectAssignment: !!selectedDriverId
-        });
+          isDirectAssignment: !!selectedDriverId,
+          // Add recipient phone number to the booking data
+          recipientPhoneNumber: recipientPhone || ''
+        };
+
+        console.log('Publishing booking data to drivers:', bookingData);
+        
+        const publishResult = await publishBookingRequest(driverIdsToNotify, bookingData);
         
         console.log('PubNub publish results:', publishResult);
       } catch (publishError) {

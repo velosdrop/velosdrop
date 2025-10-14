@@ -27,6 +27,7 @@ interface MapProps {
   activeDelivery?: {
     pickupLocation: { longitude: number; latitude: number };
     deliveryLocation: { longitude: number; latitude: number };
+    customerLocation?: { longitude: number; latitude: number };
   };
 }
 
@@ -51,6 +52,7 @@ export default function Map({
   const [isLocating, setIsLocating] = useState(false);
   const [currentAddress, setCurrentAddress] = useState<string>('');
   const [driverToPickupRouteData, setDriverToPickupRouteData] = useState<any>(null);
+  const [currentEta, setCurrentEta] = useState<number | null>(null);
 
   // Convert any coordinate format to LngLatLike
   const toLngLatLike = (location: { longitude: number; latitude: number }): [number, number] => {
@@ -158,6 +160,77 @@ export default function Map({
       }
     } catch (error) {
       console.error('❌ Error fetching driver to pickup route:', error);
+    }
+  };
+
+  // NEW: Update real-time route to customer
+  const updateRealTimeRoute = async (driverLocation: { longitude: number; latitude: number }, customerLocation: { longitude: number; latitude: number }) => {
+    if (!map.current) return;
+
+    try {
+      console.log('📍 Updating real-time driver to customer route');
+      const response = await fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/driving/${driverLocation.longitude},${driverLocation.latitude};${customerLocation.longitude},${customerLocation.latitude}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
+      );
+      const data = await response.json();
+      
+      if (data.routes && data.routes.length > 0) {
+        // Remove existing real-time route if it exists
+        if (map.current.getLayer('realtime-driver-route')) {
+          map.current.removeLayer('realtime-driver-route');
+        }
+        if (map.current.getSource('realtime-driver-route')) {
+          map.current.removeSource('realtime-driver-route');
+        }
+
+        // Add real-time route source and layer
+        map.current.addSource('realtime-driver-route', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: data.routes[0].geometry
+          }
+        });
+
+        map.current.addLayer({
+          id: 'realtime-driver-route',
+          type: 'line',
+          source: 'realtime-driver-route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#10b981',
+            'line-width': 6,
+            'line-opacity': 0.9,
+            'line-dasharray': [0.5, 0.5]
+          }
+        });
+
+        console.log('✅ Real-time route to customer updated');
+        
+        // Update ETA display
+        const eta = Math.round(data.routes[0].duration / 60);
+        setCurrentEta(eta);
+      }
+    } catch (error) {
+      console.error('❌ Error updating real-time route:', error);
+    }
+  };
+
+  // NEW: Helper function to calculate route
+  const calculateRoute = async (start: { longitude: number; latitude: number }, end: { longitude: number; latitude: number }) => {
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
+      );
+      const data = await response.json();
+      return data.routes?.[0] || null;
+    } catch (error) {
+      console.error('Error calculating route:', error);
+      return null;
     }
   };
 
@@ -367,6 +440,11 @@ export default function Map({
     if (lastLocation) {
       addDriverToPickupRoute(lastLocation, activeDelivery.pickupLocation);
     }
+
+    // NEW: Add real-time route to customer if customer location is available
+    if (lastLocation && activeDelivery.customerLocation) {
+      updateRealTimeRoute(lastLocation, activeDelivery.customerLocation);
+    }
   };
 
   const getGeolocationErrorText = (code: number): string => {
@@ -427,6 +505,11 @@ export default function Map({
       // Update driver to pickup route if we have active delivery
       if (activeDelivery) {
         addDriverToPickupRoute(location, activeDelivery.pickupLocation);
+        
+        // NEW: Update real-time route to customer if customer location is available
+        if (activeDelivery.customerLocation) {
+          updateRealTimeRoute(location, activeDelivery.customerLocation);
+        }
       }
 
       // FIXED: Convert null to undefined using nullish coalescing operator
@@ -461,7 +544,7 @@ export default function Map({
       onError,
       { 
         enableHighAccuracy: true, 
-        maximumAge: 10000,
+        maximumAge: 5000, // More frequent updates for real-time tracking
         timeout: 15000
       }
     );
@@ -494,6 +577,11 @@ export default function Map({
     if (activeDelivery && lastLocation && map.current) {
       console.log('🔄 Updating driver to pickup route with current location');
       addDriverToPickupRoute(lastLocation, activeDelivery.pickupLocation);
+      
+      // NEW: Update real-time route to customer
+      if (activeDelivery.customerLocation) {
+        updateRealTimeRoute(lastLocation, activeDelivery.customerLocation);
+      }
     }
   }, [lastLocation, activeDelivery]);
 
@@ -566,6 +654,15 @@ export default function Map({
               Updating location...
             </div>
           )}
+        </div>
+      )}
+
+      {/* NEW: ETA Display */}
+      {currentEta && (
+        <div className="absolute top-20 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
+          <h3 className="font-semibold text-green-400 mb-1">Estimated Arrival</h3>
+          <p className="text-lg font-bold">{currentEta} minutes</p>
+          <p className="text-xs text-gray-400">to customer location</p>
         </div>
       )}
 

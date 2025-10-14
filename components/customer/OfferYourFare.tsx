@@ -1,3 +1,4 @@
+//components/customer/OfferYourFare.tsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -113,14 +114,20 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
         onCancel={() => setIsSearching(false)}
         onConfirm={handleFinalConfirm}
         packageData={{
+          customerId: packageData.customerId,
+          customerUsername: customer?.username || packageData.customerPhone,
+          recipientPhone: packageData.recipientPhone, // Pass recipient phone through
           pickupAddress: packageData.pickupLocation,
           dropoffAddress: packageData.deliveryLocation,
           routeDistance: packageData.routeDistance || 0,
-          packageDescription: packageData.packageDescription
+          packageDescription: packageData.packageDescription,
+          pickupCoords: packageData.pickupCoords,
+          deliveryCoords: packageData.deliveryCoords,
+          customerPhone: packageData.customerPhone
         }}
         userLocation={userLocation || { lat: 0, lng: 0 }}
-        customerId={customer?.id || 0} // Pass customerId
-        customerUsername={customer?.phoneNumber || packageData.customerPhone} // Use phone as username
+        customerId={customer?.id || packageData.customerId || 0}
+        customerUsername={customer?.username || packageData.customerPhone}
       />
     );
   }
@@ -209,6 +216,32 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
               <div className="flex items-center">
                 <div className="w-2 h-2 bg-pink-500 rounded-full mr-2"></div>
                 <span className="text-gray-300 truncate">{packageData.deliveryLocation}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Package Details Summary */}
+          <div className="bg-gray-800/20 border border-purple-900/30 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-purple-300 font-medium">Package Details</h3>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5 text-purple-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7l8 4" />
+              </svg>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Recipient Phone:</span>
+                <span className="text-white">{packageData.recipientPhone || "Not provided"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Package Description:</span>
+                <span className="text-white truncate max-w-[150px]">{packageData.packageDescription || "No description"}</span>
               </div>
             </div>
           </div>

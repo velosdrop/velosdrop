@@ -1,0 +1,1 @@
+ALTER TABLE `delivery_requests` ADD `recipient_phone_number` text;
