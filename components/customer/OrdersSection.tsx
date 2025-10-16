@@ -1,41 +1,41 @@
 // app/customer/customer-dashboard/components/OrdersSection.tsx
 export default function OrdersSection() {
-    const orders = [
-      { id: 1, status: "Delivered", date: "2023-10-15", price: "$12.50" },
-      { id: 2, status: "In Transit", date: "2023-10-16", price: "$18.75" },
-      { id: 3, status: "Processing", date: "2023-10-17", price: "$9.99" },
-    ];
-  
-    return (
-      <div className="h-full">
-        <h2 className="text-2xl font-bold text-purple-400 mb-6">Your Orders</h2>
-        <div className="grid gap-4">
-          {orders.map((order) => (
-            <div key={order.id} className="bg-gray-900 p-4 rounded-lg border border-purple-900/50">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h3 className="font-semibold">Order #{order.id}</h3>
-                  <p className="text-sm text-gray-400">{order.date}</p>
-                </div>
-                <div className="text-right">
-                  <span className={`px-2 py-1 rounded-full text-xs ${
-                    order.status === "Delivered" 
-                      ? "bg-green-900/50 text-green-400" 
-                      : order.status === "In Transit"
-                      ? "bg-yellow-900/50 text-yellow-400"
-                      : "bg-blue-900/50 text-blue-400"
-                  }`}>
-                    {order.status}
-                  </span>
-                  <p className="font-bold mt-1">{order.price}</p>
-                </div>
+  const orders = [
+    { id: 1, status: "Delivered", date: "2023-10-15", price: "$12.50" },
+    { id: 2, status: "In Transit", date: "2023-10-16", price: "$18.75" },
+    { id: 3, status: "Processing", date: "2023-10-17", price: "$9.99" },
+  ];
+
+  return (
+    <div className="h-full">
+      <h2 className="text-xl lg:text-2xl font-bold text-purple-400 mb-4 lg:mb-6">Your Orders</h2>
+      <div className="grid gap-3 lg:gap-4">
+        {orders.map((order) => (
+          <div key={order.id} className="bg-gray-900 p-4 lg:p-6 rounded-xl lg:rounded-2xl border border-purple-900/50 shadow-lg">
+            <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-3 lg:space-y-0">
+              <div className="flex-1">
+                <h3 className="font-semibold text-base lg:text-lg">Order #{order.id}</h3>
+                <p className="text-sm text-gray-400 mt-1">{order.date}</p>
               </div>
-              <button className="mt-3 w-full bg-purple-900 hover:bg-purple-800 text-white py-2 rounded-lg transition-colors">
-                View Details
-              </button>
+              <div className="flex flex-col lg:items-end space-y-2">
+                <span className={`px-3 py-1 rounded-full text-xs lg:text-sm font-medium ${
+                  order.status === "Delivered" 
+                    ? "bg-green-900/50 text-green-400 border border-green-700/30" 
+                    : order.status === "In Transit"
+                    ? "bg-yellow-900/50 text-yellow-400 border border-yellow-700/30"
+                    : "bg-blue-900/50 text-blue-400 border border-blue-700/30"
+                }`}>
+                  {order.status}
+                </span>
+                <p className="font-bold text-base lg:text-lg">{order.price}</p>
+              </div>
             </div>
-          ))}
-        </div>
+            <button className="mt-4 w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white py-2 lg:py-3 rounded-lg transition-all duration-300 font-medium text-sm lg:text-base">
+              View Details
+            </button>
+          </div>
+        ))}
       </div>
-    );
-  }
+    </div>
+  );
+}

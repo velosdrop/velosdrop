@@ -18,46 +18,51 @@ interface Country {
   emoji: string;
 }
 
+// Zimbabwe country data - ALWAYS available
+const ZIMBABWE_COUNTRY: Country = {
+  code: "ZW",
+  name: "Zimbabwe",
+  phone: "263",
+  emoji: "🇿🇼",
+};
+
 export default function CustomerLogin() {
   const [formData, setFormData] = useState({
     phone: "",
     password: "",
   });
-  const [selectedCountry, setSelectedCountry] = useState<Country>({
-    code: "ZW",
-    name: "Zimbabwe",
-    phone: "263",
-    emoji: "🇿🇼",
-  });
+  const [selectedCountry, setSelectedCountry] = useState<Country>(ZIMBABWE_COUNTRY);
   const [countryList, setCountryList] = useState<Country[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isCountryOpen, setIsCountryOpen] = useState(false);
   const router = useRouter();
   const { setCustomer } = useUser();
 
   useEffect(() => {
-    const countriesData = Object.entries(countries)
-      .map(([code, country]) => ({
-        code,
-        name: country.name,
-        phone: country.phone,
-        emoji: country.emoji,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const loadCountries = () => {
+      try {
+        const countriesData = Object.entries(countries)
+          .map(([code, country]) => ({
+            code,
+            name: country.name,
+            phone: country.phone,
+            emoji: country.emoji,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
 
-    setCountryList(countriesData);
+        setCountryList(countriesData);
+      } catch (error) {
+        console.error("Error loading countries:", error);
+      }
+    };
 
-    // Zimbabwe default
-    const zim = countriesData.find((c) => c.code === "ZW");
-    if (zim) setSelectedCountry(zim);
+    loadCountries();
   }, []);
 
-  const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const countryCode = e.target.value;
-    const country = countryList.find((c) => c.code === countryCode);
-    if (country) {
-      setSelectedCountry(country);
-    }
+  const handleCountrySelect = (country: Country) => {
+    setSelectedCountry(country);
+    setIsCountryOpen(false);
   };
 
   const formatPhoneNumber = (value: string) => {
@@ -137,49 +142,54 @@ export default function CustomerLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-purple-900 text-white flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-gray-950/90 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-purple-600 relative overflow-hidden">
-        {/* Neon Glow */}
-        <div className="absolute -top-20 -right-20 w-60 h-60 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
-        <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
+    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-purple-900 text-white flex items-center justify-center p-4 sm:p-6 lg:p-8">
+      {/* Main Container - Responsive sizing */}
+      <div className="w-full max-w-[90vw] sm:max-w-md bg-gray-950/90 backdrop-blur-xl rounded-2xl shadow-2xl p-4 sm:p-6 lg:p-8 border border-purple-600 relative overflow-hidden">
+        {/* Neon Glow Effects */}
+        <div className="absolute -top-10 -right-10 w-40 h-40 sm:w-60 sm:h-60 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
+        <div className="absolute -bottom-10 -left-10 w-40 h-40 sm:w-60 sm:h-60 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
 
-        <div className="text-center mb-8 relative z-10">
-          <h1 className="text-4xl font-extrabold text-purple-400 mb-2 drop-shadow-lg">
+        {/* Header Section */}
+        <div className="text-center mb-6 sm:mb-8 relative z-10">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-purple-400 mb-2 drop-shadow-lg">
             Welcome
           </h1>
-          <p className="text-gray-400">Sign in with your phone number</p>
+          <p className="text-sm sm:text-base text-gray-400">Sign in with your phone number</p>
         </div>
 
+        {/* Error Message */}
         {errors.form && (
           <div className="mb-4 p-3 bg-red-900/60 border border-red-500 text-red-300 rounded-lg text-sm">
             {errors.form}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
+        {/* Form Section */}
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 relative z-10">
+          {/* Phone Input Section */}
           <div>
             <label
               htmlFor="phone"
-              className="block text-sm font-medium text-gray-300 mb-1"
+              className="block text-sm font-medium text-gray-300 mb-2"
             >
               Phone Number
             </label>
-            <div className="flex">
-              <div className="relative w-1/3 mr-2">
-                <select
-                  value={selectedCountry.code}
-                  onChange={handleCountryChange}
-                  className="w-full px-3 py-3 rounded-lg bg-gray-800/80 border border-gray-700 text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500 appearance-none"
+            
+            {/* Country Selector - Mobile Optimized */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Country Dropdown */}
+              <div className="relative w-full sm:w-40">
+                <button
+                  type="button"
+                  onClick={() => setIsCountryOpen(!isCountryOpen)}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-800/80 border border-gray-700 text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500 flex items-center justify-between hover:bg-gray-700/80 transition-colors"
                 >
-                  {countryList.map((country) => (
-                    <option key={country.code} value={country.code}>
-                      {country.emoji} +{country.phone}
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <span className="flex items-center gap-2">
+                    <span className="text-xl">{selectedCountry.emoji}</span>
+                    <span className="text-sm font-medium">+{selectedCountry.phone}</span>
+                  </span>
                   <svg
-                    className="w-5 h-5 text-gray-400"
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isCountryOpen ? 'rotate-180' : ''}`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -191,32 +201,124 @@ export default function CustomerLogin() {
                       d="M19 9l-7 7-7-7"
                     />
                   </svg>
-                </div>
+                </button>
+
+                {/* Country Dropdown Menu */}
+                {isCountryOpen && (
+                  <>
+                    {/* Backdrop for mobile */}
+                    <div 
+                      className="fixed inset-0 z-40 sm:hidden"
+                      onClick={() => setIsCountryOpen(false)}
+                    />
+                    
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl z-50 max-h-80 overflow-hidden">
+                      {/* Search Header */}
+                      <div className="p-3 border-b border-gray-700">
+                        <div className="text-sm font-medium text-gray-300 mb-2">Select Country</div>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Search countries..."
+                            className="w-full px-3 py-2 pl-9 bg-gray-900 border border-gray-600 rounded-md text-white text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                            onChange={(e) => {
+                              // You can add search functionality here if needed
+                            }}
+                          />
+                          <svg
+                            className="absolute left-3 top-2.5 w-4 h-4 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                            />
+                          </svg>
+                        </div>
+                      </div>
+                      
+                      {/* Countries List */}
+                      <div className="max-h-60 overflow-y-auto">
+                        {countryList.length > 0 ? (
+                          countryList.map((country) => (
+                            <button
+                              key={country.code}
+                              type="button"
+                              onClick={() => handleCountrySelect(country)}
+                              className={`w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-gray-700/50 transition-colors ${
+                                selectedCountry.code === country.code 
+                                  ? 'bg-purple-600/20 border-r-2 border-purple-500' 
+                                  : 'border-r-2 border-transparent'
+                              }`}
+                            >
+                              <span className="text-xl flex-shrink-0">{country.emoji}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-white truncate">
+                                  {country.name}
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                  +{country.phone}
+                                </div>
+                              </div>
+                              {selectedCountry.code === country.code && (
+                                <svg
+                                  className="w-4 h-4 text-purple-500 flex-shrink-0"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              )}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="p-4 text-center text-gray-400">
+                            Loading countries...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-              <input
-                id="phone"
-                type="tel"
-                value={formData.phone}
-                onChange={handlePhoneChange}
-                className={`flex-1 px-4 py-3 rounded-lg bg-gray-800/80 border ${
-                  errors.phone ? "border-red-500" : "border-gray-700"
-                } text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500`}
-                placeholder={
-                  selectedCountry.code === "ZW"
-                    ? "77 123 4567"
-                    : "123 456 7890"
-                }
-              />
+
+              {/* Phone Input */}
+              <div className="flex-1">
+                <input
+                  id="phone"
+                  type="tel"
+                  value={formData.phone}
+                  onChange={handlePhoneChange}
+                  className={`w-full px-4 py-3 rounded-lg bg-gray-800/80 border ${
+                    errors.phone ? "border-red-500" : "border-gray-700"
+                  } text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-base placeholder-gray-400`}
+                  placeholder="Enter phone number"
+                />
+              </div>
             </div>
             {errors.phone && (
-              <p className="mt-1 text-sm text-red-500">{errors.phone}</p>
+              <p className="mt-2 text-sm text-red-500 flex items-center gap-1">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                {errors.phone}
+              </p>
             )}
           </div>
 
+          {/* Password Input */}
           <div>
             <label
               htmlFor="password"
-              className="block text-sm font-medium text-gray-300 mb-1"
+              className="block text-sm font-medium text-gray-300 mb-2"
             >
               Password
             </label>
@@ -229,15 +331,21 @@ export default function CustomerLogin() {
               }
               className={`w-full px-4 py-3 rounded-lg bg-gray-800/80 border ${
                 errors.password ? "border-red-500" : "border-gray-700"
-              } text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500`}
-              placeholder="••••••••"
+              } text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-base placeholder-gray-400`}
+              placeholder="Enter your password"
             />
             {errors.password && (
-              <p className="mt-1 text-sm text-red-500">{errors.password}</p>
+              <p className="mt-2 text-sm text-red-500 flex items-center gap-1">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                {errors.password}
+              </p>
             )}
           </div>
 
-          <div className="flex items-center justify-between">
+          {/* Remember Me & Forgot Password */}
+          <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-3 xs:gap-0">
             <div className="flex items-center">
               <input
                 id="remember-me"
@@ -256,17 +364,18 @@ export default function CustomerLogin() {
             <div className="text-sm">
               <Link
                 href="/forgot-password"
-                className="text-purple-500 hover:text-purple-400"
+                className="text-purple-500 hover:text-purple-400 transition-colors font-medium"
               >
                 Forgot password?
               </Link>
             </div>
           </div>
 
+          {/* Submit Button */}
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg shadow-purple-900/50 transition duration-300 flex items-center justify-center"
+            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-purple-800 disabled:to-indigo-800 text-white font-bold py-3 px-4 rounded-lg shadow-lg shadow-purple-900/50 transition-all duration-300 flex items-center justify-center text-base min-h-[3rem] disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <>
@@ -298,14 +407,15 @@ export default function CustomerLogin() {
           </button>
         </form>
 
+        {/* Registration Link */}
         <div className="mt-6 text-center relative z-10">
-          <p className="text-gray-400">
+          <p className="text-sm sm:text-base text-gray-400">
             Don&apos;t have an account?{" "}
             <Link
               href="/customer/customer-registration"
-              className="text-purple-500 hover:text-purple-400 font-medium"
+              className="text-purple-500 hover:text-purple-400 font-medium transition-colors underline"
             >
-              Register
+              Register now
             </Link>
           </p>
         </div>
