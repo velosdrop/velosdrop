@@ -1,34 +1,114 @@
+//app/driver-login/page.tsx
 'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { FaUser, FaLock, FaArrowRight } from 'react-icons/fa';
-import { motion } from 'framer-motion';
-import { db } from '@/src/db';
-import { eq } from 'drizzle-orm';
-import { driversTable } from '@/src/db/schema';
-import { compareSync, hashSync } from 'bcryptjs';
-import Link from 'next/link';
 
-export default function LoginPage() {
-  const [firstName, setFirstName] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { db } from "@/src/db";
+import { driversTable } from "@/src/db/schema";
+import { eq } from "drizzle-orm";
+import { compareSync, hashSync } from "bcryptjs";
+import { countries } from "countries-list";
+import { motion } from 'framer-motion';
+
+interface Country {
+  code: string;
+  name: string;
+  phone: string;
+  emoji: string;
+}
+
+// Zimbabwe country data - ALWAYS available
+const ZIMBABWE_COUNTRY: Country = {
+  code: "ZW",
+  name: "Zimbabwe",
+  phone: "263",
+  emoji: "🇿🇼",
+};
+
+export default function DriverLogin() {
+  const [formData, setFormData] = useState({
+    phone: "",
+    password: "",
+  });
+  const [selectedCountry, setSelectedCountry] = useState<Country>(ZIMBABWE_COUNTRY);
+  const [countryList, setCountryList] = useState<Country[]>([]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isCountryOpen, setIsCountryOpen] = useState(false);
   const router = useRouter();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  useEffect(() => {
+    const loadCountries = () => {
+      try {
+        const countriesData = Object.entries(countries)
+          .map(([code, country]) => ({
+            code,
+            name: country.name,
+            phone: country.phone,
+            emoji: country.emoji,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        setCountryList(countriesData);
+      } catch (error) {
+        console.error("Error loading countries:", error);
+      }
+    };
+
+    loadCountries();
+  }, []);
+
+  const handleCountrySelect = (country: Country) => {
+    setSelectedCountry(country);
+    setIsCountryOpen(false);
+  };
+
+  const formatPhoneNumber = (value: string) => {
+    const cleaned = value.replace(/\D/g, "");
+    if (selectedCountry.code === "US" || selectedCountry.code === "CA") {
+      const match = cleaned.match(/^(\d{0,3})(\d{0,3})(\d{0,4})$/);
+      if (match) {
+        let formatted = "";
+        if (match[1]) formatted += `(${match[1]}`;
+        if (match[2]) formatted += `) ${match[2]}`;
+        if (match[3]) formatted += `-${match[3]}`;
+        return formatted;
+      }
+    }
+    return cleaned.replace(/(\d{3})(?=\d)/g, "$1 ");
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhoneNumber(e.target.value);
+    setFormData({ ...formData, phone: formatted });
+  };
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+    const phoneDigits = formData.phone.replace(/\D/g, "");
+    if (!phoneDigits) newErrors.phone = "Phone number is required";
+    else if (phoneDigits.length < 6)
+      newErrors.phone = "Phone number is too short";
+    if (!formData.password) newErrors.password = "Password is required";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) return;
+
     setIsLoading(true);
-    setError('');
+    setErrors({});
 
     try {
-      // Input validation
-      if (!firstName.trim() || !password.trim()) {
-        throw new Error('Please fill in all fields');
-      }
+      const phoneDigits = formData.phone.replace(/\D/g, "");
+      const fullPhoneNumber = `+${selectedCountry.phone}${phoneDigits}`;
 
+      // Find driver by phone number
       const driver = await db.query.driversTable.findFirst({
-        where: eq(driversTable.firstName, firstName),
+        where: eq(driversTable.phoneNumber, fullPhoneNumber),
       });
 
       if (!driver) {
@@ -45,14 +125,14 @@ export default function LoginPage() {
       let isMatch;
       if (isPasswordHashed) {
         // Compare with bcrypt for hashed passwords
-        isMatch = compareSync(password, driver.password);
+        isMatch = compareSync(formData.password, driver.password);
       } else {
         // Migration path for existing plaintext passwords
-        isMatch = password === driver.password;
+        isMatch = formData.password === driver.password;
         
         // Upgrade the password to hashed version if it's plaintext
         if (isMatch) {
-          const hashedPassword = hashSync(password, 10);
+          const hashedPassword = hashSync(formData.password, 10);
           await db.update(driversTable)
             .set({ password: hashedPassword })
             .where(eq(driversTable.id, driver.id));
@@ -63,6 +143,11 @@ export default function LoginPage() {
         throw new Error('Invalid credentials');
       }
 
+      // Update last login
+      await db.update(driversTable)
+        .set({ lastOnline: new Date().toISOString() })
+        .where(eq(driversTable.id, driver.id));
+
       // Store authentication tokens
       sessionStorage.setItem('driver-auth-token', 'true');
       sessionStorage.setItem('driver-id', driver.id.toString());
@@ -71,22 +156,27 @@ export default function LoginPage() {
       router.push('/driver-dashboard');
     } catch (err) {
       console.error('Login error:', err);
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setErrors({ form: err instanceof Error ? err.message : 'Login failed' });
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-purple-900 text-white flex items-center justify-center p-4 sm:p-6 lg:p-8">
+      {/* Main Container - Responsive sizing */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md"
+        className="w-full max-w-[90vw] sm:max-w-md bg-gray-950/90 backdrop-blur-xl rounded-2xl shadow-2xl p-4 sm:p-6 lg:p-8 border border-purple-600 relative overflow-hidden"
       >
-        {/* Header */}
-        <div className="text-center mb-10">
+        {/* Neon Glow Effects */}
+        <div className="absolute -top-10 -right-10 w-40 h-40 sm:w-60 sm:h-60 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
+        <div className="absolute -bottom-10 -left-10 w-40 h-40 sm:w-60 sm:h-60 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
+
+        {/* Header Section */}
+        <div className="text-center mb-6 sm:mb-8 relative z-10">
           <div className="inline-flex items-center gap-3 mb-2">
             <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
               <svg
@@ -106,94 +196,280 @@ export default function LoginPage() {
           <p className="text-gray-400">Driver Authentication Portal</p>
         </div>
 
-        {/* Login Card */}
-        <div className="card bg-gray-900/50 backdrop-blur-sm">
-          <h2 className="text-2xl font-bold mb-6 text-center">Sign In</h2>
+        {/* Error Message */}
+        {errors.form && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mb-4 p-3 bg-red-900/60 border border-red-500 text-red-300 rounded-lg text-sm"
+          >
+            {errors.form}
+          </motion.div>
+        )}
 
-          {error && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="mb-4 p-3 bg-red-900/30 text-red-300 rounded-lg border border-red-800/50 text-sm"
+        {/* Form Section */}
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 relative z-10">
+          {/* Phone Input Section */}
+          <div>
+            <label
+              htmlFor="phone"
+              className="block text-sm font-medium text-gray-300 mb-2"
             >
-              {error}
-            </motion.div>
-          )}
+              Phone Number
+            </label>
+            
+            {/* Country Selector - Mobile Optimized */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Country Dropdown */}
+              <div className="relative w-full sm:w-40">
+                <button
+                  type="button"
+                  onClick={() => setIsCountryOpen(!isCountryOpen)}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-800/80 border border-gray-700 text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500 flex items-center justify-between hover:bg-gray-700/80 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-xl">{selectedCountry.emoji}</span>
+                    <span className="text-sm font-medium">+{selectedCountry.phone}</span>
+                  </span>
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isCountryOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
 
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">
-                First Name
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400">
-                  <FaUser className="w-4 h-4" />
-                </div>
+                {/* Country Dropdown Menu */}
+                {isCountryOpen && (
+                  <>
+                    {/* Backdrop for mobile */}
+                    <div 
+                      className="fixed inset-0 z-40 sm:hidden"
+                      onClick={() => setIsCountryOpen(false)}
+                    />
+                    
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl z-50 max-h-80 overflow-hidden">
+                      {/* Search Header */}
+                      <div className="p-3 border-b border-gray-700">
+                        <div className="text-sm font-medium text-gray-300 mb-2">Select Country</div>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Search countries..."
+                            className="w-full px-3 py-2 pl-9 bg-gray-900 border border-gray-600 rounded-md text-white text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                            onChange={(e) => {
+                              // You can add search functionality here if needed
+                            }}
+                          />
+                          <svg
+                            className="absolute left-3 top-2.5 w-4 h-4 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                            />
+                          </svg>
+                        </div>
+                      </div>
+                      
+                      {/* Countries List */}
+                      <div className="max-h-60 overflow-y-auto">
+                        {countryList.length > 0 ? (
+                          countryList.map((country) => (
+                            <button
+                              key={country.code}
+                              type="button"
+                              onClick={() => handleCountrySelect(country)}
+                              className={`w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-gray-700/50 transition-colors ${
+                                selectedCountry.code === country.code 
+                                  ? 'bg-purple-600/20 border-r-2 border-purple-500' 
+                                  : 'border-r-2 border-transparent'
+                              }`}
+                            >
+                              <span className="text-xl flex-shrink-0">{country.emoji}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-white truncate">
+                                  {country.name}
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                  +{country.phone}
+                                </div>
+                              </div>
+                              {selectedCountry.code === country.code && (
+                                <svg
+                                  className="w-4 h-4 text-purple-500 flex-shrink-0"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              )}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="p-4 text-center text-gray-400">
+                            Loading countries...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Phone Input */}
+              <div className="flex-1">
                 <input
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  className="pl-10 w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder-gray-500"
-                  placeholder="Enter your first name"
-                  required
+                  id="phone"
+                  type="tel"
+                  value={formData.phone}
+                  onChange={handlePhoneChange}
+                  className={`w-full px-4 py-3 rounded-lg bg-gray-800/80 border ${
+                    errors.phone ? "border-red-500" : "border-gray-700"
+                  } text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-base placeholder-gray-400`}
+                  placeholder="Enter phone number"
                 />
               </div>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400">
-                  <FaLock className="w-4 h-4" />
-                </div>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder-gray-500"
-                  placeholder="••••••••"
-                  required
-                  minLength={8}
-                />
-              </div>
-              <div className="mt-1 text-xs text-gray-500">
-                Password must be at least 8 characters
-              </div>
-            </div>
-
-            <motion.button
-              type="submit"
-              disabled={isLoading}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="btn_purple w-full py-3 px-6 rounded-lg font-medium flex items-center justify-center gap-2 border"
-            >
-              {isLoading ? (
-                <span className="animate-pulse">Authenticating...</span>
-              ) : (
-                <>
-                  <span>Continue</span>
-                  <FaArrowRight className="text-sm" />
-                </>
-              )}
-            </motion.button>
-          </form>
-
-          <div className="mt-6 pt-6 border-t border-gray-800 text-center text-sm text-gray-500">
-            No account?{' '}
-            <Link
-              href="/driver/registration"
-              className="text-purple-400 hover:text-purple-300 font-medium hover:underline"
-            >
-              Register here
-            </Link>
+            {errors.phone && (
+              <p className="mt-2 text-sm text-red-500 flex items-center gap-1">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                {errors.phone}
+              </p>
+            )}
           </div>
+
+          {/* Password Input */}
+          <div>
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-gray-300 mb-2"
+            >
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={formData.password}
+              onChange={(e) =>
+                setFormData({ ...formData, password: e.target.value })
+              }
+              className={`w-full px-4 py-3 rounded-lg bg-gray-800/80 border ${
+                errors.password ? "border-red-500" : "border-gray-700"
+              } text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-base placeholder-gray-400`}
+              placeholder="Enter your password"
+              required
+              minLength={8}
+            />
+            {errors.password && (
+              <p className="mt-2 text-sm text-red-500 flex items-center gap-1">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                {errors.password}
+              </p>
+            )}
+            <div className="mt-1 text-xs text-gray-500">
+              Password must be at least 8 characters
+            </div>
+          </div>
+
+          {/* Remember Me & Forgot Password */}
+          <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-3 xs:gap-0">
+            <div className="flex items-center">
+              <input
+                id="remember-me"
+                name="remember-me"
+                type="checkbox"
+                className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-700 rounded bg-gray-800"
+              />
+              <label
+                htmlFor="remember-me"
+                className="ml-2 block text-sm text-gray-400"
+              >
+                Remember me
+              </label>
+            </div>
+
+            <div className="text-sm">
+              <Link
+                href="/driver/forgot-password"
+                className="text-purple-500 hover:text-purple-400 transition-colors font-medium"
+              >
+                Forgot password?
+              </Link>
+            </div>
+          </div>
+
+          {/* Submit Button */}
+          <motion.button
+            type="submit"
+            disabled={isLoading}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-purple-800 disabled:to-indigo-800 text-white font-bold py-3 px-4 rounded-lg shadow-lg shadow-purple-900/50 transition-all duration-300 flex items-center justify-center text-base min-h-[3rem] disabled:cursor-not-allowed"
+          >
+            {isLoading ? (
+              <>
+                <svg
+                  className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                Signing in...
+              </>
+            ) : (
+              "Continue"
+            )}
+          </motion.button>
+        </form>
+
+        {/* Registration Link */}
+        <div className="mt-6 pt-6 border-t border-gray-800 text-center text-sm text-gray-500 relative z-10">
+          No account?{' '}
+          <Link
+            href="/driver/registration"
+            className="text-purple-400 hover:text-purple-300 font-medium hover:underline"
+          >
+            Register here
+          </Link>
         </div>
 
         {/* Footer */}
-        <div className="mt-8 text-center text-xs text-gray-600">
+        <div className="mt-8 text-center text-xs text-gray-600 relative z-10">
           © {new Date().getFullYear()} VelosDrop Technologies
         </div>
       </motion.div>

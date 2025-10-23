@@ -1,4 +1,3 @@
-// app/customer/customer-dashboard/page.tsx
 "use client";
 
 import { useState, useRef, useEffect, useContext } from "react";
@@ -210,8 +209,28 @@ export default function CustomerDashboard() {
         fixed lg:relative z-50 h-full bg-gradient-to-b from-gray-900 to-gray-950 border-r border-purple-900/30 flex flex-col shadow-2xl shadow-purple-900/10 transition-all duration-300
         ${isSidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full lg:translate-x-0 lg:w-20'}
       `}>
-        {/* Profile Section */}
+        {/* Profile Section with Logout Button */}
         <div className="p-4 lg:p-6 border-b border-purple-900/30">
+          <div className="flex items-center justify-between mb-4">
+            {/* Logout Button - Top Right Corner */}
+            <button
+              onClick={handleLogout}
+              className="flex items-center px-3 py-2 rounded-xl bg-gradient-to-r from-red-600/20 to-red-700/20 text-red-400 hover:from-red-700/30 hover:to-red-800/30 hover:text-red-300 transition-all duration-300 border border-red-600/30 hover:border-red-500/40 shadow-lg shadow-red-500/5 hover:shadow-red-600/10 group transform hover:scale-105"
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                className="h-4 w-4 lg:h-5 lg:w-5 group-hover:animate-pulse" 
+                viewBox="0 0 20 20" 
+                fill="currentColor"
+              >
+                <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
+              </svg>
+              {isSidebarOpen && (
+                <span className="ml-2 font-medium text-sm">Logout</span>
+              )}
+            </button>
+          </div>
+
           <div className="flex flex-col items-center">
             <div className="relative group">
               <div className="w-16 h-16 lg:w-24 lg:h-24 rounded-full overflow-hidden border-2 border-purple-600/80 shadow-lg shadow-purple-600/20 transition-all duration-300 group-hover:border-purple-500 group-hover:shadow-purple-500/30">
@@ -291,7 +310,7 @@ export default function CustomerDashboard() {
                 name: "Help Center", 
                 icon: (
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5a1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                   </svg>
                 )
               },
@@ -334,26 +353,6 @@ export default function CustomerDashboard() {
             ))}
           </ul>
         </nav>
-
-        {/* Logout Button - Positioned at the bottom */}
-        <div className="p-4 lg:p-5 border-t border-purple-900/30 mt-auto">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-gradient-to-r from-red-600/20 to-red-700/20 text-red-400 hover:from-red-700/30 hover:to-red-800/30 hover:text-red-300 transition-all duration-300 border border-red-600/30 hover:border-red-500/40 shadow-lg shadow-red-500/5 hover:shadow-red-600/10 group"
-          >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              className="h-4 w-4 lg:h-5 lg:w-5 group-hover:animate-pulse" 
-              viewBox="0 0 20 20" 
-              fill="currentColor"
-            >
-              <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
-            </svg>
-            {isSidebarOpen && (
-              <span className="ml-2 lg:ml-3 font-medium text-sm lg:text-base">Logout</span>
-            )}
-          </button>
-        </div>
       </div>
 
       {/* Main Content */}

@@ -1,3 +1,4 @@
+//app/driver/registration/page.tsx
 'use client';
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -88,7 +89,6 @@ export default function RegistrationPage() {
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                             >
-                                [DEV ONLY] Skip OTP Verification
                             </motion.button>
                         </motion.div>
                     )}
