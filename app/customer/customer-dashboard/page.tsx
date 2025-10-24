@@ -1,3 +1,4 @@
+//app/customer/customer-dashboard/page.tsx
 "use client";
 
 import { useState, useRef, useEffect, useContext } from "react";
