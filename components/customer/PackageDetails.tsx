@@ -268,7 +268,7 @@ export default function PackageDetails({
                 type="tel"
                 value={recipientPhone}
                 onChange={(e) => setRecipientPhone(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700 text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 backdrop-blur-sm transition-all duration-300"
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-gray-800/20 border border-gray-700 text-gray-400 cursor-not-allowed"
                 placeholder="Enter recipient's phone number"
                 required
               />

@@ -7,7 +7,6 @@ import PackageDetails from "@/components/customer/PackageDetails";
 import dynamic from 'next/dynamic';
 import { useDelivery } from '@/app/context/DeliveryContext';
 
-
 // Dynamically import the map component to avoid SSR issues
 const RouteMap = dynamic(() => import('@/components/customer/RouteMap'), {
   ssr: false,
@@ -43,7 +42,7 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
   const [pickupSuggestions, setPickupSuggestions] = useState<LocationSuggestion[]>([]);
   const [deliverySuggestions, setDeliverySuggestions] = useState<LocationSuggestion[]>([]);
   const [isLocating, setIsLocating] = useState(false);
-  const [isAutoLocating, setIsAutoLocating] = useState(true);
+  const [isAutoLocating, setIsAutoLocating] = useState(true); // CHANGED: Set to true for auto-location
   const { customer } = useUser();
   const { setDeliveryData } = useDelivery();
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
@@ -286,44 +285,58 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-end justify-center z-50">
       <div className="bg-gradient-to-b from-gray-900 to-black w-full max-w-2xl rounded-t-2xl p-6 animate-slide-up border-t border-purple-900/30 max-h-[90vh] overflow-y-auto">
+        {/* Header Section */}
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            Book a Delivery
-          </h2>
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg shadow-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 7.001c0 3.865-3.134 7-7 7s-7-3.135-7-7c0-3.867 3.134-7.001 7-7.001s7 3.134 7 7.001zm-1.598 7.18c-1.506 1.137-3.374 1.82-5.402 1.82-2.03 0-3.899-.685-5.407-1.822-4.072 1.793-6.593 7.376-6.593 9.821h24c0-2.423-2.6-8.006-6.598-9.819z"/>
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              Book a Delivery
+            </h2>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white p-2 rounded-full hover:bg-purple-900/30 transition-all duration-300 transform hover:rotate-90"
+            className="text-gray-400 hover:text-white p-2 rounded-full hover:bg-purple-900/30 transition-all duration-300 transform hover:rotate-90 group"
             aria-label="Cancel"
             title="Cancel"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
+              className="h-6 w-6 group-hover:scale-110 transition-transform"
               viewBox="0 0 24 24"
-              stroke="currentColor"
+              fill="currentColor"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
+              <path d="M18.3 5.71a1 1 0 00-1.41 0L12 10.59 7.11 5.7A1 1 0 005.7 7.11L10.59 12 5.7 16.89a1 1 0 101.41 1.41L12 13.41l4.89 4.89a1 1 0 001.41-1.41L13.41 12l4.89-4.89a1 1 0 000-1.4z"/>
             </svg>
           </button>
         </div>
 
         <form onSubmit={handleSubmitBooking} className="space-y-6">
           {/* Progress Indicator */}
-          <div className="flex items-center justify-center space-x-2 mb-6">
-            <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
-            <div className="w-3 h-3 bg-gray-600 rounded-full"></div>
+          <div className="flex items-center justify-center space-x-4 mb-6">
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse shadow-lg shadow-purple-500/50"></div>
+              <span className="text-sm text-purple-300 font-medium">Location</span>
+            </div>
+            <div className="w-8 h-0.5 bg-gray-600"></div>
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-gray-600 rounded-full"></div>
+              <span className="text-sm text-gray-400">Package</span>
+            </div>
           </div>
 
           {/* Route Map Preview */}
           {(pickupCoords || deliveryCoords) && (
-            <div className="bg-gray-800/30 rounded-xl p-4 border border-purple-900/20">
-              <h3 className="text-purple-300 font-medium mb-3">Route Preview</h3>
+            <div className="bg-gray-800/30 rounded-xl p-4 border border-purple-900/20 backdrop-blur-sm">
+              <div className="flex items-center space-x-2 mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 010-5 2.5 2.5 0 010 5z"/>
+                </svg>
+                <h3 className="text-purple-300 font-medium">Route Preview</h3>
+              </div>
               <RouteMap
                 pickupCoords={pickupCoords}
                 deliveryCoords={deliveryCoords}
@@ -335,46 +348,45 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
             </div>
           )}
 
-          <div className="space-y-4">
+          <div className="space-y-6">
             {/* Pickup Location - Auto-filled with current location */}
             <div className="group">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-3">
                 <label className="block text-sm font-medium text-purple-300">
                   Pickup Location
                 </label>
                 {isAutoLocating ? (
-                  <span className="text-xs text-purple-400 flex items-center">
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-400 mr-1"></div>
-                    Detecting exact location...
+                  <span className="text-xs text-purple-400 flex items-center space-x-1">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-400"></div>
+                    <span>Detecting exact location...</span>
                   </span>
                 ) : (
                   <button
                     type="button"
                     onClick={getCurrentLocation}
                     disabled={isLocating}
-                    className="text-xs text-purple-400 hover:text-purple-300 flex items-center disabled:opacity-50"
+                    className="text-xs bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 hover:text-purple-200 flex items-center space-x-1 px-2 py-1 rounded-lg transition-all duration-200 disabled:opacity-50"
                   >
                     {isLocating ? (
                       <>
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-400 mr-1"></div>
-                        Updating...
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-300"></div>
+                        <span>Updating...</span>
                       </>
                     ) : (
                       <>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 010-5 2.5 2.5 0 010 5z"/>
                         </svg>
-                        Use exact location
+                        <span>Use exact location</span>
                       </>
                     )}
                   </button>
                 )}
               </div>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-green-400 z-10">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 010-5 2.5 2.5 0 010 5z"/>
                   </svg>
                 </div>
                 <input
@@ -384,20 +396,23 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
                     setPickupLocation(e.target.value);
                     setIsAutoLocating(false);
                   }}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700 text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 backdrop-blur-sm transition-all duration-300"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700 text-white placeholder-gray-400 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 backdrop-blur-sm transition-all duration-300 group-hover:border-gray-600"
                   placeholder="Enter pickup address"
                   required
                 />
                 {pickupSuggestions.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 bg-gray-900 border border-gray-700 rounded-b-xl shadow-lg z-10 mt-1 max-h-60 overflow-y-auto">
+                  <div className="absolute top-full left-0 right-0 bg-gray-900 border border-gray-700 rounded-b-xl shadow-2xl z-10 mt-1 max-h-60 overflow-y-auto backdrop-blur-sm">
                     {pickupSuggestions.map((suggestion, index) => (
                       <button
                         key={index}
                         type="button"
                         onClick={() => handleSuggestionClick(suggestion, true)}
-                        className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors text-sm text-gray-200 border-b border-gray-700 last:border-b-0"
+                        className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors text-sm text-gray-200 border-b border-gray-700 last:border-b-0 flex items-center space-x-3"
                       >
-                        <div className="font-medium">{suggestion.place_name}</div>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-400 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 010-5 2.5 2.5 0 010 5z"/>
+                        </svg>
+                        <span className="font-medium">{suggestion.place_name}</span>
                       </button>
                     ))}
                   </div>
@@ -407,34 +422,36 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
 
             {/* Delivery Location */}
             <div className="group">
-              <label className="block text-sm font-medium text-purple-300 mb-2">
+              <label className="block text-sm font-medium text-purple-300 mb-3">
                 Delivery Location
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-red-400 z-10">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 010-5 2.5 2.5 0 010 5z"/>
                   </svg>
                 </div>
                 <input
                   type="text"
                   value={deliveryLocation}
                   onChange={(e) => setDeliveryLocation(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700 text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 backdrop-blur-sm transition-all duration-300"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700 text-white placeholder-gray-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 backdrop-blur-sm transition-all duration-300 group-hover:border-gray-600"
                   placeholder="Enter delivery address"
                   required
                 />
                 {deliverySuggestions.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 bg-gray-900 border border-gray-700 rounded-b-xl shadow-lg z-10 mt-1 max-h-60 overflow-y-auto">
+                  <div className="absolute top-full left-0 right-0 bg-gray-900 border border-gray-700 rounded-b-xl shadow-2xl z-10 mt-1 max-h-60 overflow-y-auto backdrop-blur-sm">
                     {deliverySuggestions.map((suggestion, index) => (
                       <button
                         key={index}
                         type="button"
                         onClick={() => handleSuggestionClick(suggestion, false)}
-                        className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors text-sm text-gray-200 border-b border-gray-700 last:border-b-0"
+                        className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors text-sm text-gray-200 border-b border-gray-700 last:border-b-0 flex items-center space-x-3"
                       >
-                        <div className="font-medium">{suggestion.place_name}</div>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-red-400 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 010-5 2.5 2.5 0 010 5z"/>
+                        </svg>
+                        <span className="font-medium">{suggestion.place_name}</span>
                       </button>
                     ))}
                   </div>
@@ -444,41 +461,51 @@ export default function BookingPanel({ onClose, onLocationsSelected }: BookingPa
 
             {/* Package Details Button */}
             <div className="group">
-              <label className="block text-sm font-medium text-purple-300 mb-2">
-                Package Details
+              <label className="block text-sm font-medium text-purple-300 mb-3 flex items-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20 7h-4V5c0-.55-.22-1.05-.59-1.41C15.05 3.22 14.55 3 14 3h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zM10 5h4v2h-4V5zm1 13.5l-1-1 3-3-3-3 1-1 4 4-4 4z"/>
+                </svg>
+                <span>Package Details</span>
               </label>
               <button
                 type="button"
                 onClick={handlePackageDetailsClick}
-                className="w-full p-4 rounded-xl bg-gradient-to-r from-purple-900/30 to-indigo-900/30 border border-purple-700/30 text-left text-gray-300 hover:text-white hover:from-purple-900/50 hover:to-indigo-900/50 hover:border-purple-500/50 transition-all duration-300"
+                className="w-full p-4 rounded-xl bg-gradient-to-r from-purple-900/30 to-indigo-900/30 border border-purple-700/30 text-left text-gray-300 hover:text-white hover:from-purple-900/50 hover:to-indigo-900/50 hover:border-purple-500/50 transition-all duration-300 group-hover:scale-[1.02] backdrop-blur-sm"
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-purple-600/20 rounded-lg">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  <div className="flex items-center space-x-4">
+                    <div className="p-2 bg-yellow-600/20 rounded-lg group-hover:bg-yellow-600/30 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-400" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20 7h-4V5c0-.55-.22-1.05-.59-1.41C15.05 3.22 14.55 3 14 3h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zM10 5h4v2h-4V5zm1 13.5l-1-1 3-3-3-3 1-1 4 4-4 4z"/>
                       </svg>
                     </div>
                     <div>
                       <p className="font-medium">Add Package Information</p>
-                      <p className="text-sm text-gray-400">Describe what you're sending</p>
+                      <p className="text-sm text-gray-400 group-hover:text-gray-300">Describe what you're sending</p>
                     </div>
                   </div>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-400 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
                   </svg>
                 </div>
               </button>
             </div>
           </div>
 
+          {/* Continue Button */}
           <div className="pt-6">
             <button
               type="submit"
               disabled={!pickupCoords || !deliveryCoords}
-              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl shadow-2xl shadow-purple-900/40 hover:shadow-purple-900/60 transition-all duration-300"
+              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl shadow-2xl shadow-purple-900/40 hover:shadow-purple-900/60 transition-all duration-300 transform hover:scale-[1.02] disabled:hover:scale-100 group relative overflow-hidden"
             >
-              Continue to Package Details
+              <span className="relative z-10 flex items-center justify-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
+                </svg>
+                <span>Continue to Package Details</span>
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-700 to-indigo-700 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             </button>
           </div>
         </form>
