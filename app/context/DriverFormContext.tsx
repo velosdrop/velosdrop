@@ -1,9 +1,7 @@
+// /app/context/DriverFormContext.tsx
 'use client';
 
 import { createContext, useState, useContext } from 'react';
-import { db } from "@/src/db";
-import { driversTable } from '@/src/db/schema';
-import { eq } from 'drizzle-orm';
 
 interface FileWithPreview {
   file: File;
@@ -56,21 +54,6 @@ interface DriverFormContextType {
 }
 
 const DriverFormContext = createContext<DriverFormContextType | undefined>(undefined);
-
-interface DriverDBData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  password: string;
-  phoneNumber: string;
-  vehicleType: string;
-  carName: string;
-  numberPlate: string;
-  licenseExpiry: string;
-  registrationExpiry: string;
-  status: string;
-  profilePictureUrl?: string;
-}
 
 export function DriverFormProvider({ children }: { children: React.ReactNode }) {
   const initialFormState: DriverFormData = {
@@ -146,11 +129,44 @@ export function DriverFormProvider({ children }: { children: React.ReactNode }) 
     setError(null);
   };
 
-  const uploadFile = async (file: File, path: string): Promise<string> => {
-    // In a real app, implement actual file upload logic here
-    console.log(`Uploading file to ${path}`);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return `https://example.com/${path}/${file.name}`;
+  // File upload function
+  const uploadFile = async (file: File, documentType: string): Promise<string> => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', documentType);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      return data.url;
+    } catch (error) {
+      console.error(`Upload error for ${documentType}:`, error);
+      throw new Error(`Failed to upload ${documentType}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Hash password function (you should use a proper hashing library in production)
+  const hashPassword = async (password: string): Promise<string> => {
+    // In a real application, use bcrypt or similar
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
   };
 
   const submitAllData = async (): Promise<string> => {
@@ -159,10 +175,6 @@ export function DriverFormProvider({ children }: { children: React.ReactNode }) 
 
     try {
       // Validate required fields
-      if (!formData.personal.phoneNumber) {
-        throw new Error('Phone number is required');
-      }
-
       const requiredFields = [
         { path: 'personal.firstName', value: formData.personal.firstName },
         { path: 'personal.lastName', value: formData.personal.lastName },
@@ -184,53 +196,183 @@ export function DriverFormProvider({ children }: { children: React.ReactNode }) 
         throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
       }
 
-      // Upload files (if they exist)
-      const uploadPromises = [];
-      
-      if (formData.personal.profilePicture) {
-        uploadPromises.push(
-          uploadFile(formData.personal.profilePicture.file, `drivers/${formData.personal.email}/profilePicture`)
-            .then(url => ({ field: 'personal.profilePicture', url }))
-        );
+      // Validate document files
+      const requiredDocuments = [
+        { type: 'license front', file: formData.documents.license.front },
+        { type: 'license back', file: formData.documents.license.back },
+        { type: 'registration front', file: formData.documents.registration.front },
+        { type: 'registration back', file: formData.documents.registration.back },
+        { type: 'national ID front', file: formData.documents.nationalId.front },
+        { type: 'national ID back', file: formData.documents.nationalId.back },
+      ];
+
+      const missingDocuments = requiredDocuments
+        .filter(doc => !doc.file)
+        .map(doc => doc.type);
+
+      if (missingDocuments.length > 0) {
+        throw new Error(`Missing required documents: ${missingDocuments.join(', ')}`);
       }
 
-      // Add other file uploads as needed...
-      const uploadResults = await Promise.all(uploadPromises);
+      // Upload all files in sequence to avoid overwhelming the server
+      const uploadResults: { [key: string]: string } = {};
 
-      // Prepare data for database with proper typing
-      const driverData: DriverDBData = {
-        firstName: formData.personal.firstName,
-        lastName: formData.personal.lastName,
-        email: formData.personal.email,
-        password: formData.personal.password,
-        phoneNumber: formData.personal.phoneNumber,
-        vehicleType: formData.vehicle.vehicleType,
-        carName: formData.vehicle.carName,
-        numberPlate: formData.vehicle.numberPlate,
-        licenseExpiry: formData.documents.license.expiry,
-        registrationExpiry: formData.documents.registration.expiry,
-        status: 'pending',
+      // Upload profile picture if exists
+      if (formData.personal.profilePicture) {
+        try {
+          uploadResults.profilePicture = await uploadFile(
+            formData.personal.profilePicture.file, 
+            'profile_picture'
+          );
+        } catch (error) {
+          console.warn('Profile picture upload failed, continuing without it:', error);
+        }
+      }
+
+      // Upload vehicle images if exist
+      if (formData.vehicle.frontImage) {
+        try {
+          uploadResults.vehicleFront = await uploadFile(
+            formData.vehicle.frontImage.file,
+            'vehicle_front'
+          );
+        } catch (error) {
+          console.warn('Vehicle front image upload failed:', error);
+        }
+      }
+
+      if (formData.vehicle.backImage) {
+        try {
+          uploadResults.vehicleBack = await uploadFile(
+            formData.vehicle.backImage.file,
+            'vehicle_back'
+          );
+        } catch (error) {
+          console.warn('Vehicle back image upload failed:', error);
+        }
+      }
+
+      // Upload required documents
+      try {
+        uploadResults.licenseFront = await uploadFile(
+          formData.documents.license.front!.file,
+          'license_front'
+        );
+      } catch (error) {
+        throw new Error(`License front upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+
+      try {
+        uploadResults.licenseBack = await uploadFile(
+          formData.documents.license.back!.file,
+          'license_back'
+        );
+      } catch (error) {
+        throw new Error(`License back upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+
+      try {
+        uploadResults.registrationFront = await uploadFile(
+          formData.documents.registration.front!.file,
+          'registration_front'
+        );
+      } catch (error) {
+        throw new Error(`Registration front upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+
+      try {
+        uploadResults.registrationBack = await uploadFile(
+          formData.documents.registration.back!.file,
+          'registration_back'
+        );
+      } catch (error) {
+        throw new Error(`Registration back upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+
+      try {
+        uploadResults.nationalIdFront = await uploadFile(
+          formData.documents.nationalId.front!.file,
+          'national_id_front'
+        );
+      } catch (error) {
+        throw new Error(`National ID front upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+
+      try {
+        uploadResults.nationalIdBack = await uploadFile(
+          formData.documents.nationalId.back!.file,
+          'national_id_back'
+        );
+      } catch (error) {
+        throw new Error(`National ID back upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+
+      // Hash password
+      const hashedPassword = await hashPassword(formData.personal.password);
+
+      // Prepare data for database
+      const driverData = {
+        personal: {
+          firstName: formData.personal.firstName,
+          lastName: formData.personal.lastName,
+          email: formData.personal.email,
+          password: hashedPassword,
+          phoneNumber: formData.personal.phoneNumber,
+          profilePictureUrl: uploadResults.profilePicture || null,
+        },
+        vehicle: {
+          vehicleType: formData.vehicle.vehicleType,
+          carName: formData.vehicle.carName,
+          numberPlate: formData.vehicle.numberPlate,
+          vehicleFrontUrl: uploadResults.vehicleFront || null,
+          vehicleBackUrl: uploadResults.vehicleBack || null,
+        },
+        documents: {
+          license: {
+            expiry: formData.documents.license.expiry,
+            frontUrl: uploadResults.licenseFront,
+            backUrl: uploadResults.licenseBack,
+          },
+          registration: {
+            expiry: formData.documents.registration.expiry,
+            frontUrl: uploadResults.registrationFront,
+            backUrl: uploadResults.registrationBack,
+          },
+          nationalId: {
+            frontUrl: uploadResults.nationalIdFront,
+            backUrl: uploadResults.nationalIdBack,
+          },
+        },
       };
 
-      // Add profile picture URL if available
-      if (uploadResults.length > 0 && uploadResults[0].url) {
-        driverData.profilePictureUrl = uploadResults[0].url;
+      // Submit to registration API
+      const response = await fetch('/api/drivers/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(driverData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Registration failed: ${response.statusText}`);
       }
 
-      // Insert into database
-      const result = await db.insert(driversTable)
-        .values(driverData)
-        .returning({ id: driversTable.id });
+      const result = await response.json();
 
-      if (!result[0]?.id) {
-        throw new Error('Failed to create driver record');
+      if (!result.success) {
+        throw new Error(result.error || 'Registration failed');
       }
 
+      // Reset form on successful submission
       resetForm();
-      return result[0].id.toString();
+      
+      return result.driverId || result.id || 'success';
+      
     } catch (err) {
       console.error('Submission error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred during registration';
       setError(errorMessage);
       throw new Error(errorMessage);
     } finally {

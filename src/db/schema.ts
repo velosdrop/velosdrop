@@ -7,6 +7,18 @@ export type LocationData = {
 import { sql } from 'drizzle-orm';
 import { integer, sqliteTable, text, real } from 'drizzle-orm/sqlite-core';
 
+export const adminsTable = sqliteTable('admins', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  username: text('username').unique().notNull(),
+  password: text('password').notNull(), // This will store the hashed password
+  role: text('role').default('admin').notNull(), // 'super_admin', 'admin', 'support'
+  isActive: integer('is_active', { mode: 'boolean' }).default(true).notNull(),
+  lastLogin: text('last_login'),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+
 export const customersTable = sqliteTable('customers', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
   username: text('username').unique().notNull(),
@@ -41,6 +53,15 @@ export const driversTable = sqliteTable('drivers', {
   password: text('password').notNull(),
   profilePictureUrl: text('profile_picture_url'),
   balance: integer('balance').default(0).notNull(),
+
+  licenseFrontUrl: text('license_front_url'),
+  licenseBackUrl: text('license_back_url'),
+  registrationFrontUrl: text('registration_front_url'),
+  registrationBackUrl: text('registration_back_url'),
+  nationalIdFrontUrl: text('national_id_front_url'),
+  nationalIdBackUrl: text('national_id_back_url'),
+  vehicleFrontUrl: text('vehicle_front_url'),
+  vehicleBackUrl: text('vehicle_back_url'),
 
   // Vehicle details
   vehicleType: text('vehicle_type').notNull(),
@@ -119,6 +140,9 @@ export const driverRatingsTable = sqliteTable('driver_ratings', {
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+
+export type InsertAdmin = typeof adminsTable.$inferInsert;
+export type SelectAdmin = typeof adminsTable.$inferSelect;
 export type InsertCustomer = typeof customersTable.$inferInsert;
 export type SelectCustomer = typeof customersTable.$inferSelect;
 export type InsertDriver = typeof driversTable.$inferInsert;
@@ -131,6 +155,11 @@ export type InsertDeliveryRequest = typeof deliveryRequestsTable.$inferInsert;
 export type SelectDeliveryRequest = typeof deliveryRequestsTable.$inferSelect;
 export type InsertDriverResponse = typeof driverResponsesTable.$inferInsert;
 export type SelectDriverResponse = typeof driverResponsesTable.$inferSelect;
+
+export interface Admin extends Omit<SelectAdmin, 'isActive'> {
+  isActive: boolean;
+}
+
 
 export interface Customer extends Omit<SelectCustomer, 'isVerified' | 'lastLocation'> {
   isVerified: boolean;
