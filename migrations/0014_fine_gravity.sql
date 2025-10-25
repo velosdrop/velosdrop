@@ -1,0 +1,1 @@
+DROP TABLE `ecocash_transactions`;

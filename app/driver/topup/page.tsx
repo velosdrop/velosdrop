@@ -1,12 +1,14 @@
+//app/driver/topup/page.tsx
 'use client';
 
-import { FiDollarSign, FiCreditCard, FiArrowLeft, FiArrowUpRight } from 'react-icons/fi';
+import { FiDollarSign, FiCreditCard, FiArrowLeft, FiArrowUpRight, FiSmartphone } from 'react-icons/fi';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import CheckoutPage from "@/components/driver/CheckoutPage";
 import convertToSubcurrency from "@/lib/convertToSubcurrency";
+import MobileMoneyModal from '@/components/driver/MobileMoneyModal';
 
 // Validate Stripe public key
 if (!process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY) {
@@ -19,8 +21,10 @@ export default function TopUp() {
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
   const [showCheckout, setShowCheckout] = useState(false);
+  const [showMobileModal, setShowMobileModal] = useState(false);
   const [clientSecret, setClientSecret] = useState<string>('');
   const [selectedMethod, setSelectedMethod] = useState<'card' | 'mobile' | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const router = useRouter();
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,27 +58,64 @@ export default function TopUp() {
       return;
     }
 
+    setSelectedMethod(method);
+
+    if (method === 'card') {
+      // Handle card payment (existing Stripe flow)
+      try {
+        const response = await fetch('/api/create-payment-intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: convertToSubcurrency(numValue) }),
+        });
+        
+        if (!response.ok) throw new Error('Failed to create payment intent');
+        
+        const { clientSecret } = await response.json();
+        setClientSecret(clientSecret);
+        setShowCheckout(true);
+      } catch (err) {
+        setError('Failed to initialize payment. Please try again.');
+      }
+    } else if (method === 'mobile') {
+      // Show mobile money modal to collect phone number
+      setShowMobileModal(true);
+    }
+  };
+
+  const handleMobilePayment = async (phoneNumber: string) => {
+    setIsProcessing(true);
+    setShowMobileModal(false);
+  
     try {
-      const response = await fetch('/api/create-payment-intent', {
+      const response = await fetch('/api/payments/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: convertToSubcurrency(numValue) }),
+        body: JSON.stringify({ 
+          amount: parseFloat(amount),
+          phone: phoneNumber 
+        }),
       });
-      
-      if (!response.ok) throw new Error('Failed to create payment intent');
-      
-      const { clientSecret } = await response.json();
-      setClientSecret(clientSecret);
-      setSelectedMethod(method);
-      setShowCheckout(true);
+  
+      const result = await response.json();
+  
+      if (result.success) {
+        // Redirect to success page with pollUrl for status checking
+        router.push(`/driver/payment/success?status=loading&pollUrl=${encodeURIComponent(result.pollUrl)}`);
+      } else {
+        setError(result.error || 'Failed to initiate mobile payment');
+      }
     } catch (err) {
-      setError('Failed to initialize payment. Please try again.');
+      setError('Network error. Please try again.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleBackToPaymentMethods = () => {
     setShowCheckout(false);
     setSelectedMethod(null);
+    setShowMobileModal(false);
   };
 
   return (
@@ -85,6 +126,7 @@ export default function TopUp() {
             <button 
               onClick={showCheckout ? handleBackToPaymentMethods : () => router.push('/driver/wallet')}
               className="hover:opacity-80 transition"
+              disabled={isProcessing}
             >
               <FiArrowLeft className="w-5 h-5" />
             </button>
@@ -135,8 +177,8 @@ export default function TopUp() {
                   <div 
                     className={`flex items-center p-4 border rounded-lg cursor-pointer ${
                       selectedMethod === 'card' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-500'
-                    }`}
-                    onClick={() => handlePaymentMethodSelect('card')}
+                    } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    onClick={() => !isProcessing && handlePaymentMethodSelect('card')}
                   >
                     <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center text-white mr-4">
                       <FiCreditCard className="w-5 h-5" />
@@ -155,15 +197,15 @@ export default function TopUp() {
                   <div 
                     className={`flex items-center p-4 border rounded-lg cursor-pointer ${
                       selectedMethod === 'mobile' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-500'
-                    }`}
-                    onClick={() => handlePaymentMethodSelect('mobile')}
+                    } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    onClick={() => !isProcessing && handlePaymentMethodSelect('mobile')}
                   >
                     <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-green-600 rounded-lg flex items-center justify-center text-white mr-4">
-                      <FiArrowUpRight className="w-5 h-5" />
+                      <FiSmartphone className="w-5 h-5" />
                     </div>
                     <div className="flex-1">
                       <h4 className="font-medium text-gray-900">Mobile Money</h4>
-                      <p className="text-sm text-gray-600">EcoCash, MPesa, etc.</p>
+                      <p className="text-sm text-gray-600">EcoCash Zimbabwe</p>
                     </div>
                     {selectedMethod === 'mobile' && (
                       <div className="w-5 h-5 rounded-full border-2 border-purple-500 flex items-center justify-center">
@@ -173,6 +215,15 @@ export default function TopUp() {
                   </div>
                 </div>
               </div>
+
+              {isProcessing && (
+                <div className="text-center py-4">
+                  <div className="inline-flex items-center px-4 py-2 bg-purple-100 text-purple-700 rounded-lg">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-2"></div>
+                    Processing mobile payment...
+                  </div>
+                </div>
+              )}
             </>
           ) : clientSecret ? (
             <Elements 
@@ -211,6 +262,15 @@ export default function TopUp() {
           )}
         </div>
       </div>
+
+      {/* Mobile Money Modal */}
+      <MobileMoneyModal 
+        isOpen={showMobileModal}
+        onClose={() => setShowMobileModal(false)}
+        onConfirm={handleMobilePayment}
+        amount={amount}
+        isLoading={isProcessing}
+      />
     </div>
   );
 }

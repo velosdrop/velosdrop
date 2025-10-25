@@ -37,6 +37,7 @@
     "next": "^15.4.6",
     "next-auth": "^4.24.11",
     "ngeohash": "^0.6.3",
+    "paynow": "^2.2.2",
     "pg": "^8.16.3",
     "postcss-flexbugs-fixes": "^5.0.2",
     "postcss-preset-env": "^10.2.4",

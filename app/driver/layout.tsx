@@ -1,3 +1,4 @@
+//app/driver/layout.tsx
 'use client';
 
 import { DriverFormProvider } from '@/app/context/DriverFormContext';
@@ -19,7 +20,8 @@ export default function DriverLayout({ children }: { children: React.ReactNode }
       '/driver/vehicle',
       '/driver/documents',
       '/driver/topup',
-      '/driver/payment-success',
+      '/driver/payment/success', // ✅ Added payment success path
+      '/driver/payment-success', // Keep for backward compatibility
       '/driver/wallet',
       '/driver-login',
     ];
