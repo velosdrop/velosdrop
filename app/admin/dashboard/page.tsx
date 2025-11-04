@@ -1,4 +1,4 @@
-/// app/admin/dashboard/page.tsx
+//app/admin/dashboard/page.tsx
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -19,111 +19,218 @@ import {
   MoreHorizontal,
   MapPin,
   Shield,
-  Settings
+  Settings,
+  RefreshCw
 } from 'lucide-react';
-
-// Mock data - replace with actual API calls
-const mockData = {
-  stats: {
-    totalOrders: 1247,
-    activeDrivers: 42,
-    totalCustomers: 892,
-    totalRevenue: 28450,
-    pendingOrders: 23,
-    completedOrders: 984,
-    onlineDrivers: 28,
-    newCustomers: 45
-  },
-  recentOrders: [
-    { 
-      id: 'ORD-001', 
-      customer: 'John Doe', 
-      driver: 'Mike Johnson', 
-      status: 'delivered', 
-      amount: 25.50, 
-      time: '2 min ago',
-      customerAvatar: 'JD',
-      driverAvatar: 'MJ'
-    },
-    { 
-      id: 'ORD-002', 
-      customer: 'Sarah Wilson', 
-      driver: 'Alex Chen', 
-      status: 'in_progress', 
-      amount: 18.75, 
-      time: '5 min ago',
-      customerAvatar: 'SW',
-      driverAvatar: 'AC'
-    },
-    { 
-      id: 'ORD-003', 
-      customer: 'David Brown', 
-      driver: 'Maria Garcia', 
-      status: 'pending', 
-      amount: 32.25, 
-      time: '10 min ago',
-      customerAvatar: 'DB',
-      driverAvatar: 'MG'
-    },
-    { 
-      id: 'ORD-004', 
-      customer: 'Emily Davis', 
-      driver: 'James Smith', 
-      status: 'delivered', 
-      amount: 22.00, 
-      time: '15 min ago',
-      customerAvatar: 'ED',
-      driverAvatar: 'JS'
-    },
-    { 
-      id: 'ORD-005', 
-      customer: 'Robert Taylor', 
-      driver: 'Lisa Wang', 
-      status: 'in_progress', 
-      amount: 29.99, 
-      time: '20 min ago',
-      customerAvatar: 'RT',
-      driverAvatar: 'LW'
-    }
-  ],
-  systemHealth: {
-    api: { status: 'healthy', responseTime: '45ms' },
-    database: { status: 'healthy', connections: 42 },
-    payments: { status: 'healthy', successRate: '99.8%' },
-    notifications: { status: 'degraded', deliveryRate: '87%' }
-  },
-  performance: {
-    onTimeDelivery: 92,
-    customerSatisfaction: 88,
-    driverResponse: 95,
-    orderCompletion: 89
-  }
-};
 
 // Type definitions
 type TrendType = 'up' | 'down' | 'neutral';
 type ColorType = 'purple' | 'blue' | 'green' | 'orange' | 'cyan' | 'pink';
 type HealthStatus = 'healthy' | 'degraded' | 'down';
 
+interface DashboardStats {
+  totalOrders: number;
+  activeDrivers: number;
+  totalCustomers: number;
+  totalRevenue: number;
+  pendingOrders: number;
+  completedOrders: number;
+  onlineDrivers: number;
+  newCustomers: number;
+}
+
+interface Driver {
+  id: number;
+  firstName: string;
+  lastName: string;
+  isOnline: boolean;
+  status: string;
+  totalDeliveries: number;
+  averageRating: number;
+  totalEarnings: number;
+  createdAt: string;
+}
+
+interface Customer {
+  id: number;
+  username: string;
+  totalOrders: number;
+  totalSpent: number;
+  createdAt: string;
+}
+
+interface Order {
+  id: string;
+  customer: string;
+  driver: string;
+  status: string;
+  amount: number;
+  time: string;
+  customerAvatar: string;
+  driverAvatar: string;
+}
+
 export default function Dashboard() {
-  const [stats, setStats] = useState(mockData.stats);
-  const [recentOrders, setRecentOrders] = useState(mockData.recentOrders);
-  const [systemHealth, setSystemHealth] = useState(mockData.systemHealth);
-  const [performance, setPerformance] = useState(mockData.performance);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalOrders: 0,
+    activeDrivers: 0,
+    totalCustomers: 0,
+    totalRevenue: 0,
+    pendingOrders: 0,
+    completedOrders: 0,
+    onlineDrivers: 0,
+    newCustomers: 0
+  });
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [systemHealth, setSystemHealth] = useState({
+    api: { status: 'healthy' as HealthStatus, responseTime: '45ms' },
+    database: { status: 'healthy' as HealthStatus, connections: 42 },
+    payments: { status: 'healthy' as HealthStatus, successRate: '99.8%' },
+    notifications: { status: 'degraded' as HealthStatus, deliveryRate: '87%' }
+  });
+  const [performance, setPerformance] = useState({
+    onTimeDelivery: 92,
+    customerSatisfaction: 88,
+    driverResponse: 95,
+    orderCompletion: 89
+  });
   const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<string>('Just now');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    // Simulate data loading
-    const loadData = async () => {
-      // Replace with actual API calls
-      // const response = await fetch('/api/admin/dashboard');
-      // const data = await response.json();
-      // setStats(data.stats);
-      // setRecentOrders(data.recentOrders);
-    };
-    loadData();
+    loadDashboardData();
+    
+    // Set up real-time updates every 30 seconds
+    const interval = setInterval(loadDashboardData, 30000);
+    return () => clearInterval(interval);
   }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Fetching dashboard data...');
+      
+      // Fetch drivers data
+      const driversResponse = await fetch('/api/admin/drivers');
+      console.log('Drivers response status:', driversResponse.status);
+      
+      if (!driversResponse.ok) {
+        throw new Error(`Drivers API returned ${driversResponse.status}: ${driversResponse.statusText}`);
+      }
+      
+      const driversData = await driversResponse.json();
+      console.log('Drivers data:', driversData);
+      
+      const drivers: Driver[] = driversData.drivers || [];
+      console.log('Processed drivers:', drivers);
+
+      // Fetch customers data
+      const customersResponse = await fetch('/api/admin/customers');
+      console.log('Customers response status:', customersResponse.status);
+      
+      if (!customersResponse.ok) {
+        throw new Error(`Customers API returned ${customersResponse.status}: ${customersResponse.statusText}`);
+      }
+      
+      const customersData = await customersResponse.json();
+      console.log('Customers data:', customersData);
+      
+      // Handle both array and object responses
+      let customers: Customer[] = [];
+      if (Array.isArray(customersData)) {
+        customers = customersData;
+      } else if (customersData && Array.isArray(customersData.customers)) {
+        customers = customersData.customers;
+      } else if (customersData && customersData.error) {
+        throw new Error(customersData.error);
+      }
+      
+      console.log('Processed customers:', customers);
+
+      // Calculate dynamic stats
+      const onlineDrivers = drivers.filter(driver => driver.isOnline === true).length;
+      const activeDrivers = drivers.filter(driver => 
+        driver.status === 'active' || driver.status === 'approved'
+      ).length;
+      
+      // Calculate new customers (last 24 hours)
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const newCustomers = customers.filter(customer => {
+        try {
+          return new Date(customer.createdAt) > twentyFourHoursAgo;
+        } catch {
+          return false;
+        }
+      }).length;
+
+      // Calculate total revenue from drivers' earnings
+      const totalRevenue = drivers.reduce((sum, driver) => sum + (Number(driver.totalEarnings) || 0), 0);
+      
+      // Calculate total orders from customers
+      const totalOrders = customers.reduce((sum, customer) => sum + (Number(customer.totalOrders) || 0), 0);
+
+      // For demo purposes, we'll calculate some derived stats
+      const completedOrders = Math.floor(totalOrders * 0.8); // 80% completion rate
+      const pendingOrders = Math.max(0, totalOrders - completedOrders);
+
+      const dynamicStats: DashboardStats = {
+        totalOrders,
+        activeDrivers,
+        totalCustomers: customers.length,
+        totalRevenue,
+        pendingOrders,
+        completedOrders,
+        onlineDrivers,
+        newCustomers
+      };
+
+      console.log('Calculated stats:', dynamicStats);
+      setStats(dynamicStats);
+
+      // Generate recent orders from the data
+      const mockRecentOrders = generateRecentOrders(drivers, customers);
+      setRecentOrders(mockRecentOrders);
+
+      // Update last updated time
+      setLastUpdated(new Date().toLocaleTimeString());
+
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper function to generate recent orders (replace with actual orders API)
+  const generateRecentOrders = (drivers: Driver[], customers: Customer[]): Order[] => {
+    if (customers.length === 0) {
+      return [];
+    }
+    
+    const statuses = ['delivered', 'in_progress', 'pending'];
+    return customers.slice(0, 5).map((customer, index) => {
+      const driver = drivers[index % drivers.length];
+      const status = statuses[index % statuses.length];
+      const amount = 15 + (index * 5) + Math.random() * 10;
+      
+      return {
+        id: `ORD-${1000 + index}`,
+        customer: customer.username || `Customer ${customer.id}`,
+        driver: driver ? `${driver.firstName} ${driver.lastName}` : 'Unassigned',
+        status,
+        amount: Math.round(amount * 100) / 100,
+        time: `${5 + index * 5} min ago`,
+        customerAvatar: customer.username ? customer.username.charAt(0).toUpperCase() : 'C',
+        driverAvatar: driver ? (driver.firstName?.charAt(0) || '') + (driver.lastName?.charAt(0) || '') : 'U'
+      };
+    });
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -160,6 +267,17 @@ export default function Dashboard() {
     );
   }
 
+  if (loading && stats.totalCustomers === 0 && stats.activeDrivers === 0) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <p className="text-purple-300">Loading dashboard data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -170,14 +288,35 @@ export default function Dashboard() {
           </h1>
           <p className="text-purple-300 text-lg">Welcome back! Here's what's happening with your delivery platform.</p>
         </div>
-        <div className="flex items-center space-x-3 px-4 py-2 bg-gray-800 rounded-xl border border-purple-500/20">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-          <span className="text-purple-300 text-sm">Live</span>
-          <span className="text-gray-400">•</span>
-          <span className="text-purple-300 text-sm">Last updated: Just now</span>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={loadDashboardData}
+            disabled={loading}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-800 rounded-xl border border-purple-500/20 text-purple-300 hover:border-purple-500/40 hover:text-purple-200 transition-all duration-200 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+          <div className="flex items-center space-x-3 px-4 py-2 bg-gray-800 rounded-xl border border-purple-500/20">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+            <span className="text-purple-300 text-sm">Live</span>
+            <span className="text-gray-400">•</span>
+            <span className="text-purple-300 text-sm">Last updated: {lastUpdated}</span>
+          </div>
         </div>
       </div>
 
+      {error && (
+        <div className="bg-red-500/20 border border-red-500/30 rounded-2xl p-4">
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-400" />
+            <div>
+              <p className="text-red-400 font-medium">Error loading data</p>
+              <p className="text-red-300 text-sm">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Quick Navigation */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Link
@@ -316,19 +455,29 @@ export default function Dashboard() {
                 </div>
                 <h2 className="text-xl font-bold text-white">Recent Orders</h2>
               </div>
-              <button className="flex items-center space-x-2 text-purple-400 hover:text-purple-300 text-sm font-medium transition-colors duration-200 group-hover:translate-x-1">
+              <Link 
+                href="/admin/orders"
+                className="flex items-center space-x-2 text-purple-400 hover:text-purple-300 text-sm font-medium transition-colors duration-200 group-hover:translate-x-1"
+              >
                 <span>View All</span>
                 <TrendingUp className="w-4 h-4" />
-              </button>
+              </Link>
             </div>
             <div className="space-y-3">
-              {recentOrders.map((order, index) => (
-                <OrderItem 
-                  key={order.id} 
-                  order={order} 
-                  delay={index * 100}
-                />
-              ))}
+              {recentOrders.length > 0 ? (
+                recentOrders.map((order, index) => (
+                  <OrderItem 
+                    key={order.id} 
+                    order={order} 
+                    delay={index * 100}
+                  />
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <Package className="w-12 h-12 text-purple-400 mx-auto mb-4 opacity-50" />
+                  <p className="text-purple-300">No recent orders</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -420,6 +569,13 @@ export default function Dashboard() {
                 onClick={() => window.location.href = '/admin/drivers'}
               />
               <ActionButton
+                title="Customer Management"
+                description="Manage customer accounts"
+                icon={<Users className="w-4 h-4" />}
+                color="cyan"
+                onClick={() => window.location.href = '/admin/customers'}
+              />
+              <ActionButton
                 title="Generate Reports"
                 description="Download analytics"
                 icon={<Download className="w-4 h-4" />}
@@ -430,7 +586,7 @@ export default function Dashboard() {
                 title="Live Tracking"
                 description="Monitor active deliveries"
                 icon={<Eye className="w-4 h-4" />}
-                color="cyan"
+                color="orange"
                 onClick={() => {/* Navigate to tracking */}}
               />
             </div>
@@ -570,7 +726,7 @@ function MiniStatsCard({ title, value, icon, color }: MiniStatsCardProps) {
 
 // Order Item Component
 interface OrderItemProps {
-  order: any;
+  order: Order;
   delay: number;
 }
 

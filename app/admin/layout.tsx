@@ -91,7 +91,7 @@ export default function AdminLayout({
         <nav className="p-4 space-y-2">
           <NavLink href="/admin/dashboard" icon="📊" label="Dashboard" />
           <NavLink href="/admin/orders" icon="📦" label="Orders" />
-          <NavLink href="/admin/users" icon="👥" label="Users" />
+          <NavLink href="/admin/customers" icon="👥" label="Customers" />
           <NavLink href="/admin/drivers" icon="🚗" label="Drivers" />
           <NavLink href="/admin/analytics" icon="📈" label="Analytics" />
         </nav>
@@ -154,7 +154,7 @@ function getPageTitle(pathname: string | null) {
   const titles: { [key: string]: string } = {
     '/admin/dashboard': 'Dashboard',
     '/admin/orders': 'Orders',
-    '/admin/users': 'Users',
+    '/admin/customers': 'Customers',
     '/admin/drivers': 'Drivers',
     '/admin/analytics': 'Analytics',
   };

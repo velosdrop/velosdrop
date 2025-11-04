@@ -114,7 +114,31 @@ export default function DriverLogin() {
       if (!driver) {
         // Add delay to prevent timing attacks
         await new Promise(resolve => setTimeout(resolve, 500));
-        throw new Error('Invalid credentials');
+        throw new Error('Invalid phone number or password');
+      }
+
+      // ✅ SIMPLE STATUS MESSAGES
+      if (driver.status === 'suspended') {
+        throw new Error('Account suspended. Contact support.');
+      }
+
+      if (driver.status === 'pending') {
+        throw new Error('Account pending verification. Please wait.');
+      }
+
+      // ✅ ADDED: Check for rejected status
+      if (driver.status === 'rejected') {
+        throw new Error('Account rejected. Contact support.');
+      }
+
+      // ✅ ADDED: Check for inactive status
+      if (driver.status === 'inactive') {
+        throw new Error('Account inactive. Contact support.');
+      }
+
+      // ✅ Only allow login for active and approved drivers
+      if (driver.status !== 'active' && driver.status !== 'approved') {
+        throw new Error('Account not active. Contact support.');
       }
 
       // Check if password is hashed (bcrypt hashes start with $2a$, $2b$, or $2y$)
@@ -140,7 +164,7 @@ export default function DriverLogin() {
       }
 
       if (!isMatch) {
-        throw new Error('Invalid credentials');
+        throw new Error('Invalid phone number or password');
       }
 
       // Update last login
@@ -151,6 +175,7 @@ export default function DriverLogin() {
       // Store authentication tokens
       sessionStorage.setItem('driver-auth-token', 'true');
       sessionStorage.setItem('driver-id', driver.id.toString());
+      sessionStorage.setItem('driver-status', driver.status);
 
       // Redirect to dashboard
       router.push('/driver-dashboard');

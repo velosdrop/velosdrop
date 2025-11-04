@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const documentType = formData.get('type') as string;
+    const driverId = formData.get('driverId') as string;
 
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
@@ -22,8 +23,8 @@ export async function POST(request: NextRequest) {
 
     // Generate unique filename
     const timestamp = Date.now();
-    const extension = file.name.split('.').pop();
-    const filename = `${documentType}_${timestamp}.${extension}`;
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const filename = `${documentType}_${driverId}_${timestamp}.${extension}`;
     const filepath = join(uploadsDir, filename);
 
     // Convert file to buffer and save

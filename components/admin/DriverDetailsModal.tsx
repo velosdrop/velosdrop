@@ -2,6 +2,12 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { DriverWithStats } from '@/src/types/driver';
+import { 
+  isValidDocumentUrl, 
+  getDocumentStatus, 
+  hasAnyDocuments,
+  getDocumentDisplayUrl 
+} from '@/src/utils/documentUtils';
 import {
   X,
   Car,
@@ -85,9 +91,12 @@ export default function DriverDetailsModal({
   };
 
   const openDocumentViewer = (type: string, side: string, url: string) => {
-    setSelectedDocument({ type, side, url });
-    setZoomLevel(1);
-    setRotation(0);
+    // Only open viewer if it's not a placeholder image
+    if (!url.includes('placeholder') && isValidDocumentUrl(url)) {
+      setSelectedDocument({ type, side, url });
+      setZoomLevel(1);
+      setRotation(0);
+    }
   };
 
   const closeDocumentViewer = () => {
@@ -107,20 +116,18 @@ export default function DriverDetailsModal({
 
   // Safe document download function
   const downloadFile = async (url: string, filename: string) => {
-    if (typeof window === 'undefined') return; // Skip during SSR
+    if (typeof window === 'undefined') return;
     
     try {
       const response = await fetch(url);
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       
-      // Use ref to avoid direct DOM manipulation
       if (downloadLinkRef.current) {
         downloadLinkRef.current.href = downloadUrl;
         downloadLinkRef.current.download = filename;
         downloadLinkRef.current.click();
       } else {
-        // Fallback: create temporary link
         const link = document.createElement('a');
         link.href = downloadUrl;
         link.download = filename;
@@ -139,73 +146,53 @@ export default function DriverDetailsModal({
   // Create actual document data from driver's document URLs
   const actualDocuments = {
     license: {
-      front: driver.licenseFrontUrl || '/api/placeholder/400/250?text=License+Front+Not+Uploaded',
-      back: driver.licenseBackUrl || '/api/placeholder/400/250?text=License+Back+Not+Uploaded'
+      front: getDocumentDisplayUrl(driver.licenseFrontUrl, "License", "Front"),
+      back: getDocumentDisplayUrl(driver.licenseBackUrl, "License", "Back")
     },
     vehicle: {
-      front: driver.vehicleFrontUrl || '/api/placeholder/400/250?text=Vehicle+Front+Not+Uploaded',
-      back: driver.vehicleBackUrl || '/api/placeholder/400/250?text=Vehicle+Back+Not+Uploaded'
+      front: getDocumentDisplayUrl(driver.vehicleFrontUrl, "Vehicle", "Front"),
+      back: getDocumentDisplayUrl(driver.vehicleBackUrl, "Vehicle", "Back")
     },
     registration: {
-      front: driver.registrationFrontUrl || '/api/placeholder/400/250?text=Registration+Front+Not+Uploaded',
-      back: driver.registrationBackUrl || '/api/placeholder/400/250?text=Registration+Back+Not+Uploaded'
+      front: getDocumentDisplayUrl(driver.registrationFrontUrl, "Registration", "Front"),
+      back: getDocumentDisplayUrl(driver.registrationBackUrl, "Registration", "Back")
     },
     nationalId: {
-      front: driver.nationalIdFrontUrl || '/api/placeholder/400/250?text=National+ID+Front+Not+Uploaded',
-      back: driver.nationalIdBackUrl || '/api/placeholder/400/250?text=National+ID+Back+Not+Uploaded'
+      front: getDocumentDisplayUrl(driver.nationalIdFrontUrl, "National ID", "Front"),
+      back: getDocumentDisplayUrl(driver.nationalIdBackUrl, "National ID", "Back")
     }
   };
 
-  // Check if documents are uploaded
+  // Check if documents are uploaded using our validation function
   const hasUploadedDocuments = {
     license: {
-      front: !!driver.licenseFrontUrl,
-      back: !!driver.licenseBackUrl
+      front: isValidDocumentUrl(driver.licenseFrontUrl),
+      back: isValidDocumentUrl(driver.licenseBackUrl)
     },
     vehicle: {
-      front: !!driver.vehicleFrontUrl,
-      back: !!driver.vehicleBackUrl
+      front: isValidDocumentUrl(driver.vehicleFrontUrl),
+      back: isValidDocumentUrl(driver.vehicleBackUrl)
     },
     registration: {
-      front: !!driver.registrationFrontUrl,
-      back: !!driver.registrationBackUrl
+      front: isValidDocumentUrl(driver.registrationFrontUrl),
+      back: isValidDocumentUrl(driver.registrationBackUrl)
     },
     nationalId: {
-      front: !!driver.nationalIdFrontUrl,
-      back: !!driver.nationalIdBackUrl
+      front: isValidDocumentUrl(driver.nationalIdFrontUrl),
+      back: isValidDocumentUrl(driver.nationalIdBackUrl)
     }
-  };
-
-  // Determine document status based on upload and expiry
-  const getDocumentStatus = (type: keyof typeof hasUploadedDocuments, expiryDate?: string) => {
-    const hasFront = hasUploadedDocuments[type].front;
-    const hasBack = hasUploadedDocuments[type].back;
-    
-    if (!hasFront || !hasBack) {
-      return 'pending';
-    }
-
-    if (expiryDate) {
-      const expiry = new Date(expiryDate);
-      const today = new Date();
-      if (expiry < today) {
-        return 'expired';
-      }
-    }
-
-    return 'verified';
   };
 
   const getVerificationStatus = (type: string) => {
     switch (type) {
       case 'license':
-        return getDocumentStatus('license', driver.licenseExpiry);
+        return getDocumentStatus(driver.licenseFrontUrl, driver.licenseBackUrl, driver.licenseExpiry);
       case 'registration':
-        return getDocumentStatus('registration', driver.registrationExpiry);
+        return getDocumentStatus(driver.registrationFrontUrl, driver.registrationBackUrl, driver.registrationExpiry);
       case 'vehicle':
-        return getDocumentStatus('vehicle');
+        return getDocumentStatus(driver.vehicleFrontUrl, driver.vehicleBackUrl);
       case 'nationalId':
-        return getDocumentStatus('nationalId');
+        return getDocumentStatus(driver.nationalIdFrontUrl, driver.nationalIdBackUrl);
       default:
         return 'pending';
     }
@@ -213,7 +200,6 @@ export default function DriverDetailsModal({
 
   const handleDownloadAll = async () => {
     try {
-      // Create a list of all document URLs
       const documents = [
         { url: driver.licenseFrontUrl, name: `license_front_${driver.id}` },
         { url: driver.licenseBackUrl, name: `license_back_${driver.id}` },
@@ -223,13 +209,11 @@ export default function DriverDetailsModal({
         { url: driver.nationalIdBackUrl, name: `national_id_back_${driver.id}` },
         { url: driver.vehicleFrontUrl, name: `vehicle_front_${driver.id}` },
         { url: driver.vehicleBackUrl, name: `vehicle_back_${driver.id}` },
-      ].filter(doc => doc.url); // Filter out null/undefined URLs
+      ].filter(doc => isValidDocumentUrl(doc.url));
 
-      // Download each document
       for (const doc of documents) {
         try {
           await downloadFile(doc.url!, `${doc.name}.jpg`);
-          // Add small delay between downloads
           await new Promise(resolve => setTimeout(resolve, 100));
         } catch (error) {
           console.error(`Failed to download ${doc.name}:`, error);
@@ -368,10 +352,24 @@ export default function DriverDetailsModal({
     { id: 'performance', name: 'Performance', icon: <TrendingUp className="w-4 h-4" /> },
   ];
 
+  const hasAnyUploadedDocuments = hasAnyDocuments(driver);
+
   return (
     <>
       {/* Hidden download link for file downloads */}
       <a ref={downloadLinkRef} className="hidden" aria-hidden="true" />
+      
+      {/* Debug information - remove in production */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 left-4 bg-black/80 text-white p-4 rounded-lg text-xs max-w-md z-50">
+          <h4 className="font-bold mb-2">Document Debug Info:</h4>
+          <div className="space-y-1">
+            <div>License Front: {driver.licenseFrontUrl || 'NULL'}</div>
+            <div>License Back: {driver.licenseBackUrl || 'NULL'}</div>
+            <div>Has Uploaded Docs: {hasAnyUploadedDocuments.toString()}</div>
+          </div>
+        </div>
+      )}
       
       <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-300 ${
         isClosing ? 'bg-black/0' : 'bg-black/50'
@@ -591,7 +589,7 @@ export default function DriverDetailsModal({
                   <div>
                     <h3 className="text-2xl font-bold text-white">Driver Documents</h3>
                     <p className="text-purple-300 mt-1">
-                      {Object.values(hasUploadedDocuments).some(doc => doc.front && doc.back) 
+                      {hasAnyUploadedDocuments 
                         ? 'View and verify all uploaded documents' 
                         : 'No documents uploaded yet'}
                     </p>
@@ -600,7 +598,7 @@ export default function DriverDetailsModal({
                     <button 
                       onClick={handleDownloadAll}
                       className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white py-2.5 px-4 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={!Object.values(hasUploadedDocuments).some(doc => doc.front || doc.back)}
+                      disabled={!hasAnyUploadedDocuments}
                     >
                       <Download className="w-4 h-4" />
                       <span>Download All</span>
@@ -893,6 +891,8 @@ function DocumentSection({ title, icon, status, expiryDate, documents, hasUpload
     }
   };
 
+  const hasAnyUploaded = hasUploadedDocuments.front || hasUploadedDocuments.back;
+
   return (
     <div className="bg-gray-800/50 rounded-2xl border border-gray-700/50 p-6 backdrop-blur-sm hover:border-purple-500/30 transition-all duration-200">
       <div className="flex items-center justify-between mb-6">
@@ -938,15 +938,18 @@ function DocumentSection({ title, icon, status, expiryDate, documents, hasUpload
         <button 
           className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={() => {
-            handleDownload('front');
-            handleDownload('back');
+            if (hasUploadedDocuments.front) handleDownload('front');
+            if (hasUploadedDocuments.back) handleDownload('back');
           }}
-          disabled={!hasUploadedDocuments.front && !hasUploadedDocuments.back}
+          disabled={!hasAnyUploaded}
         >
           <Download className="w-4 h-4" />
           <span>Download All</span>
         </button>
-        <button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center space-x-2">
+        <button 
+          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!hasAnyUploaded}
+        >
           <ExternalLink className="w-4 h-4" />
           <span>View All</span>
         </button>
@@ -967,35 +970,51 @@ interface DocumentThumbnailProps {
 
 function DocumentThumbnail({ title, imageUrl, isUploaded, onView, onDownload, onError }: DocumentThumbnailProps) {
   const [imgError, setImgError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const handleError = () => {
     setImgError(true);
+    setIsLoading(false);
     onError();
   };
 
+  const handleLoad = () => {
+    setIsLoading(false);
+  };
+
   const handleClick = () => {
-    if (isUploaded && !imgError) {
+    if (isUploaded && !imgError && imageUrl && !imageUrl.includes('placeholder')) {
       onView();
     }
   };
 
+  const showPlaceholder = !isUploaded || imgError || !imageUrl || imageUrl.includes('placeholder');
+
   return (
     <div 
       className={`group cursor-pointer bg-gray-700/30 rounded-xl border p-3 transition-all duration-200 ${
-        isUploaded && !imgError 
+        isUploaded && !imgError && imageUrl && !imageUrl.includes('placeholder')
           ? 'border-gray-600/30 hover:border-purple-500/50' 
           : 'border-amber-500/30 hover:border-amber-500/50'
       }`}
       onClick={handleClick}
     >
       <div className="relative aspect-[4/3] bg-gray-600/20 rounded-lg overflow-hidden mb-2">
-        {isUploaded && imageUrl && !imgError ? (
+        {!showPlaceholder ? (
           <>
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-600/20">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500"></div>
+              </div>
+            )}
             <img
               src={imageUrl}
               alt={title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+              className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-200 ${
+                isLoading ? 'opacity-0' : 'opacity-100'
+              }`}
               onError={handleError}
+              onLoad={handleLoad}
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200 flex items-center justify-center">
               <Eye className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
@@ -1010,7 +1029,7 @@ function DocumentThumbnail({ title, imageUrl, isUploaded, onView, onDownload, on
       </div>
       <div className="flex items-center justify-between">
         <p className="text-purple-300 text-xs truncate flex-1">{title}</p>
-        {isUploaded && imageUrl && !imgError && (
+        {isUploaded && !imgError && imageUrl && !imageUrl.includes('placeholder') && (
           <button
             onClick={(e) => {
               e.stopPropagation();
