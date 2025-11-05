@@ -1,3 +1,4 @@
+//app/api/drivers/online/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/src/db";
 import { driversTable } from "@/src/db/schema";

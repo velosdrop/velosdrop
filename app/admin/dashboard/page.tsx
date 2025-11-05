@@ -134,7 +134,7 @@ export default function Dashboard() {
       console.log('Customers response status:', customersResponse.status);
       
       if (!customersResponse.ok) {
-        throw new Error(`Customers API returned ${customersResponse.status}: ${customersResponse.statusText}`);
+        throw new Error(`Customers API returned ${customersResponse.status}: ${driversResponse.statusText}`);
       }
       
       const customersData = await customersResponse.json();
@@ -585,9 +585,9 @@ export default function Dashboard() {
               <ActionButton
                 title="Live Tracking"
                 description="Monitor active deliveries"
-                icon={<Eye className="w-4 h-4" />}
+                icon={<MapPin className="w-4 h-4" />}
                 color="orange"
-                onClick={() => {/* Navigate to tracking */}}
+                onClick={() => window.location.href = '/admin/live-tracking'}
               />
             </div>
           </div>
