@@ -1,22 +1,37 @@
-import { NAV_LINKS } from "@/constants"
-import Image from "next/image"
-import Link from "next/link"
-import Button from "./Button"
+// components/Navbar.tsx
+'use client';
+
+import { NAV_LINKS } from "@/constants";
+import Image from "next/image";
+import Link from "next/link";
+import Button from "./Button";
+import { usePathname } from 'next/navigation';
 
 const Navbar = () => {
+  const pathname = usePathname();
+  const isHomePage = pathname === '/';
+
   return (
     <nav className="flexBetween max-container padding-container relative z-30 py-5 bg-dark-950">
       <Link href="/">
         <h2 className="bold-24 text-purple-500">VelosDrop</h2>
       </Link>
 
-      <ul className="hidden h-full gap-12 lg:flex">
-        {NAV_LINKS.map((link) => (
-          <Link href={link.href} key={link.key} className="regular-16 text-gray-300 flexCenter cursor-pointer pb-1.5 transition-all hover:text-purple-400">
-            {link.label}
-          </Link>
-        ))}
-      </ul>
+      {/* Navigation Links - Only show on homepage */}
+      {isHomePage && (
+        <ul className="hidden h-full gap-12 lg:flex">
+          {NAV_LINKS.map((link) => (
+            <Link href={link.href} key={link.key} className="regular-16 text-gray-300 flexCenter cursor-pointer pb-1.5 transition-all hover:text-purple-400">
+              {link.label}
+            </Link>
+          ))}
+        </ul>
+      )}
+
+      {/* If not homepage, add some flex space to center the logo */}
+      {!isHomePage && (
+        <div className="hidden lg:flex flex-1"></div>
+      )}
 
       <div className="lg:flexCenter hidden">
         <Button 
@@ -38,4 +53,4 @@ const Navbar = () => {
   )
 }
 
-export default Navbar
+export default Navbar;
