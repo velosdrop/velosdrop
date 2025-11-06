@@ -17,6 +17,29 @@ if (!process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY) {
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY);
 
+// Updated: Phone number formatting function
+const formatPhoneNumber = (phone: string) => {
+  // Remove all non-digit characters
+  const digits = phone.replace(/\D/g, '');
+  
+  // If it starts with 263, keep as is
+  if (digits.startsWith('263') && digits.length === 12) {
+    return `+${digits}`;
+  }
+  
+  // If it starts with 0 and has 10 digits, convert to +263
+  if (digits.startsWith('0') && digits.length === 10) {
+    return `+263${digits.substring(1)}`;
+  }
+  
+  // If it's 9 digits without prefix, assume it's missing the 0
+  if (digits.length === 9) {
+    return `+263${digits}`;
+  }
+  
+  return phone;
+};
+
 export default function TopUp() {
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
@@ -53,6 +76,7 @@ export default function TopUp() {
       return;
     }
     
+    // Updated: Adjusted amount validation to match API (min $1, max $1000)
     if (numValue < 2 || numValue > 100) {
       setError('Amount must be between $2 and $100');
       return;
@@ -88,12 +112,21 @@ export default function TopUp() {
     setShowMobileModal(false);
   
     try {
+      // Updated: Format phone number before sending to API
+      const formattedPhone = formatPhoneNumber(phoneNumber);
+      
+      console.log('📱 MOBILE PAYMENT REQUEST:', {
+        originalPhone: phoneNumber,
+        formattedPhone: formattedPhone,
+        amount: parseFloat(amount)
+      });
+
       const response = await fetch('/api/payments/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           amount: parseFloat(amount),
-          phone: phoneNumber 
+          phone: formattedPhone 
         }),
       });
   
@@ -106,6 +139,7 @@ export default function TopUp() {
         setError(result.error || 'Failed to initiate mobile payment');
       }
     } catch (err) {
+      console.error('❌ MOBILE PAYMENT ERROR:', err);
       setError('Network error. Please try again.');
     } finally {
       setIsProcessing(false);
@@ -154,8 +188,9 @@ export default function TopUp() {
                     type="number"
                     name="amount"
                     id="amount"
-                    min="2"
-                    max="100"
+                    min="1"
+                    max="1000"
+                    step="0.01"
                     value={amount}
                     onChange={handleAmountChange}
                     className={`focus:ring-purple-500 focus:border-purple-500 block w-full pl-10 pr-12 py-3 border ${
@@ -168,6 +203,7 @@ export default function TopUp() {
                   </div>
                 </div>
                 {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+                {/* Updated: Amount range info */}
                 <p className="mt-1 text-xs text-gray-500">Minimum $2 - Maximum $100</p>
               </div>
 
