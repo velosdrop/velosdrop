@@ -160,6 +160,19 @@ export default function DriverDashboard() {
     setBookingRequests
   );
 
+  const getGeolocationErrorText = (code: number): string => {
+    switch (code) {
+      case 1:
+        return 'Permission denied - Please enable location services in your browser settings';
+      case 2:
+        return 'Position unavailable - Location information is not available';
+      case 3:
+        return 'Timeout - The request to get location timed out';
+      default:
+        return 'Unknown error occurred while getting location';
+    }
+  };
+
   const updateDriverLocation = useCallback(async (position: GeolocationPosition) => {
     if (!driverData?.id || !isOnline) return;
     const location: LocationData = {
@@ -262,7 +275,7 @@ export default function DriverDashboard() {
         (error) => {
           console.error('Geolocation error:', {
             code: error.code,
-            message: error.message, // Use the built-in error message
+            message: getGeolocationErrorText(error.code),
             PERMISSION_DENIED: error.PERMISSION_DENIED,
             POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
             TIMEOUT: error.TIMEOUT
