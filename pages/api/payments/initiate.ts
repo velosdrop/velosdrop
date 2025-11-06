@@ -36,14 +36,14 @@ export default async function handler(
 
   // Validate amount for LIVE transactions
   const amountNum = Number(amount);
-  if (amountNum < 1) {
+  if (amountNum < 2) {
     return res.status(400).json({ 
       success: false, 
       error: 'Minimum top-up amount is $2' 
     });
   }
 
-  if (amountNum > 1000) {
+  if (amountNum > 100) {
     return res.status(400).json({ 
       success: false, 
       error: 'Maximum top-up amount is $100' 
