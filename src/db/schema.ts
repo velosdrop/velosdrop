@@ -140,6 +140,18 @@ export const driverRatingsTable = sqliteTable('driver_ratings', {
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+// Payment references table for tracking payments
+export const paymentReferencesTable = sqliteTable('payment_references', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  driverId: integer('driver_id').notNull().references(() => driversTable.id, { onDelete: 'cascade' }),
+  reference: text('reference').unique().notNull(),
+  amount: integer('amount').notNull(), // in cents
+  status: text('status').default('pending').notNull(), // pending, completed, failed
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+
 
 export type InsertAdmin = typeof adminsTable.$inferInsert;
 export type SelectAdmin = typeof adminsTable.$inferSelect;
@@ -155,6 +167,8 @@ export type InsertDeliveryRequest = typeof deliveryRequestsTable.$inferInsert;
 export type SelectDeliveryRequest = typeof deliveryRequestsTable.$inferSelect;
 export type InsertDriverResponse = typeof driverResponsesTable.$inferInsert;
 export type SelectDriverResponse = typeof driverResponsesTable.$inferSelect;
+export type InsertPaymentReference = typeof paymentReferencesTable.$inferInsert;
+export type SelectPaymentReference = typeof paymentReferencesTable.$inferSelect;
 
 export interface Admin extends Omit<SelectAdmin, 'isActive'> {
   isActive: boolean;

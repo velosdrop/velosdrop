@@ -172,10 +172,24 @@ export default function DriverLogin() {
         .set({ lastOnline: new Date().toISOString() })
         .where(eq(driversTable.id, driver.id));
 
-      // Store authentication tokens
+      // ✅ FIXED: Store authentication tokens in BOTH sessionStorage AND localStorage
       sessionStorage.setItem('driver-auth-token', 'true');
       sessionStorage.setItem('driver-id', driver.id.toString());
       sessionStorage.setItem('driver-status', driver.status);
+
+      // ✅ ADDED: Save to localStorage for payment API
+      localStorage.setItem('driverId', driver.id.toString());
+      localStorage.setItem('driverData', JSON.stringify({
+        id: driver.id,
+        firstName: driver.firstName,
+        lastName: driver.lastName,
+        email: driver.email,
+        phoneNumber: driver.phoneNumber,
+        balance: driver.balance,
+        status: driver.status
+      }));
+
+      console.log('✅ Login successful, driver ID saved:', driver.id);
 
       // Redirect to dashboard
       router.push('/driver-dashboard');

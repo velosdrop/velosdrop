@@ -1,8 +1,8 @@
-//app/driver/topup/page.tsx
+// app/driver/topup/page.tsx
 'use client';
 
 import { FiDollarSign, FiCreditCard, FiArrowLeft, FiArrowUpRight, FiSmartphone } from 'react-icons/fi';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
@@ -40,6 +40,47 @@ const formatPhoneNumber = (phone: string) => {
   return phone;
 };
 
+// ✅ UPDATED: Enhanced status polling function with new response structure
+const pollPaymentStatus = async (pollUrl: string, driverId: number): Promise<boolean> => {
+  try {
+    console.log('🔄 Polling payment status:', { pollUrl, driverId });
+    
+    const response = await fetch(
+      `/api/payments/status?pollUrl=${encodeURIComponent(pollUrl)}&driverId=${driverId}`
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to poll payment status');
+    }
+    
+    const status = await response.json();
+    
+    console.log('🔄 Payment status poll result:', {
+      paid: status.paid,
+      status: status.status,
+      amount: status.amount,
+      reference: status.reference,
+      hasValidData: status.paid && status.reference && status.amount
+    });
+    
+    // ✅ FIXED: Consider payment successful if paid=true, regardless of other data
+    // The API will now handle wallet updates internally
+    if (status.paid) {
+      console.log('✅ Payment confirmed via status polling');
+      return true;
+    } else if (status.status === 'cancelled' || status.status === 'failed') {
+      console.log('❌ Payment failed or cancelled');
+      return false;
+    }
+    
+    // Continue polling if still pending
+    return false;
+  } catch (error) {
+    console.error('Error polling payment status:', error);
+    return false;
+  }
+};
+
 export default function TopUp() {
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
@@ -48,7 +89,22 @@ export default function TopUp() {
   const [clientSecret, setClientSecret] = useState<string>('');
   const [selectedMethod, setSelectedMethod] = useState<'card' | 'mobile' | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [driverId, setDriverId] = useState<number | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    // Get driver ID from localStorage
+    if (typeof window !== 'undefined') {
+      const savedDriverId = localStorage.getItem('driverId');
+      if (savedDriverId) {
+        const id = parseInt(savedDriverId);
+        setDriverId(id);
+        console.log('✅ Driver ID loaded:', id);
+      } else {
+        console.error('❌ No driver ID found in localStorage');
+      }
+    }
+  }, []);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -58,8 +114,8 @@ export default function TopUp() {
     
     if (value) {
       const numValue = parseFloat(value);
-      if (isNaN(numValue) || numValue < 2 || numValue > 100) {
-        setError('Please enter an amount between $2 and $100');
+      if (isNaN(numValue) || numValue < 0.10 || numValue > 100) {
+        setError('Please enter an amount between $0.10 and $100');
       }
     }
   };
@@ -76,9 +132,14 @@ export default function TopUp() {
       return;
     }
     
-    // Updated: Adjusted amount validation to match API (min $1, max $1000)
-    if (numValue < 2 || numValue > 100) {
-      setError('Amount must be between $2 and $100');
+    if (numValue < 0.10 || numValue > 100) {
+      setError('Amount must be between $0.10 and $100');
+      return;
+    }
+
+    // ✅ ADDED: Check if driver ID is available
+    if (!driverId) {
+      setError('Please log in again to continue');
       return;
     }
 
@@ -107,15 +168,21 @@ export default function TopUp() {
     }
   };
 
+  // ✅ UPDATED: Enhanced mobile payment handler with proper polling
   const handleMobilePayment = async (phoneNumber: string) => {
+    if (!driverId) {
+      setError('Please log in again');
+      return;
+    }
+
     setIsProcessing(true);
     setShowMobileModal(false);
   
     try {
-      // Updated: Format phone number before sending to API
       const formattedPhone = formatPhoneNumber(phoneNumber);
       
       console.log('📱 MOBILE PAYMENT REQUEST:', {
+        driverId: driverId,
         originalPhone: phoneNumber,
         formattedPhone: formattedPhone,
         amount: parseFloat(amount)
@@ -126,15 +193,38 @@ export default function TopUp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           amount: parseFloat(amount),
-          phone: formattedPhone 
+          phone: formattedPhone,
+          driverId: driverId // ✅ Send driver ID in request
         }),
       });
   
       const result = await response.json();
   
       if (result.success) {
-        // Redirect to success page with pollUrl for status checking
-        router.push(`/driver/payment/success?status=loading&pollUrl=${encodeURIComponent(result.pollUrl)}`);
+        console.log('✅ Payment initiated successfully:', {
+          pollUrl: result.pollUrl,
+          reference: result.reference,
+          amount: result.amount,
+          driverId: result.driverId
+        });
+
+        // ✅ ADDED: Start polling for payment status
+        const pollResult = await startPaymentPolling(result.pollUrl, driverId);
+        
+        if (pollResult) {
+          console.log('✅ PAYMENT SUCCESSFUL - REDIRECTING AND REFRESHING');
+          
+          // Force immediate wallet refresh
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('walletLastUpdate', Date.now().toString());
+          }
+          
+          // Redirect to wallet with refresh parameter
+          router.push('/driver/wallet?refresh=true&payment=success&amount=' + parseFloat(amount));
+        } else {
+          // Payment failed or timed out
+          setError('Payment failed or was not completed. Please try again.');
+        }
       } else {
         setError(result.error || 'Failed to initiate mobile payment');
       }
@@ -146,10 +236,40 @@ export default function TopUp() {
     }
   };
 
+  // ✅ UPDATED: Function to handle payment polling with timeout
+  const startPaymentPolling = async (pollUrl: string, driverId: number): Promise<boolean> => {
+    const maxAttempts = 30; // 30 attempts (2.5 minutes at 5-second intervals)
+    const interval = 5000; // 5 seconds
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      console.log(`🔄 Polling attempt ${attempt}/${maxAttempts}`);
+      
+      const isPaid = await pollPaymentStatus(pollUrl, driverId);
+      
+      if (isPaid) {
+        console.log('✅ Payment confirmed after', attempt, 'attempts');
+        return true;
+      }
+      
+      // Wait before next poll
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, interval));
+      }
+    }
+    
+    console.log('❌ Payment polling timed out after', maxAttempts, 'attempts');
+    return false;
+  };
+
   const handleBackToPaymentMethods = () => {
     setShowCheckout(false);
     setSelectedMethod(null);
     setShowMobileModal(false);
+    setClientSecret('');
+  };
+
+  const handleBackToWallet = () => {
+    router.push('/driver/wallet');
   };
 
   return (
@@ -158,7 +278,7 @@ export default function TopUp() {
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 text-white">
           <div className="flex items-center space-x-4">
             <button 
-              onClick={showCheckout ? handleBackToPaymentMethods : () => router.push('/driver/wallet')}
+              onClick={showCheckout ? handleBackToPaymentMethods : handleBackToWallet}
               className="hover:opacity-80 transition"
               disabled={isProcessing}
             >
@@ -188,8 +308,8 @@ export default function TopUp() {
                     type="number"
                     name="amount"
                     id="amount"
-                    min="1"
-                    max="1000"
+                    min="0.10"
+                    max="100"
                     step="0.01"
                     value={amount}
                     onChange={handleAmountChange}
@@ -203,16 +323,15 @@ export default function TopUp() {
                   </div>
                 </div>
                 {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
-                {/* Updated: Amount range info */}
-                <p className="mt-1 text-xs text-gray-500">Minimum $2 - Maximum $100</p>
+                <p className="mt-1 text-xs text-gray-500">Minimum $0.10 - Maximum $100</p>
               </div>
 
               <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-3">Select Payment Method</h3>
                 <div className="space-y-3">
                   <div 
-                    className={`flex items-center p-4 border rounded-lg cursor-pointer ${
-                      selectedMethod === 'card' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-500'
+                    className={`flex items-center p-4 border rounded-lg cursor-pointer transition-all ${
+                      selectedMethod === 'card' ? 'border-purple-500 bg-purple-50 shadow-sm' : 'border-gray-200 hover:border-purple-500'
                     } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     onClick={() => !isProcessing && handlePaymentMethodSelect('card')}
                   >
@@ -231,8 +350,8 @@ export default function TopUp() {
                   </div>
 
                   <div 
-                    className={`flex items-center p-4 border rounded-lg cursor-pointer ${
-                      selectedMethod === 'mobile' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-500'
+                    className={`flex items-center p-4 border rounded-lg cursor-pointer transition-all ${
+                      selectedMethod === 'mobile' ? 'border-purple-500 bg-purple-50 shadow-sm' : 'border-gray-200 hover:border-purple-500'
                     } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     onClick={() => !isProcessing && handlePaymentMethodSelect('mobile')}
                   >
@@ -258,6 +377,12 @@ export default function TopUp() {
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-2"></div>
                     Processing mobile payment...
                   </div>
+                  <p className="text-xs text-gray-600 mt-2">
+                    Please check your phone for the EcoCash prompt
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    This may take up to 2 minutes to complete
+                  </p>
                 </div>
               )}
             </>
@@ -281,7 +406,7 @@ export default function TopUp() {
               <p className="text-red-500">Payment initialization failed. Please try again.</p>
               <button
                 onClick={handleBackToPaymentMethods}
-                className="mt-4 bg-purple-600 text-white px-4 py-2 rounded-lg"
+                className="mt-4 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition"
               >
                 Back to Payment Methods
               </button>
