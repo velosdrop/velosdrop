@@ -20,12 +20,14 @@ import {
   MapPin,
   Shield,
   Settings,
-  RefreshCw
+  RefreshCw,
+  CreditCard,
+  FileText
 } from 'lucide-react';
 
 // Type definitions
 type TrendType = 'up' | 'down' | 'neutral';
-type ColorType = 'purple' | 'blue' | 'green' | 'orange' | 'cyan' | 'pink';
+type ColorType = 'purple' | 'blue' | 'green' | 'orange' | 'cyan' | 'pink' ;
 type HealthStatus = 'healthy' | 'degraded' | 'down';
 
 interface DashboardStats {
@@ -317,6 +319,7 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
       {/* Quick Navigation */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Link
@@ -361,18 +364,27 @@ export default function Dashboard() {
           <TrendingUp className="w-5 h-5 text-white/70 group-hover:translate-x-1 transition-transform duration-300" />
         </Link>
 
+        {/* NEW: Driver Transactions Panel */}
         <Link
-          href="/admin/analytics"
-          className="flex items-center space-x-4 p-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white hover:from-emerald-700 hover:to-emerald-800 transition-all duration-300 transform hover:scale-[1.02] hover:shadow-2xl group"
+          href="/admin/driver-transactions"
+          className="flex items-center space-x-4 p-4 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 text-white hover:from-amber-700 hover:to-amber-800 transition-all duration-300 transform hover:scale-[1.02] hover:shadow-2xl group relative overflow-hidden"
         >
-          <div className="p-3 bg-white/20 rounded-lg group-hover:scale-110 transition-transform duration-300">
-            <BarChart3 className="w-6 h-6" />
+          {/* Animated background effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/10 to-orange-400/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          
+          <div className="p-3 bg-white/20 rounded-lg group-hover:scale-110 transition-transform duration-300 relative z-10">
+            <CreditCard className="w-6 h-6" />
           </div>
-          <div className="flex-1">
-            <div className="font-semibold text-lg">Analytics</div>
-            <div className="text-emerald-200 text-sm">View detailed reports</div>
+          <div className="flex-1 relative z-10">
+            <div className="font-semibold text-lg">Driver Transactions</div>
+            <div className="text-amber-200 text-sm">Manage payments & earnings</div>
           </div>
-          <TrendingUp className="w-5 h-5 text-white/70 group-hover:translate-x-1 transition-transform duration-300" />
+          <div className="flex items-center space-x-2 relative z-10">
+            <div className="px-2 py-1 bg-yellow-500/30 rounded-full text-xs text-yellow-200 animate-pulse">
+              New
+            </div>
+            <TrendingUp className="w-5 h-5 text-white/70 group-hover:translate-x-1 transition-transform duration-300" />
+          </div>
         </Link>
       </div>
 
@@ -574,6 +586,13 @@ export default function Dashboard() {
                 icon={<Users className="w-4 h-4" />}
                 color="cyan"
                 onClick={() => window.location.href = '/admin/customers'}
+              />
+              <ActionButton
+                title="Driver Transactions"
+                description="Manage payments & earnings"
+                icon={<CreditCard className="w-4 h-4" />}
+                color="orange"
+                onClick={() => window.location.href = '/admin/driver-transactions'}
               />
               <ActionButton
                 title="Generate Reports"
