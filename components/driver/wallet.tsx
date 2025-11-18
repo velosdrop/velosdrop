@@ -274,108 +274,168 @@ export default function Wallet() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-      <div className="space-y-6">
-        {/* Balance Card */}
-        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-start justify-between mb-2">
-            <h3 className="text-lg font-medium">Available Balance</h3>
-            <button 
-              onClick={refreshWallet}
-              disabled={refreshing || loading}
-              className="text-purple-200 hover:text-white text-sm font-medium disabled:opacity-50 transition flex items-center"
-            >
-              {refreshing ? (
-                <>
-                  <FiRefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                  Refreshing...
-                </>
-              ) : (
-                <>
-                  <FiRefreshCw className="w-3 h-3 mr-1" />
-                  Refresh
-                </>
-              )}
-            </button>
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Simple Header with Refresh Button Only */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Wallet</h1>
+            <p className="text-gray-600">Manage your earnings and payments</p>
           </div>
-          <div className="flex items-end justify-between">
-            <div>
-              <p className="text-3xl font-bold">
-                {loading ? 'Loading...' : `$${balance.toFixed(2)}`}
-              </p>
-              <p className="text-purple-200 text-sm mt-1">
-                {balance === 0 ? 'Start by adding funds to your wallet' : 'Your current available balance'}
-              </p>
-            </div>
-            <Link 
-              href="/driver/topup" 
-              className="px-4 py-2 bg-white text-purple-600 rounded-lg text-sm font-medium hover:bg-opacity-90 transition shadow-sm"
-            >
-              Top Up
-            </Link>
-          </div>
+          <button
+            onClick={refreshWallet}
+            disabled={refreshing || loading}
+            className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 rounded-lg border border-gray-300 hover:border-purple-500 hover:text-purple-600 transition-all duration-200 disabled:opacity-50 shadow-sm"
+          >
+            <FiRefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
         </div>
-        {/* Recent Transactions */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Transactions</h3>
-            <button className="text-sm text-purple-600 hover:text-purple-800 font-medium">
-              View All
-            </button>
-          </div>
-          <div className="space-y-3">
-            {loading ? (
-              <div className="animate-pulse space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-16 bg-gray-100 rounded-lg"></div>
-                ))}
-              </div>
-            ) : transactions.length > 0 ? (
-              transactions.map((tx) => (
-                <div key={tx.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-purple-200 transition-colors">
-                  <div className="flex items-center">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${
-                      tx.amount > 0 ? 'bg-green-100 text-green-600' : 'bg-purple-100 text-purple-600'
-                    }`}>
-                      {tx.amount > 0 ? (
-                        <FiArrowUpRight className="w-5 h-5" />
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                          <path d="M4.5 3.75a3 3 0 00-3 3v.75h21v-.75a3 3 0 00-3-3h-15z" />
-                        </svg>
-                      )}
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-gray-900">
-                        {tx.description || (tx.amount > 0 ? 'Top Up' : 'Withdrawal')}
-                      </h4>
-                      <p className="text-sm text-gray-500">
-                        {formatTransactionDate(tx.created_at)}
-                      </p>
-                      {tx.reference && (
-                        <p className="text-xs text-gray-400 font-mono">
-                          {tx.reference.substring(0, 8)}...
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className={`font-medium ${tx.amount > 0 ? 'text-green-600' : 'text-purple-600'}`}>
-                      {formatTransactionAmount(tx.amount, tx.type)}
-                    </p>
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(tx.status)}`}>
-                      {tx.status}
-                    </span>
-                  </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Balance Card */}
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
+              <div className="flex items-start justify-between mb-2">
+                <h3 className="text-lg font-medium">Available Balance</h3>
+                <div className="text-purple-200 text-sm font-medium">
+                  {refreshing ? 'Refreshing...' : 'Live'}
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <FiArrowUpRight className="w-12 h-12 mx-auto text-gray-300 mb-2" />
-                <p>No transactions yet</p>
-                <p className="text-sm text-gray-400 mt-1">Your transactions will appear here</p>
               </div>
-            )}
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-3xl font-bold">
+                    {loading ? 'Loading...' : `$${balance.toFixed(2)}`}
+                  </p>
+                  <p className="text-purple-200 text-sm mt-1">
+                    {balance === 0 ? 'Start by adding funds to your wallet' : 'Your current available balance'}
+                  </p>
+                </div>
+                <Link 
+                  href="/driver/topup" 
+                  className="px-6 py-3 bg-white text-purple-600 rounded-lg font-medium hover:bg-opacity-90 transition shadow-sm flex items-center space-x-2"
+                >
+                  <FiPlus className="w-4 h-4" />
+                  <span>Top Up</span>
+                </Link>
+              </div>
+            </div>
+
+            {/* Recent Transactions */}
+            <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Recent Transactions</h3>
+                <button className="text-sm text-purple-600 hover:text-purple-800 font-medium">
+                  View All
+                </button>
+              </div>
+              <div className="space-y-4">
+                {loading ? (
+                  <div className="animate-pulse space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-16 bg-gray-100 rounded-lg"></div>
+                    ))}
+                  </div>
+                ) : transactions.length > 0 ? (
+                  transactions.map((tx) => (
+                    <div key={tx.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-purple-200 transition-colors">
+                      <div className="flex items-center">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center mr-4 ${
+                          tx.amount > 0 ? 'bg-green-100 text-green-600' : 'bg-purple-100 text-purple-600'
+                        }`}>
+                          {tx.amount > 0 ? (
+                            <FiArrowUpRight className="w-6 h-6" />
+                          ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                              <path d="M4.5 3.75a3 3 0 00-3 3v.75h21v-.75a3 3 0 00-3-3h-15z" />
+                            </svg>
+                          )}
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-gray-900">
+                            {tx.description || (tx.amount > 0 ? 'Top Up' : 'Withdrawal')}
+                          </h4>
+                          <p className="text-sm text-gray-500">
+                            {formatTransactionDate(tx.created_at)}
+                          </p>
+                          {tx.reference && (
+                            <p className="text-xs text-gray-400 font-mono">
+                              {tx.reference.substring(0, 8)}...
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className={`font-medium text-lg ${tx.amount > 0 ? 'text-green-600' : 'text-purple-600'}`}>
+                          {formatTransactionAmount(tx.amount, tx.type)}
+                        </p>
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(tx.status)}`}>
+                          {tx.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12">
+                    <FiArrowUpRight className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No transactions yet</h3>
+                    <p className="text-gray-600 mb-6">Your transaction history will appear here</p>
+                    <Link 
+                      href="/driver/topup"
+                      className="inline-flex items-center space-x-2 px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
+                    >
+                      <FiPlus className="w-5 h-5" />
+                      <span>Make Your First Top Up</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Quick Stats */}
+            <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Wallet Overview</h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Total Top Ups</span>
+                  <span className="font-semibold text-gray-900">
+                    {transactions.filter(tx => tx.amount > 0).length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Successful</span>
+                  <span className="font-semibold text-green-600">
+                    {transactions.filter(tx => tx.status === 'completed').length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Pending</span>
+                  <span className="font-semibold text-yellow-600">
+                    {transactions.filter(tx => tx.status === 'pending').length}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Support Card */}
+            <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 rounded-lg p-6">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h4 className="font-semibold text-gray-900 mb-2">Need Help?</h4>
+                <p className="text-gray-600 text-sm mb-4">Having issues with payments or transactions?</p>
+                <button className="w-full py-2 bg-white text-blue-600 border border-blue-200 rounded-lg font-medium hover:bg-blue-50 transition-colors">
+                  Contact Support
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
