@@ -1,3 +1,4 @@
+//app/api/bookings/status/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/src/db';
 import { deliveryRequestsTable, driversTable } from '@/src/db/schema';

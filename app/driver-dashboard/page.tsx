@@ -1,7 +1,8 @@
 //app/driver-dashboard/page.tsx
 'use client';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '@/src/db';
 import { eq } from 'drizzle-orm';
@@ -125,6 +126,7 @@ const renderPackageDescriptionWithClickablePhones = (description: string) => {
 
 export default function DriverDashboard() {
   const router = useRouter();
+  const pathname = usePathname();
   const [driverData, setDriverData] = useState<Driver | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
@@ -640,7 +642,7 @@ export default function DriverDashboard() {
                   onClick={() => setActiveTab('map')}
                   className={`w-full text-left flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'map' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    }`}
+                  }`}
                 >
                   <FiMap className="mr-3" />
                   <span>Delivery Map</span>
@@ -651,7 +653,7 @@ export default function DriverDashboard() {
                   onClick={() => setActiveTab('delivery-requests')}
                   className={`w-full text-left flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'delivery-requests' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    }`}
+                  }`}
                 >
                   <FiPackage className="mr-3" />
                   <span>Delivery Requests</span>
@@ -665,29 +667,34 @@ export default function DriverDashboard() {
                   onClick={() => setActiveTab('profile')}
                   className={`w-full text-left flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'profile' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    }`}
+                  }`}
                 >
                   <FiUser className="mr-3" />
                   <span>My Profile</span>
                 </button>
               </li>
+              
+              {/* My Deliveries Link */}
               <li>
-                <button
-                  onClick={() => setActiveTab('deliveries')}
+                <Link
+                  href="/driver-dashboard/mydeliveries"
                   className={`w-full text-left flex items-center p-3 rounded-lg transition-colors ${
-                    activeTab === 'deliveries' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    }`}
+                    pathname === '/driver-dashboard/mydeliveries' 
+                      ? 'bg-purple-600 text-white' 
+                      : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                  }`}
                 >
                   <FiTruck className="mr-3" />
                   <span>My Deliveries</span>
-                </button>
+                </Link>
               </li>
+              
               <li>
                 <button
                   onClick={() => setActiveTab('wallet')}
                   className={`w-full text-left flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'wallet' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    }`}
+                  }`}
                 >
                   <FiDollarSign className="mr-3" />
                   <span>My Wallet</span>
@@ -771,7 +778,7 @@ export default function DriverDashboard() {
                         }}
                         className={`w-full text-left flex items-center p-3 rounded-lg transition-colors ${
                           activeTab === 'map' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                          }`}
+                        }`}
                       >
                         <FiMap className="mr-3" />
                         <span>Delivery Map</span>
@@ -785,7 +792,7 @@ export default function DriverDashboard() {
                         }}
                         className={`w-full text-left flex items-center p-3 rounded-lg transition-colors ${
                           activeTab === 'delivery-requests' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                          }`}
+                        }`}
                       >
                         <FiPackage className="mr-3" />
                         <span>Delivery Requests</span>
@@ -802,26 +809,29 @@ export default function DriverDashboard() {
                         }}
                         className={`w-full text-left flex items-center p-3 rounded-lg transition-colors ${
                           activeTab === 'profile' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                          }`}
+                        }`}
                       >
                         <FiUser className="mr-3" />
                         <span>My Profile</span>
                       </button>
                     </li>
+                    
+                    {/* My Deliveries Link for Mobile */}
                     <li>
-                      <button
-                        onClick={() => {
-                          setActiveTab('deliveries');
-                          setSidebarOpen(false);
-                        }}
+                      <Link
+                        href="/driver-dashboard/mydeliveries"
+                        onClick={() => setSidebarOpen(false)}
                         className={`w-full text-left flex items-center p-3 rounded-lg transition-colors ${
-                          activeTab === 'deliveries' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                          }`}
+                          pathname === '/driver-dashboard/mydeliveries' 
+                            ? 'bg-purple-600 text-white' 
+                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        }`}
                       >
                         <FiTruck className="mr-3" />
                         <span>My Deliveries</span>
-                      </button>
+                      </Link>
                     </li>
+                    
                     <li>
                       <button
                         onClick={() => {
@@ -830,7 +840,7 @@ export default function DriverDashboard() {
                         }}
                         className={`w-full text-left flex items-center p-3 rounded-lg transition-colors ${
                           activeTab === 'wallet' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                          }`}
+                        }`}
                       >
                         <FiDollarSign className="mr-3" />
                         <span>My Wallet</span>
@@ -875,7 +885,7 @@ export default function DriverDashboard() {
               <div className="relative">
                 <FiBell className="h-6 w-6 text-purple-600 animate-pulse" />
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
-            </div>
+              </div>
             )}
             <span className={`mr-3 text-sm font-medium ${isOnline ? 'text-purple-600' : 'text-gray-600'}`}>
               {isOnline ? 'Online - Available' : 'Offline'}
@@ -885,12 +895,12 @@ export default function DriverDashboard() {
               disabled={isUpdatingStatus}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
                 isOnline ? 'bg-purple-600' : 'bg-gray-200'
-                } ${isUpdatingStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
+              } ${isUpdatingStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                   isOnline ? 'translate-x-6' : 'translate-x-1'
-                  }`}
+                }`}
               />
             </button>
           </div>
@@ -949,7 +959,7 @@ export default function DriverDashboard() {
                     disabled={!selectedFile}
                     className={`px-4 py-2 rounded-lg text-white transition-colors ${
                       selectedFile ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-400 cursor-not-allowed'
-                      }`}
+                    }`}
                   >
                     Save Changes
                   </button>
@@ -1047,59 +1057,11 @@ export default function DriverDashboard() {
                 style={{ height: '100%', width: '100%' }}
                 driverId={driverData?.id}
                 isOnline={isOnline}
-                activeDelivery={activeDelivery} // Add this line
+                activeDelivery={activeDelivery}
               />
             </div>
           ) : activeTab === 'wallet' ? (
             <Wallet />
-          ) : activeTab === 'deliveries' ? (
-            <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-              <h3 className="text-lg font-semibold mb-4 text-gray-900">My Deliveries</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                      Completed
-                    </span>
-                    <span className="text-sm text-gray-500">2 hours ago</span>
-                  </div>
-                  <p className="font-medium text-gray-900">City Center to Airport</p>
-                  <p className="text-sm text-gray-600 mt-1">Customer: john_doe</p>
-                  <div className="flex items-center justify-between mt-3">
-                    <span className="text-sm font-medium text-gray-900">$15.50</span>
-                    <span className="text-sm text-gray-500">5.2 km</span>
-                  </div>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
-                      In Progress
-                    </span>
-                    <span className="text-sm text-gray-500">Now</span>
-                  </div>
-                  <p className="font-medium text-gray-900">Mall to Residential</p>
-                  <p className="text-sm text-gray-600 mt-1">Customer: sarah_m</p>
-                  <div className="flex items-center justify-between mt-3">
-                    <span className="text-sm font-medium text-gray-900">$12.00</span>
-                    <span className="text-sm text-gray-500">3.8 km</span>
-                  </div>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
-                      Scheduled
-                    </span>
-                    <span className="text-sm text-gray-500">Tomorrow</span>
-                  </div>
-                  <p className="font-medium text-gray-900">Office to Home</p>
-                  <p className="text-sm text-gray-600 mt-1">Customer: mike_t</p>
-                  <div className="flex items-center justify-between mt-3">
-                    <span className="text-sm font-medium text-gray-900">$18.75</span>
-                    <span className="text-sm text-gray-500">7.1 km</span>
-                  </div>
-                </div>
-              </div>
-            </div>
           ) : activeTab === 'delivery-requests' ? (
             <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
               <h3 className="text-lg font-semibold mb-4 text-gray-900">Delivery Requests</h3>
@@ -1128,7 +1090,7 @@ export default function DriverDashboard() {
 
                       {/* Content */}
                       <div className="p-4">
-                        {/* Enhanced Customer Info Section - NOW INCLUDES PHONE NUMBER */}
+                        {/* Enhanced Customer Info Section */}
                         <div className="flex items-center space-x-3 mb-4 p-3 bg-gray-50 rounded-lg">
                           <div className="relative">
                             {request.customerProfilePictureUrl ? (
@@ -1153,7 +1115,7 @@ export default function DriverDashboard() {
                               </span>
                             </div>
                             
-                            {/* CUSTOMER PHONE NUMBER - ADDED HERE */}
+                            {/* CUSTOMER PHONE NUMBER */}
                             {request.customerPhoneNumber && (
                               <div className="flex items-center space-x-1 mt-1">
                                 <FiPhone className="h-3 w-3 text-gray-500 flex-shrink-0" />
@@ -1348,7 +1310,7 @@ export default function DriverDashboard() {
                     isOnline
                       ? 'bg-red-600 text-white hover:bg-red-700'
                       : 'bg-green-600 text-white hover:bg-green-700'
-                    } ${isUpdatingStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  } ${isUpdatingStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   {isUpdatingStatus ? (
                     <span>Updating...</span>
