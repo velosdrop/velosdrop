@@ -1,3 +1,4 @@
+// components/customer/OrdersSection.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -16,8 +17,9 @@ import {
   FiPhone,
   FiDollarSign,
   FiCalendar,
-  FiStar,
-  FiMap
+  FiMap,
+  FiTrash2,
+  FiLoader
 } from 'react-icons/fi';
 
 interface Order {
@@ -112,6 +114,7 @@ export default function OrdersSection() {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [deletingOrders, setDeletingOrders] = useState<number[]>([]);
   const { customer } = useUser();
 
   useEffect(() => {
@@ -124,13 +127,20 @@ export default function OrdersSection() {
   const fetchCustomerOrders = async () => {
     try {
       setRefreshing(true);
+      console.log('🔄 Fetching orders for customer:', customer?.id);
+      
       const response = await fetch(`/api/customer/orders?customerId=${customer?.id}`);
-      if (response.ok) {
-        const ordersData = await response.json();
-        setOrders(ordersData);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
+      const ordersData = await response.json();
+      console.log('📦 Orders data received:', ordersData);
+      setOrders(ordersData);
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.error('❌ Error fetching orders:', error);
+      setOrders([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -145,6 +155,7 @@ export default function OrdersSection() {
     pubnub.addListener({
       message: (event: any) => {
         const { message } = event;
+        console.log('📡 PubNub message received:', message);
         
         switch (message.type) {
           case MESSAGE_TYPES.BOOKING_STATUS_UPDATE:
@@ -164,9 +175,12 @@ export default function OrdersSection() {
         `customer_orders_${customer.id}`
       ]
     });
+
+    console.log('🔔 PubNub listener setup for customer:', customer.id);
   };
 
   const handleOrderStatusUpdate = (updateData: any) => {
+    console.log('🔄 Order status update received:', updateData);
     setOrders(prev => prev.map(order => 
       order.id === updateData.orderId 
         ? { ...order, status: updateData.status, driver: updateData.driver }
@@ -175,6 +189,7 @@ export default function OrdersSection() {
   };
 
   const handleDriverLocationUpdate = (locationData: any) => {
+    console.log('📍 Driver location update received:', locationData);
     if (locationData.orderId) {
       setOrders(prev => prev.map(order => 
         order.id === locationData.orderId 
@@ -188,6 +203,39 @@ export default function OrdersSection() {
           currentDriverLocation: locationData.location
         } : null);
       }
+    }
+  };
+
+  const deleteOrder = async (orderId: number) => {
+    if (!confirm('Are you sure you want to delete this order? This action cannot be undone.')) {
+      return;
+    }
+
+    setDeletingOrders(prev => [...prev, orderId]);
+    
+    try {
+      console.log('🗑️ Deleting order:', orderId);
+      const response = await fetch(`/api/customer/orders/${orderId}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        console.log('✅ Order deleted successfully:', orderId);
+        setOrders(prev => prev.filter(order => order.id !== orderId));
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder(null);
+        }
+      } else {
+        console.error('❌ Failed to delete order:', result.error);
+        alert(`Failed to delete order: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('❌ Error deleting order:', error);
+      alert('Failed to delete order. Please try again.');
+    } finally {
+      setDeletingOrders(prev => prev.filter(id => id !== orderId));
     }
   };
 
@@ -323,6 +371,7 @@ export default function OrdersSection() {
             {orders.map((order) => {
               const statusConfig = getStatusConfig(order.status);
               const StatusIcon = statusConfig.icon;
+              const isDeleting = deletingOrders.includes(order.id);
               
               return (
                 <motion.div
@@ -395,8 +444,8 @@ export default function OrdersSection() {
                           </div>
                         </div>
 
-                        {/* Driver Information */}
-                        {order.driver && (
+                        {/* Driver Information - Only show when driver is assigned */}
+                        {order.driver && order.status !== 'pending' && order.status !== 'cancelled' && (
                           <motion.div
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: 'auto' }}
@@ -441,21 +490,13 @@ export default function OrdersSection() {
                                   </a>
                                 </div>
                               </div>
-                              
-                              <div className="text-right">
-                                <div className="flex items-center space-x-1 text-yellow-400">
-                                  <FiStar className="w-4 h-4 fill-current" />
-                                  <span className="text-sm font-semibold">4.8</span>
-                                </div>
-                                <p className="text-gray-400 text-xs mt-1">Rating</p>
-                              </div>
                             </div>
                           </motion.div>
                         )}
                       </div>
                     </div>
 
-                    {/* Action Button */}
+                    {/* Action Buttons */}
                     <div className="flex space-x-4 mt-6 pt-6 border-t border-gray-700/50">
                       <motion.button
                         whileHover={{ scale: 1.02 }}
@@ -464,10 +505,27 @@ export default function OrdersSection() {
                         className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white py-4 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center space-x-3 shadow-lg shadow-purple-500/25"
                       >
                         <FiMap className="w-5 h-5" />
-                        <span>Track Order</span>
+                        <span>View Details</span>
                       </motion.button>
                       
-                      {order.driver && (
+                      {/* Delete button - Available for ALL orders */}
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => deleteOrder(order.id)}
+                        disabled={isDeleting}
+                        className="px-6 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-300 py-4 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isDeleting ? (
+                          <FiLoader className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <FiTrash2 className="w-5 h-5" />
+                        )}
+                        <span>{isDeleting ? 'Deleting...' : 'Delete'}</span>
+                      </motion.button>
+                      
+                      {/* Call Driver button - Only show when driver is assigned */}
+                      {order.driver && order.status !== 'pending' && order.status !== 'cancelled' && (
                         <motion.a
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
@@ -492,6 +550,10 @@ export default function OrdersSection() {
             <OrderDetailsModal 
               order={selectedOrder} 
               onClose={() => setSelectedOrder(null)} 
+              onDelete={() => {
+                deleteOrder(selectedOrder.id);
+                setSelectedOrder(null);
+              }}
             />
           )}
         </AnimatePresence>
@@ -501,7 +563,7 @@ export default function OrdersSection() {
 }
 
 // Enhanced Order Details Modal Component
-function OrderDetailsModal({ order, onClose }: { order: Order; onClose: () => void }) {
+function OrderDetailsModal({ order, onClose, onDelete }: { order: Order; onClose: () => void; onDelete?: () => void }) {
   const statusConfig = getStatusConfig(order.status);
   const StatusIcon = statusConfig.icon;
 
@@ -626,8 +688,8 @@ function OrderDetailsModal({ order, onClose }: { order: Order; onClose: () => vo
 
             {/* Right Column */}
             <div className="space-y-6">
-              {/* Driver Information */}
-              {order.driver && (
+              {/* Driver Information - Only show when driver is assigned */}
+              {order.driver && order.status !== 'pending' && order.status !== 'cancelled' && (
                 <div className="bg-gradient-to-br from-purple-500/10 to-indigo-500/5 rounded-2xl p-6 border border-purple-500/20">
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
                     <FiUser className="w-5 h-5 mr-2 text-purple-400" />
@@ -655,17 +717,6 @@ function OrderDetailsModal({ order, onClose }: { order: Order; onClose: () => vo
                       <p className="text-gray-400 text-sm">
                         {order.driver.carName} • {order.driver.numberPlate}
                       </p>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 mt-6">
-                    <div className="text-center p-3 bg-gray-700/30 rounded-xl">
-                      <p className="text-2xl font-bold text-green-400">4.8</p>
-                      <p className="text-gray-400 text-sm">Rating</p>
-                    </div>
-                    <div className="text-center p-3 bg-gray-700/30 rounded-xl">
-                      <p className="text-2xl font-bold text-blue-400">127</p>
-                      <p className="text-gray-400 text-sm">Deliveries</p>
                     </div>
                   </div>
                 </div>
@@ -744,7 +795,21 @@ function OrderDetailsModal({ order, onClose }: { order: Order; onClose: () => vo
               Close Details
             </motion.button>
             
-            {order.driver && (
+            {/* Delete button in modal - Available for ALL orders */}
+            {onDelete && (
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={onDelete}
+                className="flex-1 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-300 py-4 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center space-x-3"
+              >
+                <FiTrash2 className="w-5 h-5" />
+                <span>Delete Order</span>
+              </motion.button>
+            )}
+            
+            {/* Call Driver button - Only show when driver is assigned */}
+            {order.driver && order.status !== 'pending' && order.status !== 'cancelled' && (
               <motion.a
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
