@@ -64,7 +64,7 @@ export interface BookingRequestMessage extends PubNubMessage {
     customerUsername: string;
     customerProfilePictureUrl: string;
     customerPhoneNumber?: string;
-    recipientPhoneNumber?: string; // Ensure this is properly defined
+    recipientPhoneNumber?: string;
     pickupLocation: string;
     dropoffLocation: string;
     fare: number;
@@ -94,7 +94,7 @@ export interface BookingResponseMessage extends PubNubMessage {
 
 // Create PubNub client instance
 export const createPubNubClient = (userId: string) => {
-  return pubnub; // Return the shared instance
+  return pubnub;
 };
 
 // Export the getPubNubInstance function that was missing
@@ -111,20 +111,17 @@ export const publishBookingRequest = async (
     type: MESSAGE_TYPES.BOOKING_REQUEST,
     data: {
       ...bookingData,
-      // Explicitly include recipientPhoneNumber to ensure it's not omitted
       recipientPhoneNumber: bookingData.recipientPhoneNumber || ''
     },
   };
 
   try {
-    // Publish to specific driver channels for direct assignments
     if (bookingData.isDirectAssignment && driverIds.length === 1) {
       await pubnub.publish({
         channel: CHANNELS.driver(driverIds[0]),
         message,
       });
     } else {
-      // Broadcast to all specified drivers
       const publishPromises = driverIds.map(driverId =>
         pubnub.publish({
           channel: CHANNELS.driver(driverId),
@@ -135,7 +132,7 @@ export const publishBookingRequest = async (
     }
 
     console.log(`Booking request published to ${driverIds.length} drivers`, {
-      recipientPhoneNumber: bookingData.recipientPhoneNumber, // Debug log
+      recipientPhoneNumber: bookingData.recipientPhoneNumber,
       bookingData: bookingData
     });
     return { success: true };
@@ -183,7 +180,6 @@ export const publishDriverLocationUpdate = async (
   };
 
   try {
-    // Use a single, predictable channel for all driver locations
     await pubnub.publish({
       channel: CHANNELS.driverLocations,
       message,
@@ -193,7 +189,36 @@ export const publishDriverLocationUpdate = async (
     return { success: true };
   } catch (error) {
     console.error('Error publishing driver location:', error);
-    // Don't throw the error - just return failure
+    return { success: false, error };
+  }
+};
+
+// NEW: Enhanced driver location update with order context
+export const publishDriverLocationUpdateWithOrder = async (
+  driverId: number,
+  location: { latitude: number; longitude: number; heading?: number; speed?: number },
+  orderId: number
+) => {
+  const message: PubNubPublishMessage = {
+    type: MESSAGE_TYPES.DRIVER_LOCATION_UPDATE,
+    data: {
+      driverId,
+      location,
+      orderId, // Add orderId to the context
+      timestamp: Date.now()
+    },
+  };
+
+  try {
+    await pubnub.publish({
+      channel: CHANNELS.driverLocations,
+      message,
+    });
+
+    console.log(`Driver location update published for driver ${driverId}, order ${orderId}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Error publishing driver location with order context:', error);
     return { success: false, error };
   }
 };

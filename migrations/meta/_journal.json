@@ -113,6 +113,13 @@
       "when": 1763411951618,
       "tag": "0015_giant_vargas",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1763545978671,
+      "tag": "0016_glamorous_lionheart",
+      "breakpoints": true
     }
   ]
 }

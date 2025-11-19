@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiClock, FiMapPin, FiDollarSign, FiUser, FiX, FiPackage, FiPhone, FiCopy } from 'react-icons/fi';
-import { createPubNubClient } from '@/lib/pubnub-booking';
+import { createPubNubClient, publishDriverLocationUpdateWithOrder } from '@/lib/pubnub-booking';
 
 interface BookingRequest {
   id: number;
@@ -122,24 +122,21 @@ export default function BookingNotification({
 
   // Format phone number for display
   const formatPhoneNumber = (phone: string) => {
-    // Remove all non-numeric characters
     const cleaned = phone.replace(/\D/g, '');
     
-    // Format based on length
     if (cleaned.length === 10) {
       return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
     } else if (cleaned.length === 11 && cleaned.startsWith('1')) {
       return `+1 (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
     }
     
-    return phone; // Return original if format doesn't match
+    return phone;
   };
 
   // Extract phone numbers from package description and make them clickable
   const renderPackageDescriptionWithClickablePhones = (description: string) => {
     if (!description) return description;
     
-    // Regular expression to match phone numbers in various formats
     const phoneRegex = /(\+?\d{1,4}?[-.\s]?\(?\d{1,3}?\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9})/g;
     
     const parts = [];
@@ -147,14 +144,12 @@ export default function BookingNotification({
     let match;
 
     while ((match = phoneRegex.exec(description)) !== null) {
-      // Add text before the phone number
       if (match.index > lastIndex) {
         parts.push(description.slice(lastIndex, match.index));
       }
 
       const phoneNumber = match[0];
       
-      // Add clickable phone number
       parts.push(
         <a
           key={match.index}
@@ -171,7 +166,6 @@ export default function BookingNotification({
       lastIndex = match.index + phoneNumber.length;
     }
 
-    // Add remaining text after last phone number
     if (lastIndex < description.length) {
       parts.push(description.slice(lastIndex));
     }
@@ -179,14 +173,14 @@ export default function BookingNotification({
     return parts.length > 0 ? parts : description;
   };
 
-  // Enhanced real-time tracking function
-  const startRealTimeTracking = async (customerId: number, pickupLocation: string, dropoffLocation: string) => {
+  // ENHANCED: Real-time tracking function with order context
+  const startRealTimeTracking = async (customerId: number, pickupLocation: string, dropoffLocation: string, orderId: number) => {
     if (!navigator.geolocation) {
       console.error('❌ Geolocation is not supported by this browser');
       return;
     }
 
-    console.log('📍 Starting real-time tracking for customer:', customerId);
+    console.log('📍 Starting real-time tracking for customer:', customerId, 'order:', orderId);
     
     const currentPubNub = pubnubRef.current;
     if (!currentPubNub) {
@@ -259,7 +253,7 @@ export default function BookingNotification({
             })
           });
 
-          console.log('📍 Location updated in database:', { longitude, latitude });
+          console.log('📍 Location updated in database for order:', orderId);
           
           // Calculate route and ETA to pickup
           let routeData = null;
@@ -272,7 +266,7 @@ export default function BookingNotification({
             }
           }
           
-          // PUBLISH LOCATION AND ROUTE DATA TO CUSTOMER
+          // PUBLISH LOCATION WITH ORDER CONTEXT
           try {
             await currentPubNub.publish({
               channel: `customer_${customerId}`,
@@ -280,6 +274,7 @@ export default function BookingNotification({
                 type: 'DRIVER_LOCATION_UPDATE',
                 data: {
                   driverId: driverId,
+                  orderId: orderId, // Add orderId here
                   location: { 
                     longitude, 
                     latitude,
@@ -293,11 +288,24 @@ export default function BookingNotification({
                 }
               }
             });
-            console.log('📡 Location and route data published to customer:', { 
+            
+            // FIXED: Convert null to undefined for the publish function
+            await publishDriverLocationUpdateWithOrder(
+              driverId, 
+              { 
+                latitude, 
+                longitude, 
+                heading: heading ?? undefined,  // Convert null to undefined
+                speed: speed ?? undefined       // Convert null to undefined
+              }, 
+              orderId
+            );
+            
+            console.log('📡 Location published with order context:', { 
+              orderId,
               longitude, 
               latitude, 
-              eta,
-              hasRoute: !!routeData 
+              eta
             });
           } catch (pubnubError) {
             console.error('❌ PubNub publish error:', pubnubError);
@@ -318,7 +326,7 @@ export default function BookingNotification({
     );
 
     setLocationWatchId(watchId);
-    console.log('📍 Real-time tracking started with watchId:', watchId);
+    console.log('📍 Real-time tracking started for order:', orderId);
 
     return () => {
       if (watchId) {
@@ -328,6 +336,7 @@ export default function BookingNotification({
     };
   };
 
+  // UPDATED: handleAccept with order context
   const handleAccept = async () => {
     if (isProcessing) return;
     
@@ -391,7 +400,8 @@ export default function BookingNotification({
         setIsVisible(false);
         onAccept();
         
-        startRealTimeTracking(request.customerId, request.pickupLocation, request.dropoffLocation);
+        // PASS THE ORDER ID TO TRACKING FUNCTION
+        startRealTimeTracking(request.customerId, request.pickupLocation, request.dropoffLocation, requestId);
       } else {
         let errorData;
         try {

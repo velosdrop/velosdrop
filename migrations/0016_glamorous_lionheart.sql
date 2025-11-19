@@ -1,0 +1,1 @@
+ALTER TABLE `delivery_requests` ADD `updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL;

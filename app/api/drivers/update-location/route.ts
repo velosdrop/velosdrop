@@ -1,9 +1,9 @@
-// app/api/drivers/update-location/route.ts
+//app/api/drivers/update-location/route.ts
 import { db } from '@/src/db';
 import { driversTable, deliveryRequestsTable } from '@/src/db/schema';
 import { eq, sql, and, desc } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
-import { publishDriverLocationUpdate, getPubNubInstance, MESSAGE_TYPES } from "@/lib/pubnub-booking";
+import { publishDriverLocationUpdate, getPubNubInstance, MESSAGE_TYPES, publishDriverLocationUpdateWithOrder } from "@/lib/pubnub-booking";
 
 export async function POST(request: Request) {
   try {
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
       orderBy: [desc(deliveryRequestsTable.createdAt)]
     });
 
-    // Broadcast location update to customer if there's an active delivery
+    // ENHANCED: Broadcast location update to customer with order context
     if (activeDelivery) {
       try {
         const pubnub = getPubNubInstance();
@@ -96,17 +96,26 @@ export async function POST(request: Request) {
             type: MESSAGE_TYPES.DRIVER_LOCATION_UPDATE,
             data: {
               driverId,
+              orderId: activeDelivery.id, // Include orderId
               location: normalizedLocation,
-              deliveryId: activeDelivery.id,
               timestamp: normalizedLocation.timestamp
             }
           }
         });
         
-        console.log('✅ Location broadcast to customer:', { customerId: activeDelivery.customerId });
+        // Also publish with the enhanced function that includes order context
+        await publishDriverLocationUpdateWithOrder(
+          driverId,
+          normalizedLocation,
+          activeDelivery.id
+        );
+        
+        console.log('✅ Location broadcast to customer with order context:', { 
+          customerId: activeDelivery.customerId,
+          orderId: activeDelivery.id 
+        });
       } catch (pubnubError) {
         console.warn('⚠️ PubNub location broadcast failed, but DB update succeeded:', pubnubError);
-        // Continue - the DB update is what matters most
       }
     }
 
@@ -122,7 +131,8 @@ export async function POST(request: Request) {
       success: true,
       message: 'Location updated successfully',
       location: normalizedLocation,
-      hasActiveDelivery: !!activeDelivery
+      hasActiveDelivery: !!activeDelivery,
+      orderId: activeDelivery?.id || null
     });
 
   } catch (error) {
