@@ -31,6 +31,7 @@ interface CustomerMapProps {
   showCurrentLocation?: boolean;
   onLocationUpdate?: (location: { longitude: number; latitude: number; address: string }) => void;
   customerId?: number;
+  compact?:boolean;
 }
 
 export default function CustomerMap({
@@ -563,73 +564,6 @@ export default function CustomerMap({
           </div>
         </div>
       )}
-
-      {(currentLocation || currentAddress) && (
-        <div className="absolute top-4 left-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm max-w-xs">
-          <h3 className="font-semibold text-purple-400 mb-2">Your Location</h3>
-          {currentAddress && <p className="text-sm mb-1">{currentAddress}</p>}
-          {currentLocation && (
-            <p className="text-xs text-gray-400">
-              {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
-            </p>
-          )}
-          {isLocating && (
-            <div className="flex items-center mt-2 text-purple-400 text-xs">
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-400 mr-2"></div>
-              Updating location...
-            </div>
-          )}
-        </div>
-      )}
-
-      {driverLocation && (
-        <div className="absolute top-4 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
-          <h3 className="font-semibold text-green-400 mb-2">Driver Location</h3>
-          <p className="text-sm">Live tracking active</p>
-          <p className="text-xs text-gray-400 mt-1">
-            {driverLocation.latitude.toFixed(6)}, {driverLocation.longitude.toFixed(6)}
-          </p>
-          {driverLocation.speed && (
-            <p className="text-xs text-gray-400">
-              Speed: {(driverLocation.speed * 3.6).toFixed(1)} km/h
-            </p>
-          )}
-          {/* NEW: Driver ETA Display */}
-          {driverEta && (
-            <div className="mt-2 pt-2 border-t border-gray-600">
-              <p className="text-sm text-green-400 font-semibold">
-                ETA: {driverEta} minutes
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* NEW: Real-time Route ETA Display */}
-      {driverEta && (
-        <div className="absolute top-24 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
-          <h3 className="font-semibold text-green-400 mb-1">Driver ETA</h3>
-          <p className="text-lg font-bold">{driverEta} minutes</p>
-          <p className="text-xs text-gray-400">until arrival</p>
-        </div>
-      )}
-
-      {routeData && (
-        <div className="absolute bottom-20 left-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
-          <h3 className="font-semibold text-purple-400 mb-2">Delivery Route</h3>
-          <p className="text-sm">Distance: {(routeData.distance / 1000).toFixed(1)} km</p>
-          <p className="text-sm">Duration: {Math.round(routeData.duration / 60)} min</p>
-        </div>
-      )}
-
-      {driverToPickupRouteData && (
-        <div className="absolute bottom-20 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
-          <h3 className="font-semibold text-yellow-400 mb-2">Driver to Pickup</h3>
-          <p className="text-sm">Distance: {(driverToPickupRouteData.distance / 1000).toFixed(1)} km</p>
-          <p className="text-sm">ETA: {Math.round(driverToPickupRouteData.duration / 60)} min</p>
-        </div>
-      )}
-
       <button
         onClick={getCurrentLocation}
         disabled={isLocating}

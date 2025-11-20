@@ -23,6 +23,7 @@ interface Driver {
   phoneNumber: string;
   vehicleType: string;
   carName: string;
+  numberPlate: string;
   profilePictureUrl: string;
   distance: number;
   rating: number;
@@ -72,33 +73,32 @@ export default function SearchingForDrivers({
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Enhanced driver location update handler with map integration
-// Enhanced driver location update handler with map integration
-const handleDriverLocationUpdate = useCallback((data: any) => {
-  console.log('📍 Processing driver location update:', data);
-  
-  if (!data || !data.driverId || !data.location) {
-    console.error('❌ Invalid location data:', data);
-    return;
-  }
-  
-  // Check if this update is for our accepted driver
-  if (data.driverId === acceptedDriver?.id) {
-    console.log('✅ Location update for accepted driver:', data.driverId);
+  const handleDriverLocationUpdate = useCallback((data: any) => {
+    console.log('📍 Processing driver location update:', data);
     
-    // Update driver location state with proper typing that matches CustomerMapProps
-    setDriverLocation({
-      longitude: data.location.longitude,
-      latitude: data.location.latitude,
-      heading: data.location.heading,
-      speed: data.location.speed
-    });
-    setIsTrackingDriver(true);
+    if (!data || !data.driverId || !data.location) {
+      console.error('❌ Invalid location data:', data);
+      return;
+    }
     
-    console.log('🗺️ Driver location state updated:', data.location);
-  } else {
-    console.log('📍 Location update for different driver:', data.driverId);
-  }
-}, [acceptedDriver?.id]);
+    // Check if this update is for our accepted driver
+    if (data.driverId === acceptedDriver?.id) {
+      console.log('✅ Location update for accepted driver:', data.driverId);
+      
+      // Update driver location state with proper typing that matches CustomerMapProps
+      setDriverLocation({
+        longitude: data.location.longitude,
+        latitude: data.location.latitude,
+        heading: data.location.heading,
+        speed: data.location.speed
+      });
+      setIsTrackingDriver(true);
+      
+      console.log('🗺️ Driver location state updated:', data.location);
+    } else {
+      console.log('📍 Location update for different driver:', data.driverId);
+    }
+  }, [acceptedDriver?.id]);
 
   // Enhanced PubNub message handler with duplicate prevention and better logging
   const handlePubNubMessage = useCallback((event: any) => {
@@ -161,6 +161,7 @@ const handleDriverLocationUpdate = useCallback((data: any) => {
       phoneNumber: data.driverPhone || '',
       vehicleType: data.vehicleType || 'car',
       carName: data.carName || 'Vehicle',
+      numberPlate: data.numberPlate || '',
       profilePictureUrl: data.profilePictureUrl || '/default-driver.png',
       distance: 0,
       rating: data.rating || data.averageRating || 4.5,
@@ -470,7 +471,7 @@ const handleDriverLocationUpdate = useCallback((data: any) => {
     setAcceptedDriver(null);
     setAcceptedDrivers([]);
     setSelectedDriver(null); // Reset selected driver on retry
-    setDriverLocation(null); // This now matches the type
+    setDriverLocation(null);
     setIsTrackingDriver(false);
     fetchNearbyDrivers();
   };
@@ -482,18 +483,9 @@ const handleDriverLocationUpdate = useCallback((data: any) => {
     return "15-20 min";
   };
 
-  const renderStars = (rating: number) => {
-    return Array.from({ length: 5 }, (_, i) => (
-      <svg
-        key={i}
-        xmlns="http://www.w3.org/2000/svg"
-        className={`h-4 w-4 ${i < Math.floor(rating) ? "text-yellow-400 fill-current" : "text-gray-500"}`}
-        viewBox="0 0 20 20"
-        fill="currentColor"
-      >
-        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-      </svg>
-    ));
+  // Function to call driver
+  const callDriver = (phoneNumber: string) => {
+    window.open(`tel:${phoneNumber}`, '_self');
   };
 
   // Filter drivers to show only accepted ones first
@@ -620,7 +612,8 @@ const handleDriverLocationUpdate = useCallback((data: any) => {
               </div>
             </div>
             
-            <div className="h-64 bg-gray-700/50 rounded-xl mb-4 flex items-center justify-center">
+            {/* Compact Map */}
+            <div className="h-40 bg-gray-700/50 rounded-xl mb-4 flex items-center justify-center">
               <CustomerMap
                 pickupLocation={{
                   longitude: userLocation.lng,
@@ -628,45 +621,103 @@ const handleDriverLocationUpdate = useCallback((data: any) => {
                   address: packageData.pickupAddress
                 }}
                 deliveryLocation={{
-                  longitude: userLocation.lng, // You might want to use actual delivery coords
+                  longitude: userLocation.lng,
                   latitude: userLocation.lat,
                   address: packageData.dropoffAddress
                 }}
                 driverLocation={driverLocation}
-                showRoute={true}
-                showCurrentLocation={true}
+                showRoute={false}
+                showCurrentLocation={false}
                 style={{ height: '100%', width: '100%', borderRadius: '0.5rem' }}
+                compact={true}
               />
             </div>
             
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="text-center p-2 bg-gray-700/30 rounded-lg">
-                <p className="text-gray-400">Driver</p>
-                <p className="text-white font-semibold">{acceptedDriver.firstName} {acceptedDriver.lastName}</p>
+            {/* Enhanced Driver Information */}
+            <div className="space-y-3 mb-4">
+              {/* Driver Profile with Call Button */}
+              <div className="flex items-center space-x-3 p-3 bg-gray-700/30 rounded-lg">
+                <div className="w-14 h-14 bg-gray-600 rounded-full overflow-hidden border-2 border-green-500/50">
+                  <img
+                    src={acceptedDriver.profilePictureUrl || '/default-driver.png'}
+                    alt={acceptedDriver.firstName}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239336f3' stroke-width='2'%3E%3Cpath d='M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'/%3E%3C/svg%3E";
+                    }}
+                  />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-white font-semibold text-sm">
+                    {acceptedDriver.firstName} {acceptedDriver.lastName}
+                  </h4>
+                  <p className="text-gray-400 text-xs mt-1">Your assigned driver</p>
+                </div>
+                <button
+                  onClick={() => callDriver(acceptedDriver.phoneNumber)}
+                  className="bg-green-600 hover:bg-green-700 text-white p-3 rounded-xl transition-colors flex items-center space-x-2"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                    />
+                  </svg>
+                  <span className="text-sm font-medium">Call</span>
+                </button>
               </div>
-              <div className="text-center p-2 bg-gray-700/30 rounded-lg">
-                <p className="text-gray-400">Vehicle</p>
-                <p className="text-white font-semibold">{acceptedDriver.carName}</p>
+
+              {/* Vehicle and License Information */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="text-center p-3 bg-gray-700/30 rounded-lg">
+                  <p className="text-gray-400 text-xs mb-1">Vehicle</p>
+                  <p className="text-white font-semibold text-sm">{acceptedDriver.carName}</p>
+                  <p className="text-gray-500 text-xs mt-1">{acceptedDriver.vehicleType}</p>
+                </div>
+                <div className="text-center p-3 bg-gray-700/30 rounded-lg">
+                  <p className="text-gray-400 text-xs mb-1">License Plate</p>
+                  <p className="text-white font-semibold text-sm font-mono">{acceptedDriver.numberPlate}</p>
+                </div>
+              </div>
+
+              {/* Phone Number */}
+              <div className="text-center p-3 bg-gray-700/30 rounded-lg">
+                <p className="text-gray-400 text-xs mb-1">Driver Phone</p>
+                <p className="text-white font-semibold text-sm">{acceptedDriver.phoneNumber}</p>
               </div>
             </div>
+
+            {/* Tracking Status */}
             {isTrackingDriver && driverLocation && (
-                     <div className="mt-3 p-2 bg-green-900/20 rounded-lg text-center">
-                                     <p className="text-green-400 text-sm">📍 Driver location tracking active</p>
-                                     <p className="text-green-300 text-xs">Real-time updates enabled</p>
-            {driverLocation.heading && (
-                                    <p className="text-green-300 text-xs">Heading: {driverLocation.heading}°</p>
-             )}
-           {driverLocation.speed && (
-                                    <p className="text-green-300 text-xs">Speed: {(driverLocation.speed * 3.6).toFixed(1)} km/h</p>
-             )}
-          </div>
-)}
-     <button
-              onClick={() => onConfirm(acceptedDriver)}
-              className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors"
-            >
-              Confirm Booking
-            </button>
+              <div className="mt-3 p-3 bg-green-900/20 rounded-lg">
+                <div className="flex items-center justify-center space-x-2 mb-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <p className="text-green-400 text-sm font-medium">Live location tracking active</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {driverLocation.heading && (
+                    <div className="text-center">
+                      <p className="text-gray-400">Heading</p>
+                      <p className="text-green-300">{driverLocation.heading}°</p>
+                    </div>
+                  )}
+                  {driverLocation.speed && (
+                    <div className="text-center">
+                      <p className="text-gray-400">Speed</p>
+                      <p className="text-green-300">{(driverLocation.speed * 3.6).toFixed(1)} km/h</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -950,17 +1001,16 @@ const handleDriverLocationUpdate = useCallback((data: any) => {
                         {driver.firstName} {driver.lastName}
                       </p>
                       <div className="flex items-center space-x-2 mt-1">
-                        <div className="flex items-center space-x-1">
-                          {renderStars(driver.rating)}
-                        </div>
-                        <span className="text-xs text-gray-400">({driver.totalRatings || 12})</span>
-                      </div>
-                      <div className="flex items-center space-x-2 mt-1">
                         <span className="text-xs text-gray-400 bg-gray-800/50 px-2 py-1 rounded">
                           {driver.carName}
                         </span>
                         <span className="text-xs text-gray-400 bg-gray-800/50 px-2 py-1 rounded">
                           {driver.vehicleType}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <span className="text-xs text-gray-400 bg-gray-800/50 px-2 py-1 rounded">
+                          {driver.numberPlate}
                         </span>
                       </div>
                     </div>
