@@ -93,7 +93,6 @@ export default function AdminLayout({
           <NavLink href="/admin/orders" icon="📦" label="Orders" />
           <NavLink href="/admin/customers" icon="👥" label="Customers" />
           <NavLink href="/admin/drivers" icon="🚗" label="Drivers" />
-          <NavLink href="/admin/analytics" icon="📈" label="Analytics" />
         </nav>
 
         {/* Logout Button */}
@@ -156,7 +155,6 @@ function getPageTitle(pathname: string | null) {
     '/admin/orders': 'Orders',
     '/admin/customers': 'Customers',
     '/admin/drivers': 'Drivers',
-    '/admin/analytics': 'Analytics',
   };
   
   return titles[pathname] || 'Admin';
