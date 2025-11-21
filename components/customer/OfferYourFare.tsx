@@ -1,4 +1,4 @@
-//components/customer/OfferYourFare.tsx
+// components/customer/OfferYourFare.tsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -156,7 +156,7 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
             </svg>
           </button>
           <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            Offer Your Fare
+            Set Your Delivery Price
           </h2>
           <div className="w-10"></div>
         </div>
@@ -168,109 +168,107 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
           <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Fare Input Section */}
-          <div className="text-center">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Fare Input Section - Simplified */}
+          <div className="text-center space-y-4">
+            {/* Input Label */}
+            <div className="text-center mb-2">
+              <p className="text-gray-300 text-sm mb-1">Enter your delivery price</p>
+              <p className="text-gray-500 text-xs">Drivers will see your offer and can accept it</p>
+            </div>
+
+            {/* Input Field */}
             <div className="relative flex items-center justify-center max-w-xs mx-auto">
               <div className="absolute left-3 text-purple-400 text-2xl font-bold">$</div>
-              <div className="absolute right-3">
-                <div className="h-8 w-px bg-purple-500 mx-2 animate-pulse"></div>
-              </div>
               <input
                 ref={inputRef}
                 type="text"
                 inputMode="decimal"
                 value={fare}
                 onChange={handleFareChange}
-                className="w-full pl-10 pr-12 py-4 text-3xl text-center bg-gray-800/50 border border-purple-700/30 rounded-xl text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 backdrop-blur-sm transition-all duration-300"
+                className="w-full pl-10 pr-4 py-4 text-3xl text-center bg-gray-800/50 border-2 border-purple-500/50 rounded-xl text-white focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500/30 backdrop-blur-sm transition-all duration-300"
                 placeholder="0.00"
               />
             </div>
-          </div>
 
-          {/* Route Information */}
-          <div className="bg-gray-800/20 border border-purple-900/30 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-purple-300 font-medium">Delivery Route</h3>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 text-purple-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+            {/* Recommended Price - Now below the input */}
+            <div className="text-center space-y-2">
+              <p className="text-gray-400 text-sm">Recommended price for this trip</p>
+              <button
+                type="button"
+                onClick={useRecommendedFare}
+                className="inline-flex items-center space-x-2 bg-purple-900/40 hover:bg-purple-900/60 border border-purple-600/50 rounded-xl px-6 py-3 transition-all duration-300 group hover:scale-105"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center">
-                <div className="w-2 h-2 bg-purple-500 rounded-full mr-2"></div>
-                <span className="text-gray-300 truncate">{packageData.pickupLocation}</span>
-              </div>
-              <div className="flex items-center">
-                <div className="w-2 h-2 bg-pink-500 rounded-full mr-2"></div>
-                <span className="text-gray-300 truncate">{packageData.deliveryLocation}</span>
-              </div>
+                <span className="text-white font-bold text-lg">${recommendedFare}</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 text-purple-300 group-hover:translate-x-1 transition-transform"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </button>
             </div>
           </div>
-
-          {/* Package Details Summary */}
-          <div className="bg-gray-800/20 border border-purple-900/30 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-purple-300 font-medium">Package Details</h3>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 text-purple-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7l8 4" />
-              </svg>
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Recipient Phone:</span>
-                <span className="text-white">{packageData.recipientPhone || "Not provided"}</span>
+          {/* Quick Info Cards - Simplified */}
+          <div className="grid grid-cols-1 gap-4">
+            {/* Route Info */}
+            <div className="bg-gray-800/30 border border-purple-900/30 rounded-xl p-4">
+              <div className="flex items-start space-x-3">
+                <div className="flex flex-col items-center pt-1">
+                  <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                  <div className="w-0.5 h-6 bg-purple-500/30 my-1"></div>
+                  <div className="w-3 h-3 bg-pink-500 rounded-full"></div>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-purple-300 font-medium text-sm mb-2">Delivery Route</h3>
+                  <div className="space-y-1 text-sm">
+                    <p className="text-white truncate">{packageData.pickupLocation}</p>
+                    <p className="text-white truncate">{packageData.deliveryLocation}</p>
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Package Description:</span>
-                <span className="text-white truncate max-w-[150px]">{packageData.packageDescription || "No description"}</span>
+            </div>
+
+            {/* Package Info */}
+            <div className="bg-gray-800/30 border border-purple-900/30 rounded-xl p-4">
+              <div className="flex items-start space-x-3">
+                <div className="w-8 h-8 bg-purple-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4 text-purple-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7l8 4" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-purple-300 font-medium text-sm mb-2">Package Details</h3>
+                  <div className="space-y-1 text-sm">
+                    <p className="text-gray-300">
+                      <span className="text-gray-400">To:</span> {packageData.recipientPhone || "Not provided"}
+                    </p>
+                    <p className="text-gray-300 truncate">
+                      <span className="text-gray-400">Item:</span> {packageData.packageDescription || "No description"}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Payment Method */}
-          <div className="bg-gray-800/20 border border-purple-900/30 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-purple-300 font-medium">Payment Method</h3>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 text-purple-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
-                />
-              </svg>
-            </div>
+          {/* Payment Method - Simplified */}
+          <div className="bg-gray-800/30 border border-purple-900/30 rounded-xl p-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-purple-600/20 rounded-lg flex items-center justify-center">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 text-purple-400"
+                    className="h-4 w-4 text-purple-400"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -283,50 +281,22 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
                     />
                   </svg>
                 </div>
-                <span className="text-white font-medium">Cash</span>
+                <div>
+                  <span className="text-white font-medium block">Cash Payment</span>
+                  <span className="text-gray-400 text-xs">Pay the driver upon delivery</span>
+                </div>
               </div>
-              <div className="bg-purple-900/30 text-purple-300 text-xs px-2 py-1 rounded-md">Default</div>
             </div>
           </div>
 
-          {/* Recommended Price */}
-          <div className="text-center">
-            <p className="text-gray-400 mb-2">Recommended Price</p>
-            <button
-              type="button"
-              onClick={useRecommendedFare}
-              className="inline-flex items-center space-x-2 bg-purple-900/30 hover:bg-purple-900/50 border border-purple-700/30 rounded-xl px-4 py-2 transition-all duration-300 group"
-            >
-              <span className="text-white font-medium">${recommendedFare}</span>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 text-purple-400 group-hover:translate-x-1 transition-transform"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-            {packageData.routeDistance ? (
-              <p className="text-xs text-gray-500 mt-2">
-                Distance: {packageData.routeDistance.toFixed(1)} km
-              </p>
-            ) : (
-              <p className="text-xs text-gray-500 mt-2">
-                Based on direct distance only (95¢ per km)
-              </p>
-            )}
-          </div>
-
           {/* Done Button */}
-          <div className="pt-6">
+          <div className="pt-4">
             <button
               type="submit"
               disabled={!fare || parseFloat(fare) <= 0}
               className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl shadow-2xl shadow-purple-900/40 hover:shadow-purple-900/60 transition-all duration-300 transform hover:scale-105 disabled:hover:scale-100"
             >
-              Confirm Booking
+              {fare ? `Book for $${fare}` : "Enter Price to Continue"}
             </button>
           </div>
         </form>

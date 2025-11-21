@@ -1,4 +1,4 @@
-//app/customer/customer-dashboard/page.tsx
+// app/customer/customer-dashboard/page.tsx
 "use client";
 
 import { useState, useRef, useEffect, useContext } from "react";
@@ -169,17 +169,31 @@ export default function CustomerDashboard() {
                 </div>
               )}
               
-              {/* Book Delivery Button */}
-              <button
-                onClick={handleBookDelivery}
-                className="absolute bottom-4 right-4 lg:bottom-6 lg:right-6 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-3 px-6 lg:py-4 lg:px-8 rounded-full shadow-2xl shadow-purple-900/40 transition-all duration-300 flex items-center transform hover:scale-105 z-10 text-sm lg:text-base"
-              >
-                <span className="mr-2 lg:mr-3 text-lg lg:text-xl">🚚</span>
-                Book Delivery
-                <svg xmlns="http://www.w3.org/2000/svg" className="ml-2 h-4 w-4 lg:h-5 lg:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
-              </button>
+              {/* Enhanced Book Delivery Button */}
+              <div className="absolute bottom-4 left-4 right-4 lg:bottom-6 lg:left-auto lg:right-6 z-10">
+                <button
+                  onClick={handleBookDelivery}
+                  className="w-full lg:w-auto bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-4 px-6 lg:py-4 lg:px-8 rounded-2xl shadow-2xl shadow-purple-900/60 transition-all duration-300 flex items-center justify-center transform hover:scale-105 animate-pulse-glow border-2 border-purple-400/30"
+                >
+                  <span className="mr-3 text-xl">🚚</span>
+                  <span className="text-base lg:text-lg">Book Delivery Now</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="ml-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </button>
+                
+                {/* Scroll indicator for mobile */}
+                {isMobile && (
+                  <div className="mt-2 flex justify-center">
+                    <div className="flex items-center text-xs text-purple-300 bg-purple-900/30 px-3 py-1 rounded-full">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                      </svg>
+                      Tap to book delivery
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );
@@ -408,6 +422,21 @@ export default function CustomerDashboard() {
           onLocationsSelected={handleLocationsSelected}
         />
       )}
+
+      {/* Add custom CSS for the glowing animation */}
+      <style jsx global>{`
+        @keyframes pulse-glow {
+          0%, 100% {
+            box-shadow: 0 0 20px 0px rgba(168, 85, 247, 0.4);
+          }
+          50% {
+            box-shadow: 0 0 30px 5px rgba(168, 85, 247, 0.6);
+          }
+        }
+        .animate-pulse-glow {
+          animation: pulse-glow 2s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 }
