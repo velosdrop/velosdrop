@@ -135,171 +135,190 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-end justify-center z-50">
       <div
-        className={`bg-gradient-to-b from-gray-900 to-black w-full max-w-2xl rounded-t-2xl p-6 border-t border-purple-900/30 max-h-[90vh] overflow-y-auto transform transition-transform duration-500 ease-out ${
+        className={`bg-gradient-to-b from-gray-900 to-black w-full max-w-2xl rounded-t-2xl border-t border-purple-900/30 max-h-[90vh] overflow-hidden transform transition-transform duration-500 ease-out ${
           isVisible ? "translate-y-0" : "translate-y-full"
         }`}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <button
-            onClick={onBack}
-            className="p-2 rounded-full hover:bg-purple-900/30 transition-all duration-300"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6 text-purple-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            Set Your Delivery Price
-          </h2>
-          <div className="w-10"></div>
-        </div>
-
-        {/* Progress Indicator */}
-        <div className="flex items-center justify-center space-x-2 mb-8">
-          <div className="w-3 h-3 bg-gray-600 rounded-full"></div>
-          <div className="w-3 h-3 bg-gray-600 rounded-full"></div>
-          <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Fare Input Section - Simplified */}
-          <div className="text-center space-y-4">
-            {/* Input Label */}
-            <div className="text-center mb-2">
-              <p className="text-gray-300 text-sm mb-1">Enter your delivery price</p>
-              <p className="text-gray-500 text-xs">Drivers will see your offer and can accept it</p>
-            </div>
-
-            {/* Input Field */}
-            <div className="relative flex items-center justify-center max-w-xs mx-auto">
-              <div className="absolute left-3 text-purple-400 text-2xl font-bold">$</div>
-              <input
-                ref={inputRef}
-                type="text"
-                inputMode="decimal"
-                value={fare}
-                onChange={handleFareChange}
-                className="w-full pl-10 pr-4 py-4 text-3xl text-center bg-gray-800/50 border-2 border-purple-500/50 rounded-xl text-white focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500/30 backdrop-blur-sm transition-all duration-300"
-                placeholder="0.00"
-              />
-            </div>
-
-            {/* Recommended Price - Now below the input */}
-            <div className="text-center space-y-2">
-              <p className="text-gray-400 text-sm">Recommended price for this trip</p>
+        {/* Scrollable Content Container */}
+        <div className="h-full flex flex-col">
+          {/* Header - Fixed */}
+          <div className="flex-shrink-0 p-6 border-b border-purple-900/30">
+            <div className="flex items-center justify-between mb-2">
               <button
-                type="button"
-                onClick={useRecommendedFare}
-                className="inline-flex items-center space-x-2 bg-purple-900/40 hover:bg-purple-900/60 border border-purple-600/50 rounded-xl px-6 py-3 transition-all duration-300 group hover:scale-105"
+                onClick={onBack}
+                className="p-2 rounded-full hover:bg-purple-900/30 transition-all duration-300"
               >
-                <span className="text-white font-bold text-lg">${recommendedFare}</span>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 text-purple-300 group-hover:translate-x-1 transition-transform"
+                  className="h-6 w-6 text-purple-400"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
+              <h2 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Set Your Delivery Price
+              </h2>
+              <div className="w-10"></div>
+            </div>
+
+            {/* Progress Indicator */}
+            <div className="flex items-center justify-center space-x-2">
+              <div className="w-2 h-2 bg-gray-600 rounded-full"></div>
+              <div className="w-2 h-2 bg-gray-600 rounded-full"></div>
+              <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
             </div>
           </div>
-          {/* Quick Info Cards - Simplified */}
-          <div className="grid grid-cols-1 gap-4">
-            {/* Route Info */}
-            <div className="bg-gray-800/30 border border-purple-900/30 rounded-xl p-4">
-              <div className="flex items-start space-x-3">
-                <div className="flex flex-col items-center pt-1">
-                  <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                  <div className="w-0.5 h-6 bg-purple-500/30 my-1"></div>
-                  <div className="w-3 h-3 bg-pink-500 rounded-full"></div>
+
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Fare Input Section */}
+              <div className="text-center space-y-4">
+                {/* Input Label */}
+                <div className="text-center mb-2">
+                  <p className="text-gray-300 text-sm mb-1">Enter your delivery price</p>
+                  <p className="text-gray-500 text-xs">Drivers will see your offer and can accept it</p>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-purple-300 font-medium text-sm mb-2">Delivery Route</h3>
-                  <div className="space-y-1 text-sm">
-                    <p className="text-white truncate">{packageData.pickupLocation}</p>
-                    <p className="text-white truncate">{packageData.deliveryLocation}</p>
+
+                {/* Input Field */}
+                <div className="relative flex items-center justify-center max-w-xs mx-auto">
+                  <div className="absolute left-3 text-purple-400 text-2xl font-bold">$</div>
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    inputMode="decimal"
+                    value={fare}
+                    onChange={handleFareChange}
+                    className="w-full pl-10 pr-4 py-4 text-3xl text-center bg-gray-800/50 border-2 border-purple-500/50 rounded-xl text-white focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500/30 backdrop-blur-sm transition-all duration-300"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                {/* Recommended Price */}
+                <div className="text-center space-y-2">
+                  <p className="text-gray-400 text-sm">Recommended price for this trip</p>
+                  <button
+                    type="button"
+                    onClick={useRecommendedFare}
+                    className="inline-flex items-center space-x-2 bg-purple-900/40 hover:bg-purple-900/60 border border-purple-600/50 rounded-xl px-6 py-3 transition-all duration-300 group hover:scale-105"
+                  >
+                    <span className="text-white font-bold text-lg">${recommendedFare}</span>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5 text-purple-300 group-hover:translate-x-1 transition-transform"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </button>
+                  {packageData.routeDistance ? (
+                    <p className="text-xs text-gray-500">
+                      Based on {packageData.routeDistance.toFixed(1)} km route • 95¢ per km
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500">
+                      Based on direct distance • 95¢ per km
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Quick Info Cards */}
+              <div className="grid grid-cols-1 gap-4">
+                {/* Route Info */}
+                <div className="bg-gray-800/30 border border-purple-900/30 rounded-xl p-4">
+                  <div className="flex items-start space-x-3">
+                    <div className="flex flex-col items-center pt-1">
+                      <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                      <div className="w-0.5 h-6 bg-purple-500/30 my-1"></div>
+                      <div className="w-3 h-3 bg-pink-500 rounded-full"></div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-purple-300 font-medium text-sm mb-2">Delivery Route</h3>
+                      <div className="space-y-1 text-sm">
+                        <p className="text-white break-words">{packageData.pickupLocation}</p>
+                        <p className="text-white break-words">{packageData.deliveryLocation}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Package Info */}
+                <div className="bg-gray-800/30 border border-purple-900/30 rounded-xl p-4">
+                  <div className="flex items-start space-x-3">
+                    <div className="w-8 h-8 bg-purple-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4 text-purple-400"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7l8 4" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-purple-300 font-medium text-sm mb-2">Package Details</h3>
+                      <div className="space-y-1 text-sm">
+                        <p className="text-gray-300 break-words">
+                          <span className="text-gray-400">To:</span> {packageData.recipientPhone || "Not provided"}
+                        </p>
+                        <p className="text-gray-300 break-words">
+                          <span className="text-gray-400">Item:</span> {packageData.packageDescription || "No description"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Package Info */}
-            <div className="bg-gray-800/30 border border-purple-900/30 rounded-xl p-4">
-              <div className="flex items-start space-x-3">
-                <div className="w-8 h-8 bg-purple-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4 text-purple-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7l8 4" />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-purple-300 font-medium text-sm mb-2">Package Details</h3>
-                  <div className="space-y-1 text-sm">
-                    <p className="text-gray-300">
-                      <span className="text-gray-400">To:</span> {packageData.recipientPhone || "Not provided"}
-                    </p>
-                    <p className="text-gray-300 truncate">
-                      <span className="text-gray-400">Item:</span> {packageData.packageDescription || "No description"}
-                    </p>
+              {/* Payment Method */}
+              <div className="bg-gray-800/30 border border-purple-900/30 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-purple-600/20 rounded-lg flex items-center justify-center">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4 text-purple-400"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
+                        />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-white font-medium block truncate">Cash Payment</span>
+                      <span className="text-gray-400 text-xs">Pay the driver upon delivery</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </form>
           </div>
 
-          {/* Payment Method - Simplified */}
-          <div className="bg-gray-800/30 border border-purple-900/30 rounded-xl p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-purple-600/20 rounded-lg flex items-center justify-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4 text-purple-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <span className="text-white font-medium block">Cash Payment</span>
-                  <span className="text-gray-400 text-xs">Pay the driver upon delivery</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Done Button */}
-          <div className="pt-4">
+          {/* Fixed Footer with Button */}
+          <div className="flex-shrink-0 p-6 border-t border-purple-900/30 bg-gray-900/50">
             <button
               type="submit"
+              onClick={handleSubmit}
               disabled={!fare || parseFloat(fare) <= 0}
               className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl shadow-2xl shadow-purple-900/40 hover:shadow-purple-900/60 transition-all duration-300 transform hover:scale-105 disabled:hover:scale-100"
             >
               {fare ? `Book for $${fare}` : "Enter Price to Continue"}
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
