@@ -304,19 +304,18 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
                   </div>
                 </div>
               </div>
-            </form>
-          </div>
 
-          {/* Fixed Footer with Button */}
-          <div className="flex-shrink-0 p-6 border-t border-purple-900/30 bg-gray-900/50">
-            <button
-              type="submit"
-              onClick={handleSubmit}
-              disabled={!fare || parseFloat(fare) <= 0}
-              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl shadow-2xl shadow-purple-900/40 hover:shadow-purple-900/60 transition-all duration-300 transform hover:scale-105 disabled:hover:scale-100"
-            >
-              {fare ? `Book for $${fare}` : "Enter Price to Continue"}
-            </button>
+              {/* Book Button - INSIDE the form but at the bottom of scrollable content */}
+              <div className="pt-4">
+                <button
+                  type="submit"
+                  disabled={!fare || parseFloat(fare) <= 0}
+                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl shadow-2xl shadow-purple-900/40 hover:shadow-purple-900/60 transition-all duration-300 transform hover:scale-105 disabled:hover:scale-100"
+                >
+                  {fare ? `Book for $${fare}` : "Enter Price to Continue"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </div>
