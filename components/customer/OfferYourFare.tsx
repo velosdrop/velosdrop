@@ -225,8 +225,8 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
                 <div className="flex-1">
                   <h3 className="text-purple-300 font-medium text-sm mb-2">Delivery Route</h3>
                   <div className="space-y-1 text-sm">
-                    <p className="text-white truncate">{packageData.pickupLocation}</p>
-                    <p className="text-white truncate">{packageData.deliveryLocation}</p>
+                      <p className="text-white break-words">{packageData.pickupLocation}</p>
+                      <p className="text-white break-words">{packageData.deliveryLocation}</p>
                   </div>
                 </div>
               </div>
@@ -252,8 +252,8 @@ export default function OfferYourFare({ packageData, onBack, onConfirmFare }: Of
                     <p className="text-gray-300">
                       <span className="text-gray-400">To:</span> {packageData.recipientPhone || "Not provided"}
                     </p>
-                    <p className="text-gray-300 truncate">
-                      <span className="text-gray-400">Item:</span> {packageData.packageDescription || "No description"}
+                    <p className="text-gray-300 break-words">
+                    <span className="text-gray-400">Item:</span> {packageData.packageDescription || "No description"}
                     </p>
                   </div>
                 </div>
