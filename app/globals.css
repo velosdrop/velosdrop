@@ -162,3 +162,26 @@
 .animate-slide-up {
   animation: slide-up 0.3s ease-out;
 }
+
+/* Add to your globals.css */
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -20px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.navbar-enter {
+  animation: fadeInDown 0.3s ease-out;
+}
+
+/* Smooth transitions for all interactive elements */
+* {
+  transition-property: color, background-color, border-color, transform, opacity;
+  transition-duration: 200ms;
+  transition-timing-function: ease-in-out;
+}

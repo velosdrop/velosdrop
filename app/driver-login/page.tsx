@@ -214,27 +214,6 @@ export default function DriverLogin() {
         <div className="absolute -top-10 -right-10 w-40 h-40 sm:w-60 sm:h-60 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
         <div className="absolute -bottom-10 -left-10 w-40 h-40 sm:w-60 sm:h-60 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
 
-        {/* Header Section */}
-        <div className="text-center mb-6 sm:mb-8 relative z-10">
-          <div className="inline-flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="w-6 h-6"
-              >
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-            </div>
-            <h1 className="text-3xl font-bold gradient-text">VelosDrop</h1>
-          </div>
-          <p className="text-gray-400">Driver Authentication Portal</p>
-        </div>
-
         {/* Error Message */}
         {errors.form && (
           <motion.div
