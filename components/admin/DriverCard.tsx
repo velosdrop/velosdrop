@@ -18,8 +18,10 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Wallet
 } from 'lucide-react';
+import WalletAdjustmentModal from './WalletAdjustmentModal';
 
 interface DriverWithStats extends SelectDriver {
   totalDeliveries?: number;
@@ -37,6 +39,7 @@ interface DriverCardProps {
 export default function DriverCard({ driver, onStatusChange, onViewDetails }: DriverCardProps) {
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [showWalletModal, setShowWalletModal] = useState(false);
 
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -305,6 +308,18 @@ export default function DriverCard({ driver, onStatusChange, onViewDetails }: Dr
           <MoreVertical className="w-4 h-4 group-hover/btn:translate-x-0.5 transition-transform duration-200" />
         </button>
         
+        {/* Wallet Adjustment Button */}
+        <button
+          onClick={() => setShowWalletModal(true)}
+          className="p-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl transition-all duration-300 transform hover:scale-110 hover:shadow-lg hover:shadow-amber-500/25 group/tooltip relative"
+          title="Adjust Wallet Balance"
+        >
+          <Wallet className="w-4 h-4" />
+          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity duration-200 whitespace-nowrap">
+            Adjust Wallet
+          </div>
+        </button>
+        
         {driver.status === 'active' ? (
           <button
             onClick={() => onStatusChange(driver.id, 'suspended')}
@@ -329,6 +344,20 @@ export default function DriverCard({ driver, onStatusChange, onViewDetails }: Dr
           </button>
         )}
       </div>
+
+      {/* Wallet Adjustment Modal */}
+      {showWalletModal && (
+        <WalletAdjustmentModal
+          driver={driver}
+          isOpen={showWalletModal}
+          onClose={() => setShowWalletModal(false)}
+          onSuccess={() => {
+            // Refresh driver data or show success message
+            setShowWalletModal(false);
+            // You might want to trigger a refresh here
+          }}
+        />
+      )}
 
       {/* Hover Effect Border */}
       <div className="absolute inset-0 rounded-2xl border-2 border-transparent group-hover:border-purple-500/20 transition-all duration-500 pointer-events-none"></div>

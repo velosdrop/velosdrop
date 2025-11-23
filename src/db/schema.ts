@@ -151,8 +151,23 @@ export const paymentReferencesTable = sqliteTable('payment_references', {
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+// Admin wallet adjustments table
+export const adminWalletAdjustments = sqliteTable('admin_wallet_adjustments', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  adminId: integer('admin_id').notNull().references(() => adminsTable.id, { onDelete: 'cascade' }),
+  driverId: integer('driver_id').notNull().references(() => driversTable.id, { onDelete: 'cascade' }),
+  amount: integer('amount').notNull(), // in cents (positive for add, negative for deduct)
+  type: text('type').notNull(), // 'add_funds', 'deduct_funds', 'set_balance'
+  reason: text('reason').notNull(), // 'reward', 'refund', 'correction', 'penalty', 'other'
+  note: text('note'), // Optional detailed explanation
+  previousBalance: integer('previous_balance').notNull(), // Balance before adjustment
+  newBalance: integer('new_balance').notNull(), // Balance after adjustment
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
 
 
+export type InsertAdminWalletAdjustment = typeof adminWalletAdjustments.$inferInsert;
+export type SelectAdminWalletAdjustment = typeof adminWalletAdjustments.$inferSelect;
 export type InsertAdmin = typeof adminsTable.$inferInsert;
 export type SelectAdmin = typeof adminsTable.$inferSelect;
 export type InsertCustomer = typeof customersTable.$inferInsert;

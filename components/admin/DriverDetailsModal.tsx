@@ -40,8 +40,10 @@ import {
   RotateCw,
   ChevronLeft,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  Wallet
 } from 'lucide-react';
+import WalletHistory from './WalletHistory';
 
 interface DriverDetailsModalProps {
   driver: DriverWithStats;
@@ -350,6 +352,7 @@ export default function DriverDetailsModal({
     { id: 'overview', name: 'Overview', icon: <User className="w-4 h-4" /> },
     { id: 'documents', name: 'Documents', icon: <FileText className="w-4 h-4" /> },
     { id: 'performance', name: 'Performance', icon: <TrendingUp className="w-4 h-4" /> },
+    { id: 'wallet', name: 'Wallet History', icon: <Wallet className="w-4 h-4" /> },
   ];
 
   const hasAnyUploadedDocuments = hasAnyDocuments(driver);
@@ -744,6 +747,10 @@ export default function DriverDetailsModal({
                   </button>
                 </div>
               </div>
+            )}
+
+            {activeTab === 'wallet' && (
+              <WalletHistory driverId={driver.id} />
             )}
           </div>
         </div>
