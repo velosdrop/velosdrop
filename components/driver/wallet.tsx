@@ -1,31 +1,61 @@
-// components/driver/wallet.tsx
 'use client';
 
 import { FiPlus, FiArrowUpRight, FiRefreshCw } from 'react-icons/fi';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { db } from '@/src/db/index';
-import { driversTable, driverTransactions, paymentReferencesTable } from '@/src/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { driversTable, driverTransactions } from '@/src/db/schema';
+import { eq } from 'drizzle-orm';
+
+// ✅ FIXED: Only use driverTransactions interface
+interface DriverTransaction {
+  id: number;
+  driver_id: number;
+  amount: number;
+  payment_intent_id: string;
+  status: string;
+  created_at: string;
+}
 
 export default function Wallet() {
   const [balance, setBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<DriverTransaction[]>([]);
   const [driverId, setDriverId] = useState<number | null>(null);
 
+  // ✅ FIXED: Load driverId FIRST, then handle URL params
   useEffect(() => {
-    // Check for refresh parameter
+    const loadDriverId = () => {
+      if (typeof window !== 'undefined') {
+        const savedDriverId = localStorage.getItem('driverId');
+        if (savedDriverId) {
+          const id = parseInt(savedDriverId);
+          setDriverId(id);
+          console.log('✅ Driver ID loaded:', id);
+          return id;
+        } else {
+          console.error('❌ No driver ID found in localStorage');
+          return null;
+        }
+      }
+      return null;
+    };
+
+    const currentDriverId = loadDriverId();
+    
+    // Now check for refresh parameter
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('refresh') === 'true') {
+      if (urlParams.get('refresh') === 'true' && currentDriverId) {
         console.log('🔄 MANUAL REFRESH TRIGGERED VIA URL PARAM');
         const paymentAmount = urlParams.get('amount');
         if (paymentAmount) {
           console.log('💰 PAYMENT SUCCESS DETECTED, AMOUNT:', paymentAmount);
         }
-        refreshWallet();
+        
+        // ✅ FIXED: Only refresh if we have driverId
+        refreshWallet(currentDriverId);
         
         // Clean up URL
         window.history.replaceState({}, '', '/driver/wallet');
@@ -33,198 +63,103 @@ export default function Wallet() {
     }
   }, []);
 
+  // ✅ FIXED: Separate useEffect for initial data load
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Get driver ID from localStorage (saved during registration/login)
-        let currentDriverId: number | null = null;
-        
-        if (typeof window !== 'undefined') {
-          const savedDriverId = localStorage.getItem('driverId');
-          if (savedDriverId) {
-            currentDriverId = parseInt(savedDriverId);
-            setDriverId(currentDriverId);
-          }
-        }
+    if (driverId) {
+      fetchData(driverId);
+      
+      // Set up polling for real-time updates
+      const interval = setInterval(() => {
+        fetchData(driverId);
+      }, 30000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [driverId]);
 
-        // If no driver ID found, redirect to login
-        if (!currentDriverId) {
-          console.error('❌ No driver ID found. Please log in.');
-          setLoading(false);
-          return;
-        }
+  const fetchData = async (currentDriverId: number) => {
+    try {
+      console.log('🔄 Fetching wallet data for driver:', currentDriverId);
 
-        console.log('🔄 Fetching wallet data for driver:', currentDriverId);
-
-        // Fetch balance from database
-        const balanceResult = await db.select({ 
-          balance: driversTable.balance 
-        }).from(driversTable).where(eq(driversTable.id, currentDriverId));
-        
-        if (balanceResult.length > 0) {
-          const balanceInDollars = balanceResult[0].balance / 100;
-          setBalance(balanceInDollars);
-          console.log('✅ Balance fetched:', balanceInDollars, '(Raw balance:', balanceResult[0].balance, 'cents)');
-        } else {
-          console.error('❌ No driver found with ID:', currentDriverId);
-          setBalance(0);
-        }
-
-        // ✅ UPDATED: Fetch transactions from BOTH driverTransactions AND paymentReferencesTable
-        const driverTxResult = await db.select()
-          .from(driverTransactions)
-          .where(eq(driverTransactions.driver_id, currentDriverId))
-          .orderBy(driverTransactions.created_at)
-          .limit(10);
-
-        const paymentRefResult = await db.select()
-          .from(paymentReferencesTable)
-          .where(eq(paymentReferencesTable.driverId, currentDriverId))
-          .orderBy(paymentReferencesTable.createdAt)
-          .limit(10);
-
-        console.log('📊 TRANSACTION SOURCES:', {
-          driverTransactions: driverTxResult.length,
-          paymentReferences: paymentRefResult.length
-        });
-
-        // Combine both transaction sources
-        const allTransactions = [
-          ...driverTxResult.map(tx => ({
-            id: tx.id,
-            amount: tx.amount,
-            status: tx.status,
-            created_at: tx.created_at,
-            type: 'wallet_topup',
-            description: 'Wallet Top Up'
-          })),
-          ...paymentRefResult.map(ref => ({
-            id: ref.id,
-            amount: ref.amount,
-            status: ref.status,
-            created_at: ref.createdAt,
-            type: 'payment_reference',
-            description: 'Mobile Payment',
-            reference: ref.reference
-          }))
-        ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-         .slice(0, 8); // Get latest 8 transactions
-
-        setTransactions(allTransactions);
-        console.log('✅ Combined transactions fetched:', allTransactions.length);
-        
-      } catch (error) {
-        console.error('❌ Error fetching wallet data:', error);
+      // Fetch balance from database
+      const balanceResult = await db.select({ 
+        balance: driversTable.balance 
+      }).from(driversTable).where(eq(driversTable.id, currentDriverId));
+      
+      if (balanceResult.length > 0) {
+        const balanceInDollars = balanceResult[0].balance / 100;
+        setBalance(balanceInDollars);
+        console.log('✅ Balance fetched:', balanceInDollars, '(Raw balance:', balanceResult[0].balance, 'cents)');
+      } else {
+        console.error('❌ No driver found with ID:', currentDriverId);
         setBalance(0);
-        setTransactions([]);
-      } finally {
-        setLoading(false);
       }
-    };
 
-    fetchData();
+      // ✅ FIXED: Use ONLY driverTransactions table (they have the actual balance updates)
+      const driverTxResult = await db.select()
+        .from(driverTransactions)
+        .where(eq(driverTransactions.driver_id, currentDriverId))
+        .orderBy(driverTransactions.created_at)
+        .limit(10);
 
-    // Set up polling for real-time updates
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, []);
+      console.log('📊 TRANSACTIONS FROM DATABASE:', {
+        totalTransactions: driverTxResult.length,
+        transactions: driverTxResult.map(tx => ({
+          id: tx.id,
+          amount: tx.amount,
+          status: tx.status,
+          payment_intent_id: tx.payment_intent_id,
+          created_at: tx.created_at
+        }))
+      });
 
-  // ✅ UPDATED: Enhanced manual refresh function with debugging
-  const refreshWallet = async () => {
-    setRefreshing(true);
+      setTransactions(driverTxResult);
+      
+    } catch (error) {
+      console.error('❌ Error fetching wallet data:', error);
+      setBalance(0);
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ FIXED: Enhanced manual refresh function that accepts driverId
+  const refreshWallet = async (currentDriverId?: number) => {
+    const idToUse = currentDriverId || driverId;
     
-    if (!driverId) {
+    if (!idToUse) {
       console.error('❌ No driver ID for refresh');
       setRefreshing(false);
       return;
     }
 
+    setRefreshing(true);
+    
     try {
-      console.log('🔄 MANUALLY REFRESHING WALLET DATA FOR DRIVER:', driverId);
+      console.log('🔄 MANUALLY REFRESHING WALLET DATA FOR DRIVER:', idToUse);
       
       const balanceResult = await db.select({ 
         balance: driversTable.balance 
-      }).from(driversTable).where(eq(driversTable.id, driverId));
+      }).from(driversTable).where(eq(driversTable.id, idToUse));
       
       if (balanceResult.length > 0) {
         const newBalance = balanceResult[0].balance / 100;
         setBalance(newBalance);
         console.log('✅ Wallet balance refreshed:', newBalance, '(Raw balance:', balanceResult[0].balance, 'cents)');
-        
-        // ✅ ADDED: Debug - check if there are any completed payments
-        const completedPayments = await db.select()
-          .from(paymentReferencesTable)
-          .where(
-            and(
-              eq(paymentReferencesTable.driverId, driverId),
-              eq(paymentReferencesTable.status, 'completed')
-            )
-          );
-        
-        console.log('🔍 COMPLETED PAYMENTS COUNT:', completedPayments.length);
-        completedPayments.forEach(payment => {
-          console.log('💰 COMPLETED PAYMENT:', {
-            amount: payment.amount,
-            amountInDollars: (payment.amount / 100).toFixed(2),
-            reference: payment.reference,
-            createdAt: payment.createdAt
-          });
-        });
-
-        // ✅ ADDED: Check driver transactions too
-        const driverTx = await db.select()
-          .from(driverTransactions)
-          .where(eq(driverTransactions.driver_id, driverId));
-
-        console.log('🔍 DRIVER TRANSACTIONS COUNT:', driverTx.length);
-        driverTx.forEach(tx => {
-          console.log('💳 DRIVER TRANSACTION:', {
-            amount: tx.amount,
-            amountInDollars: (tx.amount / 100).toFixed(2),
-            status: tx.status,
-            created_at: tx.created_at
-          });
-        });
       } else {
         console.error('❌ No driver found during refresh');
       }
 
-      // Refresh transactions too
+      // ✅ FIXED: Refresh transactions using ONLY driverTransactions
       const driverTxResult = await db.select()
         .from(driverTransactions)
-        .where(eq(driverTransactions.driver_id, driverId))
+        .where(eq(driverTransactions.driver_id, idToUse))
         .orderBy(driverTransactions.created_at)
         .limit(10);
 
-      const paymentRefResult = await db.select()
-        .from(paymentReferencesTable)
-        .where(eq(paymentReferencesTable.driverId, driverId))
-        .orderBy(paymentReferencesTable.createdAt)
-        .limit(10);
-
-      const allTransactions = [
-        ...driverTxResult.map(tx => ({
-          id: tx.id,
-          amount: tx.amount,
-          status: tx.status,
-          created_at: tx.created_at,
-          type: 'wallet_topup',
-          description: 'Wallet Top Up'
-        })),
-        ...paymentRefResult.map(ref => ({
-          id: ref.id,
-          amount: ref.amount,
-          status: ref.status,
-          created_at: ref.createdAt,
-          type: 'payment_reference',
-          description: 'Mobile Payment',
-          reference: ref.reference
-        }))
-      ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-       .slice(0, 8);
-
-      setTransactions(allTransactions);
-      console.log('✅ Transactions refreshed:', allTransactions.length);
+      setTransactions(driverTxResult);
+      console.log('✅ Transactions refreshed:', driverTxResult.length);
     } catch (error) {
       console.error('❌ Error refreshing wallet:', error);
     } finally {
@@ -232,8 +167,13 @@ export default function Wallet() {
     }
   };
 
+  // Update the refresh button to use the current driverId
+  const handleRefreshClick = () => {
+    refreshWallet();
+  };
+
   // Format transaction amount for display
-  const formatTransactionAmount = (amount: number, type: string) => {
+  const formatTransactionAmount = (amount: number) => {
     const amountInDollars = Math.abs(amount) / 100;
     const sign = amount > 0 ? '+' : '-';
     return `${sign}$${amountInDollars.toFixed(2)}`;
@@ -273,6 +213,20 @@ export default function Wallet() {
     }
   };
 
+  // ✅ FIXED: Get transaction description based on status
+  const getTransactionDescription = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'Wallet Top Up';
+      case 'pending':
+        return 'Wallet Top Up - Pending';
+      case 'failed':
+        return 'Wallet Top Up - Failed';
+      default:
+        return 'Wallet Transaction';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
@@ -283,8 +237,8 @@ export default function Wallet() {
             <p className="text-gray-600">Manage your earnings and payments</p>
           </div>
           <button
-            onClick={refreshWallet}
-            disabled={refreshing || loading}
+            onClick={handleRefreshClick}
+            disabled={refreshing || loading || !driverId}
             className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 rounded-lg border border-gray-300 hover:border-purple-500 hover:text-purple-600 transition-all duration-200 disabled:opacity-50 shadow-sm"
           >
             <FiRefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -326,9 +280,9 @@ export default function Wallet() {
             <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">Recent Transactions</h3>
-                <button className="text-sm text-purple-600 hover:text-purple-800 font-medium">
-                  View All
-                </button>
+                <span className="text-sm text-gray-500">
+                  {transactions.length} transactions
+                </span>
               </div>
               <div className="space-y-4">
                 {loading ? (
@@ -352,23 +306,24 @@ export default function Wallet() {
                             </svg>
                           )}
                         </div>
-                        <div>
+                        <div className="flex-1">
                           <h4 className="font-medium text-gray-900">
-                            {tx.description || (tx.amount > 0 ? 'Top Up' : 'Withdrawal')}
+                            {getTransactionDescription(tx.status)}
                           </h4>
                           <p className="text-sm text-gray-500">
                             {formatTransactionDate(tx.created_at)}
                           </p>
-                          {tx.reference && (
-                            <p className="text-xs text-gray-400 font-mono">
-                              {tx.reference.substring(0, 8)}...
+                          {/* ✅ FIXED: Show full payment reference */}
+                          {tx.payment_intent_id && (
+                            <p className="text-xs text-gray-400 font-mono break-all">
+                              Ref: {tx.payment_intent_id}
                             </p>
                           )}
                         </div>
                       </div>
                       <div className="text-right">
                         <p className={`font-medium text-lg ${tx.amount > 0 ? 'text-green-600' : 'text-purple-600'}`}>
-                          {formatTransactionAmount(tx.amount, tx.type)}
+                          {formatTransactionAmount(tx.amount)}
                         </p>
                         <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(tx.status)}`}>
                           {tx.status}

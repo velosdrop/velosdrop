@@ -74,34 +74,6 @@ async function publishTransactionUpdate(transactionData: any) {
   }
 }
 
-// Helper function to create transaction record
-async function createTransactionRecord(driverId: number, amount: number, reference: string, status: string) {
-  try {
-    // Convert amount to cents for consistent storage
-    const amountInCents = Math.round(amount * 100);
-    
-    const transaction = await db.insert(driverTransactions).values({
-      driver_id: driverId,
-      amount: amountInCents,
-      payment_intent_id: reference,
-      status: status,
-      created_at: new Date().toISOString()
-    }).returning();
-
-    console.log('✅ Transaction record created:', {
-      transactionId: transaction[0].id,
-      driverId: driverId,
-      amount: amountInCents,
-      status: status
-    });
-
-    return transaction[0];
-  } catch (error) {
-    console.error('❌ Error creating transaction record:', error);
-    throw error;
-  }
-}
-
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -113,7 +85,9 @@ export default async function handler(
   try {
     const paymentStatus = req.body;
     
-    console.log('🔔 LIVE PAYNOW WEBHOOK RECEIVED:', {
+    // ✅ ADDED: Unique request ID to track multiple calls
+    const requestId = Math.random().toString(36).substr(2, 9);
+    console.log('🔔 LIVE PAYNOW WEBHOOK RECEIVED - REQUEST ID:', requestId, {
       reference: paymentStatus.reference,
       amount: paymentStatus.amount,
       status: paymentStatus.status,
@@ -122,9 +96,33 @@ export default async function handler(
       receivedAt: new Date().toISOString()
     });
 
+    // ✅ ADDED: Duplicate payment protection
+    const existingTransactions = await db
+      .select()
+      .from(driverTransactions)
+      .where(eq(driverTransactions.payment_intent_id, paymentStatus.reference))
+      .limit(1);
+
+    if (existingTransactions.length > 0 && existingTransactions[0].status === 'completed') {
+      console.log('⚠️ DUPLICATE WEBHOOK CALL - PAYMENT ALREADY PROCESSED:', {
+        requestId: requestId,
+        reference: paymentStatus.reference,
+        existingTransactionId: existingTransactions[0].id,
+        existingStatus: existingTransactions[0].status
+      });
+      
+      return res.status(200).json({ 
+        status: 'OK',
+        message: 'Payment already processed',
+        reference: paymentStatus.reference,
+        requestId: requestId
+      });
+    }
+
     // Process LIVE payment based on status
     if (paymentStatus.status && paymentStatus.status.toLowerCase() === 'paid') {
       console.log('💰 LIVE PAYMENT SUCCESSFUL - Processing...', {
+        requestId: requestId,
         reference: paymentStatus.reference,
         amount: paymentStatus.amount,
         method: paymentStatus.method
@@ -134,14 +132,30 @@ export default async function handler(
       const driverId = await getDriverIdFromReference(paymentStatus.reference);
       
       if (driverId) {
-        // Update driver's wallet balance
-        await updateDriverWallet(
+        // ✅ ADDED: Debug amount analysis
+        console.log('🔍 AMOUNT ANALYSIS:', {
+          requestId: requestId,
+          rawAmount: paymentStatus.amount,
+          parsedAmount: parseFloat(paymentStatus.amount),
+          type: typeof paymentStatus.amount,
+          expectedFor$0_10: '0.10'
+        });
+
+        // ✅ FIXED: Only call updateDriverWallet - it already creates the transaction record
+        const updateResult = await updateDriverWallet(
           driverId,
           parseFloat(paymentStatus.amount),
           paymentStatus.reference
         );
         
-        // Update payment reference status
+        console.log('✅ WALLET UPDATE RESULT:', {
+          requestId: requestId,
+          driverId: driverId,
+          reference: paymentStatus.reference,
+          updateResult: updateResult
+        });
+        
+        // ✅ FIXED: Update payment reference status (separate from transaction)
         await db
           .update(paymentReferencesTable)
           .set({
@@ -150,35 +164,43 @@ export default async function handler(
           })
           .where(eq(paymentReferencesTable.reference, paymentStatus.reference));
         
-        // ✅ CREATE TRANSACTION RECORD
-        const transaction = await createTransactionRecord(
-          driverId,
-          parseFloat(paymentStatus.amount),
-          paymentStatus.reference,
-          'completed'
-        );
-        
-        // ✅ GET DRIVER DETAILS FOR REAL-TIME UPDATE
+        // ✅ FIXED: Get driver details for real-time update
         const driverDetails = await getDriverDetails(driverId);
         
-        // ✅ PUBLISH REAL-TIME UPDATE TO PUBNUB
-        await publishTransactionUpdate({
-          ...transaction,
-          driver: driverDetails
-        });
+        // ✅ FIXED: Get the created transaction for real-time update
+        const latestTransaction = await db
+          .select()
+          .from(driverTransactions)
+          .where(eq(driverTransactions.payment_intent_id, paymentStatus.reference))
+          .limit(1);
+        
+        if (latestTransaction.length > 0) {
+          // ✅ FIXED: Publish real-time update
+          await publishTransactionUpdate({
+            ...latestTransaction[0],
+            driver: driverDetails
+          });
+        }
         
         console.log('✅ LIVE PAYMENT PROCESSED COMPLETELY:', {
+          requestId: requestId,
           reference: paymentStatus.reference,
           driverId: driverId,
           amount: paymentStatus.amount,
-          transactionId: transaction.id
+          transactionId: latestTransaction[0]?.id
         });
       } else {
-        console.error('❌ Could not find driver ID for reference:', paymentStatus.reference);
+        console.error('❌ Could not find driver ID for reference:', {
+          requestId: requestId,
+          reference: paymentStatus.reference
+        });
       }
       
     } else if (paymentStatus.status && paymentStatus.status.toLowerCase() === 'cancelled') {
-      console.log('❌ LIVE PAYMENT CANCELLED:', paymentStatus.reference);
+      console.log('❌ LIVE PAYMENT CANCELLED:', {
+        requestId: requestId,
+        reference: paymentStatus.reference
+      });
       
       // Get driver ID from payment reference
       const driverId = await getDriverIdFromReference(paymentStatus.reference);
@@ -192,57 +214,64 @@ export default async function handler(
         })
         .where(eq(paymentReferencesTable.reference, paymentStatus.reference));
       
-      // ✅ CREATE FAILED TRANSACTION RECORD
+      // ✅ FIXED: Only create transaction record for failed status
       if (driverId) {
-        const transaction = await createTransactionRecord(
-          driverId,
-          parseFloat(paymentStatus.amount),
-          paymentStatus.reference,
-          'failed'
-        );
-        
-        // ✅ GET DRIVER DETAILS FOR REAL-TIME UPDATE
+        const transaction = await db.insert(driverTransactions).values({
+          driver_id: driverId,
+          amount: Math.round(parseFloat(paymentStatus.amount) * 100),
+          payment_intent_id: paymentStatus.reference,
+          status: 'failed',
+          created_at: new Date().toISOString()
+        }).returning();
+
+        // ✅ FIXED: Get driver details for real-time update
         const driverDetails = await getDriverDetails(driverId);
         
-        // ✅ PUBLISH REAL-TIME UPDATE TO PUBNUB
+        // ✅ FIXED: Publish real-time update
         await publishTransactionUpdate({
-          ...transaction,
+          ...transaction[0],
           driver: driverDetails
         });
         
         console.log('❌ FAILED TRANSACTION RECORD CREATED:', {
-          transactionId: transaction.id,
+          requestId: requestId,
+          transactionId: transaction[0].id,
           driverId: driverId,
           status: 'failed'
         });
       }
       
     } else if (paymentStatus.status && paymentStatus.status.toLowerCase() === 'sent') {
-      console.log('📨 LIVE PAYMENT SENT (Awaiting confirmation):', paymentStatus.reference);
+      console.log('📨 LIVE PAYMENT SENT (Awaiting confirmation):', {
+        requestId: requestId,
+        reference: paymentStatus.reference
+      });
       
       // Get driver ID from payment reference
       const driverId = await getDriverIdFromReference(paymentStatus.reference);
       
-      // ✅ CREATE PENDING TRANSACTION RECORD
+      // ✅ FIXED: Only create pending transaction record
       if (driverId) {
-        const transaction = await createTransactionRecord(
-          driverId,
-          parseFloat(paymentStatus.amount),
-          paymentStatus.reference,
-          'pending'
-        );
-        
-        // ✅ GET DRIVER DETAILS FOR REAL-TIME UPDATE
+        const transaction = await db.insert(driverTransactions).values({
+          driver_id: driverId,
+          amount: Math.round(parseFloat(paymentStatus.amount) * 100),
+          payment_intent_id: paymentStatus.reference,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        }).returning();
+
+        // ✅ FIXED: Get driver details for real-time update
         const driverDetails = await getDriverDetails(driverId);
         
-        // ✅ PUBLISH REAL-TIME UPDATE TO PUBNUB
+        // ✅ FIXED: Publish real-time update
         await publishTransactionUpdate({
-          ...transaction,
+          ...transaction[0],
           driver: driverDetails
         });
         
         console.log('📨 PENDING TRANSACTION RECORD CREATED:', {
-          transactionId: transaction.id,
+          requestId: requestId,
+          transactionId: transaction[0].id,
           driverId: driverId,
           status: 'pending'
         });
@@ -250,6 +279,7 @@ export default async function handler(
       
     } else {
       console.log('⚠️ UNKNOWN LIVE PAYMENT STATUS:', {
+        requestId: requestId,
         status: paymentStatus.status,
         reference: paymentStatus.reference
       });
@@ -257,26 +287,28 @@ export default async function handler(
       // Get driver ID from payment reference
       const driverId = await getDriverIdFromReference(paymentStatus.reference);
       
-      // ✅ CREATE TRANSACTION RECORD FOR UNKNOWN STATUS
+      // ✅ FIXED: Only create transaction record for unknown status
       if (driverId) {
-        const transaction = await createTransactionRecord(
-          driverId,
-          parseFloat(paymentStatus.amount),
-          paymentStatus.reference,
-          'pending' // Default to pending for unknown status
-        );
-        
-        // ✅ GET DRIVER DETAILS FOR REAL-TIME UPDATE
+        const transaction = await db.insert(driverTransactions).values({
+          driver_id: driverId,
+          amount: Math.round(parseFloat(paymentStatus.amount) * 100),
+          payment_intent_id: paymentStatus.reference,
+          status: 'pending', // Default to pending for unknown status
+          created_at: new Date().toISOString()
+        }).returning();
+
+        // ✅ FIXED: Get driver details for real-time update
         const driverDetails = await getDriverDetails(driverId);
         
-        // ✅ PUBLISH REAL-TIME UPDATE TO PUBNUB
+        // ✅ FIXED: Publish real-time update
         await publishTransactionUpdate({
-          ...transaction,
+          ...transaction[0],
           driver: driverDetails
         });
         
         console.log('⚠️ TRANSACTION RECORD CREATED FOR UNKNOWN STATUS:', {
-          transactionId: transaction.id,
+          requestId: requestId,
+          transactionId: transaction[0].id,
           driverId: driverId,
           status: 'pending'
         });
@@ -288,6 +320,7 @@ export default async function handler(
       status: 'OK',
       message: 'Webhook processed successfully',
       reference: paymentStatus.reference,
+      requestId: requestId,
       processedAt: new Date().toISOString()
     });
     
