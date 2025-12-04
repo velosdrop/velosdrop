@@ -1,4 +1,3 @@
-//app/driver-dashboard/page.tsx
 'use client';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -49,6 +48,20 @@ interface BookingRequest {
   pickupCoords?: { longitude: number; latitude: number };
   dropoffCoords?: { longitude: number; latitude: number };
   recipientPhoneNumber?: string;
+}
+
+interface ActiveDelivery {
+  id: number;
+  deliveryId: number;
+  customerId: number;
+  customerUsername: string;
+  pickupLocation: { longitude: number; latitude: number };
+  deliveryLocation: { longitude: number; latitude: number };
+  pickupAddress: string;
+  deliveryAddress: string;
+  fare: number;
+  customerPhoneNumber?: string;
+  customerLocation?: { longitude: number; latitude: number };
 }
 
 function ConnectionStatus({ isConnected, isOnline }: { isConnected: boolean; isOnline: boolean }) {
@@ -141,11 +154,7 @@ export default function DriverDashboard() {
   const [bookingRequest, setBookingRequest] = useState<BookingRequest | null>(null);
   const [hasNewNotification, setHasNewNotification] = useState(false);
   const [copiedNumber, setCopiedNumber] = useState<string | null>(null);
-  const [activeDelivery, setActiveDelivery] = useState<{
-    pickupLocation: { longitude: number; latitude: number };
-    deliveryLocation: { longitude: number; latitude: number };
-    customerLocation?: { longitude: number; latitude: number };
-  } | null>(null);
+  const [activeDelivery, setActiveDelivery] = useState<ActiveDelivery | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [ratings] = useState({
     average: 4.5,
@@ -328,10 +337,41 @@ export default function DriverDashboard() {
     console.log('✅ Delivery completed, active delivery cleared');
   };
 
-  const handleBookingAccept = async (requestId?: number) => {
-    const requestToAccept = requestId
-      ? bookingRequests.find(req => req.id === requestId)
-      : bookingRequest;
+  // Geocode address function
+  const geocodeAddress = async (address: string): Promise<{ longitude: number; latitude: number }> => {
+    try {
+      const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${MAPBOX_TOKEN}`
+      );
+      const data = await response.json();
+      if (data.features && data.features.length > 0) {
+        return {
+          longitude: data.features[0].center[0],
+          latitude: data.features[0].center[1]
+        };
+      }
+      throw new Error('No coordinates found');
+    } catch (error) {
+      console.error('Error geocoding address:', error);
+      return { longitude: 31.033, latitude: -17.827 };
+    }
+  };
+
+  // UPDATED: handleBookingAccept function with proper type
+  const handleBookingAccept = async (deliveryData?: ActiveDelivery | number) => {
+    // If deliveryData is provided as an ActiveDelivery object (from BookingNotification), use it
+    if (deliveryData && typeof deliveryData !== 'number') {
+      setActiveDelivery(deliveryData);
+      console.log('📍 Active delivery set with chat data:', deliveryData);
+      setActiveTab('map');
+      return;
+    }
+    
+    // If deliveryData is a number (requestId from delivery requests list), find the request
+    const requestId = typeof deliveryData === 'number' ? deliveryData : bookingRequest?.id;
+    const requestToAccept = bookingRequests.find(req => req.id === requestId) || bookingRequest;
+    
     if (!requestToAccept || !driverData) return;
     
     try {
@@ -348,44 +388,26 @@ export default function DriverDashboard() {
       });
       
       if (response.ok) {
-        // Convert addresses to coordinates for the map
-        const geocodeAddress = async (address: string): Promise<{ longitude: number; latitude: number }> => {
-          try {
-            const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
-            const response = await fetch(
-              `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${MAPBOX_TOKEN}`
-            );
-            const data = await response.json();
-            if (data.features && data.features.length > 0) {
-              return {
-                longitude: data.features[0].center[0],
-                latitude: data.features[0].center[1]
-              };
-            }
-            throw new Error('No coordinates found');
-          } catch (error) {
-            console.error('Error geocoding address:', error);
-            // Fallback coordinates
-            return { longitude: 31.033, latitude: -17.827 };
-          }
-        };
-
-        // Set active delivery with coordinates
         const pickupCoords = await geocodeAddress(requestToAccept.pickupLocation);
         const deliveryCoords = await geocodeAddress(requestToAccept.dropoffLocation);
         
-        setActiveDelivery({
+        const newActiveDelivery: ActiveDelivery = {
+          id: requestToAccept.id,
+          deliveryId: requestToAccept.id,
+          customerId: requestToAccept.customerId,
+          customerUsername: requestToAccept.customerUsername,
           pickupLocation: pickupCoords,
           deliveryLocation: deliveryCoords,
-          // You can add customer location here if available
-        });
+          pickupAddress: requestToAccept.pickupLocation,
+          deliveryAddress: requestToAccept.dropoffLocation,
+          fare: requestToAccept.fare,
+          customerPhoneNumber: requestToAccept.customerPhoneNumber
+        };
 
-        console.log('📍 Active delivery set with coordinates:', {
-          pickup: pickupCoords,
-          delivery: deliveryCoords
-        });
+        setActiveDelivery(newActiveDelivery);
+        console.log('📍 Active delivery set with coordinates and chat data');
 
-        // Update both notification and list to keep them synchronized
+        // Update notification and list
         if (bookingRequest?.id === requestToAccept.id) {
           setBookingRequest(null);
         }
@@ -402,7 +424,7 @@ export default function DriverDashboard() {
         if (!hasOtherPending) {
           setHasNewNotification(false);
         }
-        setActiveTab('map'); // Switch to map tab to see the routes
+        setActiveTab('map');
       } else {
         throw new Error('Failed to accept booking');
       }
@@ -582,7 +604,7 @@ export default function DriverDashboard() {
       {bookingRequest && driverData?.id && (
         <BookingNotification
           request={bookingRequest}
-          onAccept={() => handleBookingAccept()}
+          onAccept={(deliveryData) => handleBookingAccept(deliveryData)}
           onReject={() => handleBookingReject()}
           onExpire={handleBookingExpire}
           isConnected={isConnected}

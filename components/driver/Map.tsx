@@ -1,9 +1,10 @@
-// components/driver/Map.tsx
+//components/driver/Map.tsx
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import LocationPermissionRequest from '@/components/driver/LocationPermissionRequest';
+import ChatBubble from '@/components/driver/ChatBubble'; // We'll create this next
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 if (!MAPBOX_TOKEN) {
@@ -25,10 +26,18 @@ interface MapProps {
     };
   };
   activeDelivery?: {
+    id: number; // Added for chat
+    deliveryId: number; // Added for chat
+    customerId: number; // Added for chat
+    customerUsername: string; // Added for chat
     pickupLocation: { longitude: number; latitude: number };
     deliveryLocation: { longitude: number; latitude: number };
     customerLocation?: { longitude: number; latitude: number };
-  } | null; // Added null to fix the TypeScript error
+    pickupAddress: string; // Added for chat context
+    deliveryAddress: string; // Added for chat context
+    fare: number; // Added for chat context
+    customerPhoneNumber?: string; // Added for chat
+  } | null;
 }
 
 export default function Map({
@@ -56,6 +65,31 @@ export default function Map({
   const [driverToCustomerRouteData, setDriverToCustomerRouteData] = useState<any>(null);
   const [currentEta, setCurrentEta] = useState<number | null>(null);
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
+
+  // Image upload handler for chat
+  const handleImageUpload = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('deliveryId', activeDelivery?.deliveryId.toString() || '');
+    formData.append('driverId', driverId?.toString() || '');
+    
+    try {
+      const response = await fetch('/api/upload/delivery-proof', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to upload image');
+      }
+      
+      const data = await response.json();
+      return data.imageUrl;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      throw error;
+    }
+  };
 
   // Add this useEffect for debugging
   useEffect(() => {
@@ -888,6 +922,16 @@ export default function Map({
             <span className="text-xs">High Accuracy GPS</span>
           </div>
         </div>
+      )}
+
+      {/* CHAT BUBBLE - Only show when we have an active delivery */}
+      {activeDelivery && driverId && activeDelivery.customerId && (
+        <ChatBubble
+          driverId={driverId}
+          deliveryId={activeDelivery.deliveryId}
+          customerId={activeDelivery.customerId}
+          onSendImage={handleImageUpload}
+        />
       )}
 
       <div ref={mapContainer} style={style} className="h-full w-full" />

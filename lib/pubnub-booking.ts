@@ -35,6 +35,11 @@ export const MESSAGE_TYPES = {
   DRIVER_LOCATION_UPDATE: 'driver_location_update',
   BOOKING_STATUS_UPDATE: 'booking_status_update',
   DRIVER_ONLINE_STATUS: 'driver_online_status',
+
+  // Chat messages
+  CHAT_MESSAGE: 'chat_message',
+  NEW_MESSAGE: 'new_message',
+  MESSAGE_READ: 'message_read',
   
   // Add the missing message types for driver notifications
   REQUEST_ACCEPTED: 'request_accepted',

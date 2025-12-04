@@ -165,6 +165,21 @@ export const adminWalletAdjustments = sqliteTable('admin_wallet_adjustments', {
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+//The messages table
+export const messagesTable = sqliteTable('messages', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  deliveryId: integer('delivery_id').notNull().references(() => deliveryRequestsTable.id, { onDelete: 'cascade' }),
+  senderType: text('sender_type').notNull(), // 'driver', 'customer', 'system'
+  senderId: integer('sender_id').notNull(), // driverId or customerId
+  messageType: text('message_type').default('text').notNull(), // 'text', 'image', 'status_update', 'location'
+  content: text('content').notNull(), // Text message or image URL
+  imageUrl: text('image_url'), // Optional: for image messages
+  metadata: text('metadata').$type<Record<string, any>>(), // Additional data like location coords
+  isRead: integer('is_read', { mode: 'boolean' }).default(false).notNull(),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+
 
 export type InsertAdminWalletAdjustment = typeof adminWalletAdjustments.$inferInsert;
 export type SelectAdminWalletAdjustment = typeof adminWalletAdjustments.$inferSelect;
@@ -184,6 +199,8 @@ export type InsertDriverResponse = typeof driverResponsesTable.$inferInsert;
 export type SelectDriverResponse = typeof driverResponsesTable.$inferSelect;
 export type InsertPaymentReference = typeof paymentReferencesTable.$inferInsert;
 export type SelectPaymentReference = typeof paymentReferencesTable.$inferSelect;
+export type InsertMessage = typeof messagesTable.$inferInsert;
+export type SelectMessage = typeof messagesTable.$inferSelect;
 
 export interface Admin extends Omit<SelectAdmin, 'isActive'> {
   isActive: boolean;

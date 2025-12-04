@@ -1,4 +1,4 @@
-// app/customer/customer-dashboard/page.tsx
+//app/customer/customer-dashboard/page.tsx
 "use client";
 
 import { useState, useRef, useEffect, useContext } from "react";
@@ -23,6 +23,7 @@ export default function CustomerDashboard() {
   const [deliveryLocation, setDeliveryLocation] = useState<{longitude: number; latitude: number; address?: string} | undefined>();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const { customer, clearUser, updateProfilePicture } = useUser();
@@ -69,7 +70,28 @@ export default function CustomerDashboard() {
         address: deliveryData.delivery.address
       });
     }
+    
+    // Fetch unread message count
+    if (customer.id) {
+      fetchUnreadMessageCount();
+      
+      // Set up polling for message count updates
+      const interval = setInterval(fetchUnreadMessageCount, 15000);
+      return () => clearInterval(interval);
+    }
   }, [customer, router, deliveryData]);
+
+  const fetchUnreadMessageCount = async () => {
+    try {
+      const response = await fetch(`/api/customer/${customer?.id}/unread-message-count`);
+      if (response.ok) {
+        const data = await response.json();
+        setUnreadMessageCount(data.count || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching unread message count:', error);
+    }
+  };
 
   const handleProfileImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -315,10 +337,18 @@ export default function CustomerDashboard() {
                 id: "notifications", 
                 name: "Notifications", 
                 icon: (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-                  </svg>
-                )
+                  <div className="relative">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                    </svg>
+                    {unreadMessageCount > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-4 h-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] rounded-full flex items-center justify-center px-1 border border-gray-900">
+                        {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                      </span>
+                    )}
+                  </div>
+                ),
+                badge: unreadMessageCount
               },
               { 
                 id: "help", 
@@ -359,7 +389,14 @@ export default function CustomerDashboard() {
                     <>
                       <span className="ml-3 font-medium tracking-wide text-sm lg:text-base">{item.name}</span>
                       {activeSection === item.id && (
-                        <div className="ml-auto w-2 h-2 bg-gradient-to-r from-purple-400 to-indigo-400 rounded-full animate-pulse"></div>
+                        <div className="ml-auto flex items-center">
+                          {item.badge && item.badge > 0 && (
+                            <span className="mr-2 min-w-5 h-5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs rounded-full flex items-center justify-center px-1">
+                              {item.badge > 9 ? '9+' : item.badge}
+                            </span>
+                          )}
+                          <div className="w-2 h-2 bg-gradient-to-r from-purple-400 to-indigo-400 rounded-full animate-pulse"></div>
+                        </div>
                       )}
                     </>
                   )}
@@ -387,7 +424,11 @@ export default function CustomerDashboard() {
               </button>
               
               <h1 className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-                {activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}
+                {activeSection === 'notifications' && unreadMessageCount > 0 ? (
+                  <>Messages ({unreadMessageCount} unread)</>
+                ) : (
+                  activeSection.charAt(0).toUpperCase() + activeSection.slice(1)
+                )}
               </h1>
             </div>
             

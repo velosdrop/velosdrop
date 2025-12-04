@@ -26,7 +26,18 @@ interface BookingRequest {
 
 interface BookingNotificationProps {
   request: BookingRequest;
-  onAccept: () => void;
+  onAccept: (deliveryData: {
+    id: number;
+    deliveryId: number;
+    customerId: number;
+    customerUsername: string;
+    pickupLocation: { longitude: number; latitude: number };
+    deliveryLocation: { longitude: number; latitude: number };
+    pickupAddress: string;
+    deliveryAddress: string;
+    fare: number;
+    customerPhoneNumber?: string;
+  }) => void;
   onReject: () => void;
   onExpire: () => void;
   isConnected: boolean;
@@ -336,7 +347,7 @@ export default function BookingNotification({
     };
   };
 
-  // UPDATED: handleAccept with order context
+  // UPDATED: handleAccept with comprehensive delivery data
   const handleAccept = async () => {
     if (isProcessing) return;
     
@@ -397,10 +408,54 @@ export default function BookingNotification({
 
       if (response.ok) {
         console.log('✅ Booking accepted successfully');
-        setIsVisible(false);
-        onAccept();
         
-        // PASS THE ORDER ID TO TRACKING FUNCTION
+        // Geocode addresses to coordinates
+        const geocodeAddress = async (address: string): Promise<{ longitude: number; latitude: number }> => {
+          try {
+            const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+            const response = await fetch(
+              `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${MAPBOX_TOKEN}`
+            );
+            const data = await response.json();
+            if (data.features && data.features.length > 0) {
+              return {
+                longitude: data.features[0].center[0],
+                latitude: data.features[0].center[1]
+              };
+            }
+            throw new Error('No coordinates found');
+          } catch (error) {
+            console.error('Error geocoding address:', error);
+            // Fallback coordinates
+            return { longitude: 31.033, latitude: -17.827 };
+          }
+        };
+
+        // Get coordinates for map
+        const pickupCoords = await geocodeAddress(request.pickupLocation);
+        const deliveryCoords = await geocodeAddress(request.dropoffLocation);
+        
+        // Prepare comprehensive delivery data for parent component
+        const deliveryData = {
+          id: requestId,
+          deliveryId: requestId,
+          customerId: request.customerId,
+          customerUsername: request.customerUsername,
+          pickupLocation: pickupCoords,
+          deliveryLocation: deliveryCoords,
+          pickupAddress: request.pickupLocation,
+          deliveryAddress: request.dropoffLocation,
+          fare: request.fare,
+          customerPhoneNumber: request.customerPhoneNumber
+        };
+
+        // Call parent onAccept with full delivery data
+        onAccept(deliveryData);
+        
+        // Hide notification
+        setIsVisible(false);
+        
+        // Start real-time tracking
         startRealTimeTracking(request.customerId, request.pickupLocation, request.dropoffLocation, requestId);
       } else {
         let errorData;
