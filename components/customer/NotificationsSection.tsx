@@ -1,11 +1,11 @@
-//components/customer/NotificationsSection.tsx
+// components/customer/NotificationsSection.tsx
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUser } from '@/app/context/UserContext';
-import { FiMessageSquare, FiMapPin, FiX, FiBell } from 'react-icons/fi';
-import { motion } from 'framer-motion';
-import CustomerChatBubble from './ChatBubble';
+import { FiMessageSquare, FiMapPin, FiX, FiSend, FiPaperclip, FiArrowRight, FiCornerUpLeft } from 'react-icons/fi';
+import { motion, AnimatePresence } from 'framer-motion';
+import { createPubNubClient } from '@/lib/pubnub-booking';
 
 interface MessageNotification {
   id: number;
@@ -27,6 +27,18 @@ interface MessageNotification {
   };
 }
 
+interface ChatMessage {
+  id?: number;
+  deliveryId: number;
+  senderType: 'driver' | 'customer' | 'system';
+  senderId: number;
+  messageType: 'text' | 'image';
+  content: string;
+  imageUrl?: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
 export default function NotificationsSection() {
   const { customer } = useUser();
   const [notifications, setNotifications] = useState<MessageNotification[]>([]);
@@ -36,11 +48,22 @@ export default function NotificationsSection() {
     deliveryId: number;
     driverId: number;
     customerId: number;
+    driverName: string;
   } | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [hoveredNotification, setHoveredNotification] = useState<number | null>(null);
+  
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [pubnub, setPubnub] = useState<any>(null);
   
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const notificationContainerRef = useRef<HTMLDivElement>(null);
 
   // Single function to fetch both notifications and count
   const fetchAllNotifications = useCallback(async () => {
@@ -114,6 +137,121 @@ export default function NotificationsSection() {
     }
   }, [customer, fetchAllNotifications]);
 
+  // Initialize PubNub when chat modal opens
+  useEffect(() => {
+    if (showChatModal && selectedDelivery && customer) {
+      const pubnubClient = createPubNubClient(`customer_${customer.id}`);
+      setPubnub(pubnubClient);
+      
+      const channel = `delivery_${selectedDelivery.deliveryId}`;
+      
+      const listener = {
+        message: (event: any) => {
+          if (event.channel === channel && event.message.type === 'CHAT_MESSAGE') {
+            const newMessage = event.message.data;
+            setChatMessages(prev => {
+              const exists = prev.some(m => 
+                m.createdAt === newMessage.createdAt && 
+                m.content === newMessage.content
+              );
+              return !exists ? [...prev, newMessage] : prev;
+            });
+          }
+        }
+      };
+
+      pubnubClient.addListener(listener);
+      pubnubClient.subscribe({ channels: [channel] });
+
+      return () => {
+        pubnubClient.removeListener(listener);
+        pubnubClient.unsubscribeAll();
+      };
+    }
+  }, [showChatModal, selectedDelivery, customer]);
+
+  // Load chat messages when modal opens
+  useEffect(() => {
+    if (showChatModal && selectedDelivery) {
+      loadChatMessages();
+    }
+  }, [showChatModal, selectedDelivery]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  const loadChatMessages = async () => {
+    if (!selectedDelivery) return;
+    
+    setChatLoading(true);
+    try {
+      const response = await fetch(`/api/messages?deliveryId=${selectedDelivery.deliveryId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setChatMessages(data);
+      }
+    } catch (error) {
+      console.error('Error loading chat messages:', error);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !pubnub || !selectedDelivery || !customer || isSending) return;
+
+    setIsSending(true);
+    
+    const messageToSend: ChatMessage = {
+      deliveryId: selectedDelivery.deliveryId,
+      senderType: 'customer',
+      senderId: customer.id,
+      messageType: 'text',
+      content: newMessage.trim(),
+      isRead: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      // Save to database
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messageToSend),
+      });
+
+      if (response.ok) {
+        const savedMessage = await response.json();
+        
+        // Publish to PubNub
+        await pubnub.publish({
+          channel: `delivery_${selectedDelivery.deliveryId}`,
+          message: { 
+            type: 'CHAT_MESSAGE', 
+            data: savedMessage 
+          }
+        });
+
+        // Update local state
+        setChatMessages(prev => [...prev, savedMessage]);
+        setNewMessage('');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
   const markAsRead = async (notificationId: number) => {
     try {
       await fetch('/api/messages/read', {
@@ -163,13 +301,14 @@ export default function NotificationsSection() {
     }
   };
 
-  const openChat = (deliveryId: number, driverId: number) => {
+  const openChat = (deliveryId: number, driverId: number, driverName: string) => {
     if (!customer?.id) return;
     
     setSelectedDelivery({
       deliveryId,
       driverId,
-      customerId: customer.id
+      customerId: customer.id,
+      driverName
     });
     setShowChatModal(true);
     
@@ -192,6 +331,11 @@ export default function NotificationsSection() {
     const diffHours = Math.floor(diffMins / 60);
     if (diffHours < 24) return `${diffHours}h ago`;
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const formatChatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   // Loading skeleton
@@ -229,7 +373,7 @@ export default function NotificationsSection() {
     return (
       <div className="h-full flex flex-col items-center justify-center p-8">
         <div className="w-24 h-24 bg-gradient-to-br from-gray-900 to-gray-800 rounded-full flex items-center justify-center mb-6 border-2 border-red-900/30">
-          <FiBell size={40} className="text-red-400/50" />
+          <FiMessageSquare size={40} className="text-red-400/50" />
         </div>
         <h3 className="text-xl font-medium text-red-400 mb-2">Error Loading Messages</h3>
         <p className="text-gray-400 text-center max-w-md mb-6">{error}</p>
@@ -244,7 +388,7 @@ export default function NotificationsSection() {
   }
 
   return (
-    <div className="h-full">
+    <div className="h-full" ref={notificationContainerRef}>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl lg:text-2xl font-bold text-purple-400">Messages</h2>
@@ -291,17 +435,20 @@ export default function NotificationsSection() {
         </div>
       ) : (
         <div className="space-y-4">
-          {notifications.map((notification) => (
+          {notifications.map((notification, index) => (
             <motion.div
               key={`${notification.id}-${notification.timestamp}`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
               className={`bg-gradient-to-br from-gray-900 to-black p-4 lg:p-6 rounded-2xl border shadow-lg cursor-pointer transform transition-all duration-300 hover:scale-[1.02] ${
                 notification.read 
                   ? 'border-gray-800 hover:border-purple-800/50' 
                   : 'border-purple-900/50 hover:border-purple-600'
               }`}
-              onClick={() => notification.driverId && openChat(notification.deliveryId, notification.driverId)}
+              onClick={() => notification.driverId && openChat(notification.deliveryId, notification.driverId, notification.driverName || 'Driver')}
+              onMouseEnter={() => setHoveredNotification(notification.id)}
+              onMouseLeave={() => setHoveredNotification(null)}
             >
               <div className="flex items-start space-x-3">
                 {/* Notification Icon */}
@@ -378,20 +525,88 @@ export default function NotificationsSection() {
                           {notification.deliveryDetails.dropoffLocation}
                         </div>
                       </div>
-                      <div className="mt-3 flex justify-between items-center">
-                        <span className="text-xs text-gray-500">
-                          Tap to reply
-                        </span>
+                      
+                      {/* ENHANCED "Tap to reply" Section */}
+                      <div className="mt-4 pt-3 border-t border-gray-700/50">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center">
+                            <motion.div
+                              animate={{
+                                x: hoveredNotification === notification.id ? [0, 5, 0] : 0,
+                              }}
+                              transition={{
+                                duration: 1,
+                                repeat: Infinity,
+                                repeatType: "reverse"
+                              }}
+                              className="mr-2"
+                            >
+                              <span className="text-xs text-gray-500">
+                                Click to reply →
+                              </span>
+                            </motion.div>
+                          </div>
+                          
+                          {/* Animated Reply Button */}
+                          <AnimatePresence>
+                            <motion.button
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ 
+                                opacity: hoveredNotification === notification.id ? 1 : 0.8,
+                                scale: hoveredNotification === notification.id ? 1.05 : 1
+                              }}
+                              exit={{ opacity: 0, scale: 0.8 }}
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                notification.driverId && openChat(notification.deliveryId, notification.driverId, notification.driverName || 'Driver');
+                              }}
+                              className="flex items-center space-x-2 px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 shadow-lg shadow-purple-900/30"
+                            >
+                              <FiCornerUpLeft size={12} />
+                              <span className="text-xs font-medium">Reply Now</span>
+                              <motion.div
+                                animate={{
+                                  x: hoveredNotification === notification.id ? [0, 3, 0] : 0,
+                                }}
+                                transition={{
+                                  duration: 0.8,
+                                  repeat: Infinity,
+                                  repeatType: "reverse"
+                                }}
+                              >
+                                <FiArrowRight size={12} />
+                              </motion.div>
+                            </motion.button>
+                          </AnimatePresence>
+                        </div>
+                        
+                        {/* Pulsing Indicator for Unread Messages */}
                         {!notification.read && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              markAsRead(notification.id);
-                            }}
-                            className="text-xs text-purple-400 hover:text-purple-300 px-2 py-1 rounded hover:bg-purple-900/30"
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="flex items-center justify-center mt-2"
                           >
-                            Mark as read
-                          </button>
+                            <div className="flex items-center space-x-1">
+                              <motion.div
+                                animate={{
+                                  scale: [1, 1.2, 1],
+                                  opacity: [0.5, 1, 0.5]
+                                }}
+                                transition={{
+                                  duration: 1.5,
+                                  repeat: Infinity,
+                                  repeatType: "reverse"
+                                }}
+                                className="w-1.5 h-1.5 bg-purple-500 rounded-full"
+                              />
+                              <span className="text-xs text-purple-400">
+                                New message • Tap to respond
+                              </span>
+                            </div>
+                          </motion.div>
                         )}
                       </div>
                     </div>
@@ -404,57 +619,164 @@ export default function NotificationsSection() {
       )}
 
       {/* Chat Modal */}
-      {showChatModal && selectedDelivery && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-purple-900/30 shadow-2xl">
-            <div className="p-6 border-b border-purple-900/30">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center">
-                    <FiMessageSquare size={20} className="text-white" />
+      <AnimatePresence>
+        {showChatModal && selectedDelivery && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-gradient-to-br from-gray-900 to-black rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-purple-900/30 shadow-2xl flex flex-col"
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-purple-900/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <motion.div
+                      animate={{ rotate: [0, 10, -10, 0] }}
+                      transition={{ duration: 0.5 }}
+                      className="w-10 h-10 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center"
+                    >
+                      <FiMessageSquare size={20} className="text-white" />
+                    </motion.div>
+                    <div>
+                      <h3 className="text-xl font-bold text-white">Chat with {selectedDelivery.driverName}</h3>
+                      <p className="text-sm text-purple-300">
+                        Delivery #{selectedDelivery.deliveryId}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">Chat with Driver</h3>
-                    <p className="text-sm text-purple-300">
-                      Delivery #{selectedDelivery.deliveryId}
-                    </p>
-                  </div>
+                  <button
+                    onClick={() => setShowChatModal(false)}
+                    className="text-gray-400 hover:text-white p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                  >
+                    <FiX size={24} />
+                  </button>
                 </div>
-                <button
-                  onClick={() => setShowChatModal(false)}
-                  className="text-gray-400 hover:text-white p-2 rounded-lg hover:bg-gray-800 transition-colors"
-                >
-                  <FiX size={24} />
-                </button>
               </div>
-            </div>
-            
-            <div className="p-4 h-[400px] overflow-y-auto">
-              {customer && (
-                <CustomerChatBubble
-                  customerId={selectedDelivery.customerId}
-                  deliveryId={selectedDelivery.deliveryId}
-                  driverId={selectedDelivery.driverId}
-                />
-              )}
-            </div>
-            
-            <div className="p-4 border-t border-purple-900/30">
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-gray-400">
-                  All messages are saved for future reference
-                </p>
-                <button
-                  onClick={() => setShowChatModal(false)}
-                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all"
-                >
-                  Close Chat
-                </button>
+              
+              {/* Messages Container */}
+              <div className="flex-1 overflow-y-auto p-4 bg-gradient-to-b from-gray-900 to-gray-950">
+                {chatLoading ? (
+                  <div className="flex items-center justify-center h-64">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+                  </div>
+                ) : chatMessages.length === 0 ? (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center text-gray-400 py-12"
+                  >
+                    <div className="w-20 h-20 bg-gradient-to-br from-gray-800 to-gray-900 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <FiMessageSquare size={32} className="text-purple-400" />
+                    </div>
+                    <p className="text-lg font-medium text-gray-300">Start a conversation</p>
+                    <p className="text-sm text-gray-500 mt-1">No messages yet. Say hello!</p>
+                  </motion.div>
+                ) : (
+                  <div className="space-y-4">
+                    {chatMessages.map((msg, index) => (
+                      <motion.div
+                        key={index}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className={`flex ${msg.senderType === 'customer' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`max-w-[80%] rounded-2xl p-4 ${
+                            msg.senderType === 'customer'
+                              ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-br-none'
+                              : 'bg-gray-800 text-gray-200 rounded-bl-none'
+                          }`}
+                        >
+                          <div className="flex items-center mb-1">
+                            <span className="text-xs font-medium opacity-90">
+                              {msg.senderType === 'customer' ? 'You' : selectedDelivery.driverName}
+                            </span>
+                          </div>
+                          
+                          {msg.messageType === 'image' ? (
+                            <div className="mb-2">
+                              <img
+                                src={msg.imageUrl}
+                                alt="Shared photo"
+                                className="rounded-lg max-w-full h-auto max-h-48 object-cover"
+                                loading="lazy"
+                              />
+                              <p className="text-sm mt-1 opacity-90">{msg.content}</p>
+                            </div>
+                          ) : (
+                            <p className="text-sm">{msg.content}</p>
+                          )}
+                          
+                          <div className="text-xs mt-2 opacity-70">
+                            {formatChatTime(msg.createdAt)}
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
               </div>
-            </div>
+              
+              {/* Input Area */}
+              <div className="p-4 border-t border-purple-900/30 bg-gray-900">
+                <div className="flex items-center space-x-3">
+                  <motion.button
+                    whileHover={{ rotate: 15 }}
+                    whileTap={{ scale: 0.9 }}
+                    className="p-2 text-gray-400 hover:text-purple-400 hover:bg-gray-800 rounded-lg transition-colors"
+                    title="Attach"
+                  >
+                    <FiPaperclip size={20} />
+                  </motion.button>
+                  
+                  <div className="flex-1">
+                    <motion.input
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      type="text"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder="Type your message..."
+                      disabled={isSending}
+                      className="w-full px-4 py-3 bg-gray-800 border border-purple-900/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-white placeholder-gray-500 disabled:opacity-50"
+                    />
+                  </div>
+                  
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={sendMessage}
+                    disabled={!newMessage.trim() || isSending}
+                    className="p-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  >
+                    {isSending ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                    ) : (
+                      <>
+                        <span className="font-medium">Send</span>
+                        <FiSend size={16} />
+                      </>
+                    )}
+                  </motion.button>
+                </div>
+                <motion.p 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.5 }}
+                  className="text-xs text-gray-500 mt-3 text-center"
+                >
+                  Press Enter to send • All messages are saved
+                </motion.p>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 }
