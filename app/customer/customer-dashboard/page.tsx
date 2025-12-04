@@ -1,7 +1,7 @@
-//app/customer/customer-dashboard/page.tsx
+// app/customer/customer-dashboard/page.tsx
 "use client";
 
-import { useState, useRef, useEffect, useContext } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useUser } from '@/app/context/UserContext';
@@ -24,6 +24,7 @@ export default function CustomerDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const { customer, clearUser, updateProfilePicture } = useUser();
@@ -32,8 +33,10 @@ export default function CustomerDashboard() {
   // Check if mobile on mount and resize
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024);
-      if (window.innerWidth >= 1024) {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      // Only auto-open sidebar on desktop
+      if (!mobile) {
         setIsSidebarOpen(true);
       } else {
         setIsSidebarOpen(false);
@@ -44,6 +47,25 @@ export default function CustomerDashboard() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Fetch unread message count with error handling
+  const fetchUnreadMessageCount = useCallback(async () => {
+    if (!customer?.id) return;
+    
+    try {
+      const response = await fetch(`/api/customer/${customer.id}/unread-message-count`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setUnreadMessageCount(data.count || 0);
+      } else {
+        console.warn('Failed to fetch unread count, response not OK');
+      }
+    } catch (error) {
+      console.error('Error fetching unread message count:', error);
+      // Don't set error state here, just log it
+    }
+  }, [customer]);
 
   useEffect(() => {
     // Redirect to login if no customer data
@@ -71,43 +93,53 @@ export default function CustomerDashboard() {
       });
     }
     
-    // Fetch unread message count
+    // Initial fetch of unread message count
     if (customer.id) {
       fetchUnreadMessageCount();
+      setIsLoading(false);
       
-      // Set up polling for message count updates
-      const interval = setInterval(fetchUnreadMessageCount, 15000);
+      // Set up polling for message count updates - every 30 seconds instead of 15
+      const interval = setInterval(fetchUnreadMessageCount, 30000);
       return () => clearInterval(interval);
     }
-  }, [customer, router, deliveryData]);
+  }, [customer, router, deliveryData, fetchUnreadMessageCount]);
 
-  const fetchUnreadMessageCount = async () => {
-    try {
-      const response = await fetch(`/api/customer/${customer?.id}/unread-message-count`);
-      if (response.ok) {
-        const data = await response.json();
-        setUnreadMessageCount(data.count || 0);
-      }
-    } catch (error) {
-      console.error('Error fetching unread message count:', error);
-    }
-  };
-
-  const handleProfileImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProfileImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        if (event.target?.result) {
-          const newProfileImage = event.target.result as string;
-          setProfileImage(newProfileImage);
-          
-          // Update profile picture in database and context
-          await updateProfilePicture(newProfileImage);
-        }
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
     }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image size should be less than 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      if (event.target?.result) {
+        const newProfileImage = event.target.result as string;
+        setProfileImage(newProfileImage);
+        
+        // Update profile picture in database and context
+        try {
+          await updateProfilePicture(newProfileImage);
+        } catch (error) {
+          console.error('Failed to update profile picture:', error);
+          alert('Failed to update profile picture. Please try again.');
+          // Revert to previous image
+          if (customer?.profilePictureUrl) {
+            setProfileImage(customer.profilePictureUrl);
+          }
+        }
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleLogout = () => {
@@ -223,10 +255,14 @@ export default function CustomerDashboard() {
   };
 
   // Show loading state while checking authentication
-  if (!customer) {
+  if (!customer || isLoading) {
     return (
       <div className="flex h-screen bg-gray-950 items-center justify-center">
-        <div className="text-purple-400 text-xl">Loading...</div>
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mb-4"></div>
+          <div className="text-purple-400 text-lg">Loading your dashboard...</div>
+          <div className="text-gray-500 text-sm mt-2">Please wait a moment</div>
+        </div>
       </div>
     );
   }
@@ -277,11 +313,13 @@ export default function CustomerDashboard() {
                   width={96}
                   height={96}
                   className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-110"
+                  priority
                 />
               </div>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="absolute bottom-0 right-0 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-full p-1 lg:p-2 hover:from-purple-700 hover:to-indigo-700 transition-all duration-300 shadow-lg shadow-purple-600/30 hover:shadow-purple-700/40 transform hover:scale-110"
+                aria-label="Change profile picture"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -297,6 +335,7 @@ export default function CustomerDashboard() {
                   onChange={handleProfileImageChange}
                   className="hidden"
                   accept="image/*"
+                  aria-label="Upload profile picture"
                 />
               </button>
             </div>
@@ -306,6 +345,13 @@ export default function CustomerDashboard() {
                   {customer.username}
                 </h2>
                 <p className="text-xs lg:text-sm text-gray-400 mt-1 text-center">{customer.phoneNumber}</p>
+                {unreadMessageCount > 0 && (
+                  <div className="mt-2 flex items-center justify-center">
+                    <span className="text-xs bg-gradient-to-r from-purple-600 to-pink-600 text-white px-2 py-1 rounded-full">
+                      {unreadMessageCount} unread message{unreadMessageCount !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -342,7 +388,7 @@ export default function CustomerDashboard() {
                       <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
                     </svg>
                     {unreadMessageCount > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-4 h-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] rounded-full flex items-center justify-center px-1 border border-gray-900">
+                      <span className="absolute -top-1 -right-1 min-w-4 h-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] rounded-full flex items-center justify-center px-1 border-2 border-gray-900">
                         {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
                       </span>
                     )}
@@ -377,6 +423,8 @@ export default function CustomerDashboard() {
                       ? "bg-gradient-to-r from-purple-600/20 to-indigo-600/20 text-white shadow-lg shadow-purple-500/10 border border-purple-500/30"
                       : "text-gray-400 hover:bg-gray-800/50 hover:text-white border border-transparent hover:border-purple-500/20"
                   }`}
+                  aria-label={item.name}
+                  aria-current={activeSection === item.id ? "page" : undefined}
                 >
                   <span className={`transition-colors duration-300 ${
                     activeSection === item.id 
@@ -417,15 +465,18 @@ export default function CustomerDashboard() {
               <button
                 onClick={toggleSidebar}
                 className="lg:hidden p-2 rounded-lg bg-gray-800/50 border border-purple-900/30 hover:bg-gray-700/50 transition-all duration-300"
+                aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
               >
                 <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isSidebarOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
                 </svg>
               </button>
               
               <h1 className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
                 {activeSection === 'notifications' && unreadMessageCount > 0 ? (
                   <>Messages ({unreadMessageCount} unread)</>
+                ) : activeSection === 'notifications' ? (
+                  <>Messages</>
                 ) : (
                   activeSection.charAt(0).toUpperCase() + activeSection.slice(1)
                 )}

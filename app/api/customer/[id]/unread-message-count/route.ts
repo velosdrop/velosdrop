@@ -2,14 +2,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/src/db';
 import { deliveryRequestsTable, messagesTable } from '@/src/db/schema';
-import { eq, and, count } from 'drizzle-orm';
+import { eq, and, count, sql } from 'drizzle-orm';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Await the params
     const { id } = await params;
     const customerId = parseInt(id);
     
@@ -20,39 +19,27 @@ export async function GET(
       );
     }
 
-    // Get deliveries for this customer
-    const deliveries = await db.select({
-      id: deliveryRequestsTable.id,
-    })
-    .from(deliveryRequestsTable)
-    .where(
-      eq(deliveryRequestsTable.customerId, customerId)
-    );
-
-    let totalUnread = 0;
-    
-    // Count unread messages for each delivery
-    for (const delivery of deliveries) {
-      const unreadCountResult = await db
-        .select({ count: count() })
-        .from(messagesTable)
-        .where(
-          and(
-            eq(messagesTable.deliveryId, delivery.id),
-            eq(messagesTable.senderType, 'driver'),
-            eq(messagesTable.isRead, false)
-          )
+    // Single optimized query for unread count
+    const result = await db
+      .select({ count: count() })
+      .from(messagesTable)
+      .innerJoin(
+        deliveryRequestsTable,
+        eq(messagesTable.deliveryId, deliveryRequestsTable.id)
+      )
+      .where(
+        and(
+          eq(deliveryRequestsTable.customerId, customerId),
+          eq(messagesTable.senderType, 'driver'),
+          eq(messagesTable.isRead, false)
         )
-        .get();
-      
-      totalUnread += unreadCountResult?.count || 0;
-    }
+      )
+      .get();
 
     return NextResponse.json({ 
       success: true,
       customerId,
-      count: totalUnread,
-      deliveriesCount: deliveries.length,
+      count: result?.count || 0,
       lastUpdated: new Date().toISOString()
     });
 
