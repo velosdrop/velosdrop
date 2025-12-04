@@ -930,7 +930,6 @@ export default function Map({
           driverId={driverId}
           deliveryId={activeDelivery.deliveryId}
           customerId={activeDelivery.customerId}
-          onSendImage={handleImageUpload}
         />
       )}
 
