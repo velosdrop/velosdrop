@@ -1,4 +1,3 @@
-// app/customer/customer-dashboard/page.tsx
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -206,7 +205,7 @@ export default function CustomerDashboard() {
                 initialOptions={{
                   center: pickupLocation ? [pickupLocation.longitude, pickupLocation.latitude] : [31.033, -17.827],
                   zoom: pickupLocation && deliveryLocation ? 12 : 16,
-                  style: 'mapbox://styles/mapbox/streets-v12'
+                  style: 'mapbox://styles/murombo/cmdq9jyzw00hd01s87etkezgc'
                 }}
               />
               
@@ -223,30 +222,15 @@ export default function CustomerDashboard() {
                 </div>
               )}
               
-              {/* Enhanced Book Delivery Button */}
-              <div className="absolute bottom-4 left-4 right-4 lg:bottom-6 lg:left-auto lg:right-6 z-10">
+              {/* Fixed Book Now Button - Top Center */}
+              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
                 <button
                   onClick={handleBookDelivery}
-                  className="w-full lg:w-auto bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-4 px-6 lg:py-4 lg:px-8 rounded-2xl shadow-2xl shadow-purple-900/60 transition-all duration-300 flex items-center justify-center transform hover:scale-105 animate-pulse-glow border-2 border-purple-400/30"
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-3 px-6 rounded-2xl shadow-2xl shadow-purple-900/60 transition-all duration-300 flex items-center justify-center transform hover:scale-105 animate-pulse-glow border-2 border-purple-400/30 whitespace-nowrap"
                 >
-                  <span className="mr-3 text-xl">🚚</span>
-                  <span className="text-base lg:text-lg">Book Delivery Now</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="ml-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
+                  <span className="mr-2 text-lg">🚚</span>
+                  <span className="text-base">Book Now</span>
                 </button>
-                
-                {/* Scroll indicator for mobile */}
-                {isMobile && (
-                  <div className="mt-2 flex justify-center">
-                    <div className="flex items-center text-xs text-purple-300 bg-purple-900/30 px-3 py-1 rounded-full">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                      </svg>
-                      Tap to book delivery
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -327,7 +311,7 @@ export default function CustomerDashboard() {
                   viewBox="0 0 20 20"
                   fill="currentColor"
                 >
-                  <path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                  <path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 001.414.586L11.707 4.707A1 1 0 0112.414 5H14a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h1.586a1 1 0 01.707.293l1.121 1.121A2 2 0 0011.172 5H8.828a2 2 0 00-1.414.586L6.293 6.707A1 1 0 015.586 7H4z" clipRule="evenodd" />
                 </svg>
                 <input
                   type="file"
