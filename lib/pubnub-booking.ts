@@ -60,7 +60,7 @@ export type PubNubPublishMessage = Omit<PubNubMessage, 'timestamp' | 'senderId'>
   [key: string]: any;
 };
 
-// Booking request message - UPDATED: Add recipientPhoneNumber to the interface
+// Booking request message - UPDATED: Add recipientPhoneNumber and vehicleType to the interface
 export interface BookingRequestMessage extends PubNubMessage {
   type: typeof MESSAGE_TYPES.BOOKING_REQUEST;
   data: {
@@ -74,13 +74,14 @@ export interface BookingRequestMessage extends PubNubMessage {
     dropoffLocation: string;
     fare: number;
     distance: number;
+    vehicleType?: string; // ADDED: Vehicle type
     packageDetails?: string;
     expiresAt: string;
     isDirectAssignment?: boolean;
   };
 }
 
-// Booking response message
+// Booking response message - UPDATED: Add message and requestedVehicleType properties
 export interface BookingResponseMessage extends PubNubMessage {
   type: typeof MESSAGE_TYPES.BOOKING_ACCEPTED | typeof MESSAGE_TYPES.BOOKING_REJECTED;
   data: {
@@ -94,6 +95,8 @@ export interface BookingResponseMessage extends PubNubMessage {
     wasDirectAssignment?: boolean;
     expired?: boolean;
     rejected?: boolean;
+    message?: string; // ADDED: Optional message
+    requestedVehicleType?: string; // ADDED: Optional requested vehicle type
   };
 }
 
@@ -116,7 +119,8 @@ export const publishBookingRequest = async (
     type: MESSAGE_TYPES.BOOKING_REQUEST,
     data: {
       ...bookingData,
-      recipientPhoneNumber: bookingData.recipientPhoneNumber || ''
+      recipientPhoneNumber: bookingData.recipientPhoneNumber || '',
+      vehicleType: bookingData.vehicleType || 'car' // ADDED: Default to car if not specified
     },
   };
 
@@ -138,6 +142,7 @@ export const publishBookingRequest = async (
 
     console.log(`Booking request published to ${driverIds.length} drivers`, {
       recipientPhoneNumber: bookingData.recipientPhoneNumber,
+      vehicleType: bookingData.vehicleType,
       bookingData: bookingData
     });
     return { success: true };

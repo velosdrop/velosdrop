@@ -72,6 +72,12 @@ export default function SearchingForDrivers({
   const listenerRef = useRef<any>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Debug: Log package data including vehicle type
+  useEffect(() => {
+    console.log('🚗 Package data received:', packageData);
+    console.log('🚗 Selected vehicle type:', packageData?.vehicleType);
+  }, [packageData]);
+
   // Enhanced driver location update handler with map integration
   const handleDriverLocationUpdate = useCallback((data: any) => {
     console.log('📍 Processing driver location update:', data);
@@ -224,7 +230,7 @@ export default function SearchingForDrivers({
     }
   };
 
-  // Enhanced fetchNearbyDrivers function with retry support
+  // Enhanced fetchNearbyDrivers function with retry support and vehicle type filtering
   const fetchNearbyDrivers = useCallback(async (isRetry = false) => {
     try {
       if (!userLocation || userLocation.lat === undefined || userLocation.lng === undefined) {
@@ -235,16 +241,26 @@ export default function SearchingForDrivers({
       console.log(`${isRetry ? '🔄 Retrying' : '🔍 Fetching'} nearby drivers with location:`, userLocation);
       setError(null);
 
-      const response = await fetch(
-        `/api/drivers/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=5&excludeResponded=true`
-      );
+      // Get vehicle type from packageData
+      const vehicleType = packageData?.vehicleType || null;
+      console.log('🚗 Requesting drivers for vehicle type:', vehicleType);
+
+      // Build URL with vehicle type parameter if specified
+      let url = `/api/drivers/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=5&excludeResponded=true`;
+      if (vehicleType) {
+        url += `&vehicleType=${vehicleType}`;
+      }
+
+      console.log('📡 Fetching drivers from URL:', url);
+
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch drivers: ${response.status}`);
       }
 
       const nearbyDrivers = await response.json();
-      console.log('Received nearby drivers:', nearbyDrivers);
+      console.log('✅ Received nearby drivers:', nearbyDrivers);
 
       const transformedDrivers = nearbyDrivers.map((driver: any) => ({
         ...driver,
@@ -266,7 +282,7 @@ export default function SearchingForDrivers({
       setError(error instanceof Error ? error.message : 'Failed to fetch nearby drivers');
       return [];
     }
-  }, [userLocation]);
+  }, [userLocation, packageData?.vehicleType]); // Add vehicleType dependency
 
   // Enhanced PubNub initialization with proper cleanup
   useEffect(() => {
@@ -343,9 +359,12 @@ export default function SearchingForDrivers({
         fare: parseFloat(fare),
         distance: packageData.routeDistance,
         packageDetails: packageData.packageDescription,
+        vehicleType: packageData.vehicleType || 'car', // Add vehicle type
         userLocation: userLocation,
         ...(selectedDriver && { selectedDriverId: selectedDriver.id })
       };
+
+      console.log('🚗 Creating booking request with vehicle type:', bookingData.vehicleType);
 
       const response = await fetch('/api/bookings/create', {
         method: 'POST',
@@ -356,10 +375,13 @@ export default function SearchingForDrivers({
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Booking creation failed:', errorText);
         throw new Error('Failed to create booking');
       }
 
       const result = await response.json();
+      console.log('✅ Booking request created:', result);
       setCurrentRequestId(result.request.id);
 
       // FIXED: Don't automatically set status to 'accepted' when selecting a driver
@@ -491,6 +513,11 @@ export default function SearchingForDrivers({
   // Filter drivers to show only accepted ones first
   const visibleDrivers = acceptedDrivers.length > 0 ? acceptedDrivers : drivers;
 
+  // Show vehicle type badge in header
+  const vehicleTypeLabel = packageData?.vehicleType ? 
+    packageData.vehicleType.charAt(0).toUpperCase() + packageData.vehicleType.slice(1) : 
+    'All Vehicles';
+
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-end justify-center z-50">
       <div
@@ -530,6 +557,14 @@ export default function SearchingForDrivers({
               {bookingStatus === 'waiting' ? 'Your request has been sent to the driver.' :
                bookingStatus === 'accepted' ? 'A driver has accepted your request!' : "We're finding the best matches for you"}
             </p>
+            {/* Vehicle Type Badge */}
+            {packageData?.vehicleType && (
+              <div className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-purple-900/40 border border-purple-700/40">
+                <span className="text-purple-300 text-xs font-medium">
+                  🚗 Searching for: {vehicleTypeLabel}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-blue-500 rounded-full flex items-center justify-center">
@@ -1052,7 +1087,10 @@ export default function SearchingForDrivers({
             </div>
             <h3 className="text-purple-300 font-semibold text-lg mb-2">No Drivers Available</h3>
             <p className="text-gray-400 text-sm mb-4">
-              There are no drivers in your area at the moment. Try increasing your fare offer or try again in a few minutes.
+              {packageData?.vehicleType 
+                ? `There are no ${packageData.vehicleType} drivers in your area at the moment. Try increasing your fare offer or try a different vehicle type.`
+                : 'There are no drivers in your area at the moment. Try increasing your fare offer or try again in a few minutes.'
+              }
             </p>
             <button
               onClick={handleRetry}

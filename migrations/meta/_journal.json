@@ -134,6 +134,13 @@
       "when": 1764801122962,
       "tag": "0018_gorgeous_tusk",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1764886210412,
+      "tag": "0019_red_spitfire",
+      "breakpoints": true
     }
   ]
 }

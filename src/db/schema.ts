@@ -96,6 +96,7 @@ export const deliveryRequestsTable = sqliteTable('delivery_requests', {
   dropoffLocation: text('dropoff_location').notNull(),
   fare: real('fare').notNull(),
   distance: real('distance').notNull(),
+  vehicleType: text('vehicle_type').notNull().default('car'), 
   packageDetails: text('package_details'),
   recipientPhoneNumber: text('recipient_phone_number'),
   status: text('status').default('pending').notNull(), // pending, accepted, rejected, completed, expired

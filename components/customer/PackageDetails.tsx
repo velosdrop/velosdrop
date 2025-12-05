@@ -1,4 +1,4 @@
-// components/customer/PackageDetails.tsx
+//components/customer/PackageDetails.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -15,7 +15,7 @@ interface PackageDetailsProps {
   routeDistance?: number | null;
   onBack: () => void;
   onClose: () => void;
-  onConfirmFare: (fare: string) => void;
+  onConfirmFare: (fare: string, vehicleType?: string) => void;
 }
 
 export default function PackageDetails({
@@ -66,7 +66,7 @@ export default function PackageDetails({
     setCurrentStep("package-details");
   };
 
-  const handleConfirmFare = async (fare: string) => {
+  const handleConfirmFare = async (fare: string, vehicleType?: string) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -80,6 +80,7 @@ export default function PackageDetails({
         fare,
         distance: routeDistance || 0,
         packageDetails: packageDescription,
+        vehicleType: vehicleType || 'car',
         userLocation: {
           lat: pickupCoords?.[1] || 0, 
           lng: pickupCoords?.[0] || 0
@@ -102,7 +103,7 @@ export default function PackageDetails({
       const result = await response.json();
       console.log('✅ Booking created successfully:', result);
       
-      onConfirmFare(fare);
+      onConfirmFare(fare, vehicleType);
 
     } catch (error) {
       console.error('❌ Error creating booking:', error);

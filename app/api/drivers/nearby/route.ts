@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/src/db';
 import { driversTable, driverRatingsTable } from '@/src/db/schema';
-import { eq, and, sql, isNotNull } from 'drizzle-orm';
+import { eq, and, sql, isNotNull, or } from 'drizzle-orm';
 
 // Helper function to calculate approximate distance (Haversine)
 const calculateDistance = (
@@ -28,14 +28,41 @@ const calculateDistance = (
   return R * c;
 };
 
+// Vehicle compatibility mapping
+const VEHICLE_COMPATIBILITY = {
+  motorcycle: ['motorcycle'], // Motorcycles can only handle motorcycle requests
+  car: ['motorcycle', 'car'], // Cars can handle motorcycle and car requests
+  truck: ['truck'] // Trucks can only handle truck requests
+} as const;
+
+// Get compatible vehicle types
+const getCompatibleVehicleTypes = (requestedVehicle: string): string[] => {
+  switch (requestedVehicle) {
+    case 'motorcycle':
+      return ['motorcycle', 'car']; // Motorcycle requests can be handled by motorcycles AND cars
+    case 'car':
+      return ['car']; // Car requests can only be handled by cars (not trucks)
+    case 'truck':
+      return ['truck']; // Truck requests can only be handled by trucks
+    default:
+      return ['motorcycle', 'car', 'truck']; // Show all if no specific type
+  }
+};
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const userLat = parseFloat(searchParams.get('lat') || '0');
     const userLng = parseFloat(searchParams.get('lng') || '0');
     const radius = parseFloat(searchParams.get('radius') || '5');
+    const vehicleType = searchParams.get('vehicleType'); // Get requested vehicle type
 
-    console.log('Fetching nearby drivers with params:', { userLat, userLng, radius });
+    console.log('Fetching nearby drivers with params:', { 
+      userLat, 
+      userLng, 
+      radius, 
+      vehicleType 
+    });
 
     if (isNaN(userLat) || isNaN(userLng) || userLat === 0 || userLng === 0) {
       return NextResponse.json(
@@ -64,8 +91,15 @@ export async function GET(request: NextRequest) {
       .groupBy(driverRatingsTable.driverId)
       .as('ratings');
 
+    // Get compatible vehicle types
+    const compatibleVehicleTypes = vehicleType 
+      ? getCompatibleVehicleTypes(vehicleType)
+      : ['motorcycle', 'car', 'truck']; // Default to all types
+
+    console.log('Compatible vehicle types for', vehicleType, ':', compatibleVehicleTypes);
+
     // First get all online drivers with their locations
-    const allDrivers = await db
+    let query = db
       .select({
         id: driversTable.id,
         firstName: driversTable.firstName,
@@ -73,6 +107,7 @@ export async function GET(request: NextRequest) {
         phoneNumber: driversTable.phoneNumber,
         vehicleType: driversTable.vehicleType,
         carName: driversTable.carName,
+        numberPlate: driversTable.numberPlate,
         profilePictureUrl: driversTable.profilePictureUrl,
         latitude: driversTable.latitude,
         longitude: driversTable.longitude,
@@ -90,12 +125,20 @@ export async function GET(request: NextRequest) {
         and(
           eq(driversTable.isOnline, true),
           isNotNull(driversTable.latitude),
-          isNotNull(driversTable.longitude)
+          isNotNull(driversTable.longitude),
+          // Add vehicle type filter if specified
+          ...(compatibleVehicleTypes.length > 0 
+            ? [or(...compatibleVehicleTypes.map(type => eq(driversTable.vehicleType, type)))]
+            : []
+          )
         )
       )
       .limit(100);
 
-    console.log('All online drivers found:', allDrivers.length);
+    const allDrivers = await query;
+    
+    console.log('Filtered online drivers found:', allDrivers.length);
+    console.log('Driver vehicle types:', allDrivers.map(d => ({ id: d.id, vehicle: d.vehicleType })));
 
     // Calculate distance and filter nearby
     const driversWithDistance = allDrivers
@@ -109,15 +152,6 @@ export async function GET(request: NextRequest) {
 
         const distance = calculateDistance(userLat, userLng, driverLat, driverLng);
 
-        console.log('Distance calc:', {
-          driverId: driver.id,
-          userLat,
-          userLng,
-          driverLat,
-          driverLng,
-          distance,
-        });
-
         return {
           ...driver,
           distance,
@@ -130,7 +164,12 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => a.distance - b.distance)
       .slice(0, 20);
 
-    console.log('Found nearby drivers:', driversWithDistance.length);
+    console.log('Found nearby drivers after distance filter:', driversWithDistance.length);
+    
+    // Log the final driver types for debugging
+    driversWithDistance.forEach(driver => {
+      console.log(`Driver ${driver.id}: ${driver.vehicleType} - ${driver.distance.toFixed(2)}km away`);
+    });
 
     return NextResponse.json(driversWithDistance);
   } catch (error) {

@@ -1,4 +1,4 @@
-// app/api/bookings/create/route.ts
+//app/api/bookings/create/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/src/db';
 import { deliveryRequestsTable, customersTable, driverResponsesTable, driversTable } from '@/src/db/schema';
@@ -6,11 +6,23 @@ import { eq } from 'drizzle-orm';
 import { publishBookingRequest, publishBookingResponse, MESSAGE_TYPES } from '@/lib/pubnub-booking';
 
 // Improved nearby driver matching
-const findNearbyDrivers = async (userLocation: { lat: number; lng: number }, radius: number = 5) => {
+const findNearbyDrivers = async (userLocation: { lat: number; lng: number }, vehicleType?: string, radius: number = 5) => {
   try {
+    // Build query parameters
+    const params = new URLSearchParams({
+      lat: userLocation.lat.toString(),
+      lng: userLocation.lng.toString(),
+      radius: radius.toString()
+    });
+    
+    // Add vehicleType filter if provided
+    if (vehicleType) {
+      params.append('vehicleType', vehicleType);
+    }
+
     // Use relative path instead of absolute URL for internal API calls
     const response = await fetch(
-      `${process.env.NEXTAUTH_URL || ''}/api/drivers/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=${radius}`
+      `${process.env.NEXTAUTH_URL || ''}/api/drivers/nearby?${params.toString()}`
     );
 
     if (response.ok) {
@@ -32,23 +44,24 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('Booking request received:', body);
     
-    // Updated field names to match what the frontend is sending - ADD recipientPhone
+    // Updated field names to include vehicleType
     const { 
       customerId, 
       customerUsername,
-      recipientPhone,       // NOW INCLUDED: Recipient's phone number
-      pickupAddress,       // Changed from pickupLocation
-      dropoffAddress,      // Changed from dropoffLocation
+      recipientPhone,
+      pickupAddress,
+      dropoffAddress,
       fare, 
       distance,
       packageDetails,
+      vehicleType,          // NEW: Vehicle type parameter
       userLocation,
-      selectedDriverId     // NEW: Add parameter for specific driver selection
+      selectedDriverId
     } = body;
 
-    // Updated validation to match new field names
+    // Updated validation to include vehicleType
     if (!customerId || !pickupAddress || !dropoffAddress || !fare || !userLocation) {
-      console.log('Missing required fields:', { customerId,  pickupAddress, dropoffAddress, fare, userLocation });
+      console.log('Missing required fields:', { customerId, pickupAddress, dropoffAddress, fare, userLocation });
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -61,8 +74,8 @@ export async function POST(request: NextRequest) {
       columns: { 
         id: true, 
         username: true, 
-        phoneNumber: true,        // ADDED: For driver contact
-        profilePictureUrl: true   // ADDED: For driver display
+        phoneNumber: true,
+        profilePictureUrl: true
       }
     });
 
@@ -74,22 +87,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create delivery request - ADD recipientPhone to database insert
+    // Create delivery request - ADD vehicleType to database insert
     const expiresAt = new Date(Date.now() + 30000);
     
     // Map frontend field names to database field names
     const [deliveryRequest] = await db.insert(deliveryRequestsTable).values({
       customerId,
       customerUsername: customerUsername || customer.username,
-      pickupLocation: pickupAddress,      // Map to database field
-      dropoffLocation: dropoffAddress,    // Map to database field
+      pickupLocation: pickupAddress,
+      dropoffLocation: dropoffAddress,
       fare: parseFloat(fare),
       distance: parseFloat(distance),
+      vehicleType: vehicleType || 'car', // NEW: Store vehicle type
       packageDetails: packageDetails || '',
-      recipientPhoneNumber: recipientPhone || '', // ADD THIS LINE: Store recipient phone in database
+      recipientPhoneNumber: recipientPhone || '',
       expiresAt: expiresAt.toISOString(),
       status: 'pending',
-      // NEW: If a specific driver is selected, assign it directly
       ...(selectedDriverId && { assignedDriverId: selectedDriverId })
     }).returning();
 
@@ -102,17 +115,17 @@ export async function POST(request: NextRequest) {
     let driverIdsToNotify = [];
     
     if (selectedDriverId) {
-      // NEW: If a specific driver is selected, only notify that driver
+      // If a specific driver is selected, only notify that driver
       driverIdsToNotify = [selectedDriverId];
       console.log('Specific driver selected:', selectedDriverId);
     } else {
-      // Broadcast to all nearby drivers (existing logic)
-      const driverIds = await findNearbyDrivers(userLocation, 5);
-      console.log('Nearby drivers found:', driverIds.length);
+      // Broadcast to nearby drivers with optional vehicleType filter
+      const driverIds = await findNearbyDrivers(userLocation, vehicleType, 5);
+      console.log(`Found ${driverIds.length} nearby drivers for vehicle type: ${vehicleType || 'all'}`);
       driverIdsToNotify = driverIds;
     }
 
-    // Publish booking request via PubNub - ADD recipientPhone to notification data
+    // Publish booking request via PubNub - ADD vehicleType to notification data
     if (driverIdsToNotify.length > 0) {
       try {
         // Create the booking data object with all required fields
@@ -121,15 +134,15 @@ export async function POST(request: NextRequest) {
           customerId: customerId,
           customerUsername: customerUsername || customer.username,
           customerProfilePictureUrl: customer.profilePictureUrl || '', 
-          customerPhoneNumber: customer.phoneNumber || '', // Include customer phone
+          customerPhoneNumber: customer.phoneNumber || '',
           pickupLocation: pickupAddress,
           dropoffLocation: dropoffAddress,
           fare: parseFloat(fare),
           distance: parseFloat(distance),
+          vehicleType: vehicleType || 'car', // NEW: Include vehicle type
           expiresAt: expiresAt.toISOString(),
           packageDetails: packageDetails || '',
           isDirectAssignment: !!selectedDriverId,
-          // Add recipient phone number to the booking data
           recipientPhoneNumber: recipientPhone || ''
         };
 
@@ -141,15 +154,45 @@ export async function POST(request: NextRequest) {
       } catch (publishError) {
         console.error('PubNub publish error:', publishError);
       }
+    } else {
+      // No drivers found - handle this case
+      console.log('No drivers available for notification');
+      
+      // Update status immediately to expired
+      await db.update(deliveryRequestsTable)
+        .set({ status: 'expired' })
+        .where(eq(deliveryRequestsTable.id, deliveryRequest.id));
+      
+      // Notify customer via PubNub - Use updated interface
+      await publishBookingResponse(customerId, {
+        bookingId: deliveryRequest.id,
+        driverId: 0,
+        driverName: '',
+        driverPhone: '',
+        vehicleType: '',
+        carName: '',
+        profilePictureUrl: '',
+        wasDirectAssignment: false,
+        expired: true,
+        message: 'No drivers available for your selected vehicle type',
+        requestedVehicleType: vehicleType || 'car'
+      }, MESSAGE_TYPES.BOOKING_REJECTED);
+      
+      return NextResponse.json({
+        success: false,
+        request: deliveryRequest,
+        status: 'expired',
+        message: 'No drivers available for your selected vehicle type'
+      });
     }
 
-    // NEW: For direct assignments, return immediately without waiting for responses
+    // For direct assignments, return immediately without waiting for responses
     if (selectedDriverId) {
       return NextResponse.json({
         success: true,
         request: deliveryRequest,
         message: 'Request sent to specific driver',
-        status: 'pending' // Status is pending until driver responds
+        status: 'pending'
       });
     }
 
@@ -219,7 +262,7 @@ export async function POST(request: NextRequest) {
         })
         .where(eq(deliveryRequestsTable.id, deliveryRequest.id));
       
-      // Notify customer via PubNub
+      // Notify customer via PubNub - Use updated interface
       await publishBookingResponse(customerId, {
         bookingId: deliveryRequest.id,
         driverId: responseResult.driver.id,
@@ -228,7 +271,8 @@ export async function POST(request: NextRequest) {
         vehicleType: responseResult.driver.vehicleType || '',
         carName: responseResult.driver.carName || '',
         profilePictureUrl: responseResult.driver.profilePictureUrl,
-        wasDirectAssignment: false
+        wasDirectAssignment: false,
+        requestedVehicleType: vehicleType || 'car' // NEW: Include requested vehicle type
       }, MESSAGE_TYPES.BOOKING_ACCEPTED);
       
       return NextResponse.json({
@@ -243,7 +287,7 @@ export async function POST(request: NextRequest) {
         .set({ status: 'expired' })
         .where(eq(deliveryRequestsTable.id, deliveryRequest.id));
       
-      // Notify customer of expiration via PubNub
+      // Notify customer of expiration via PubNub - Use updated interface
       await publishBookingResponse(customerId, {
         bookingId: deliveryRequest.id,
         driverId: 0,
@@ -253,7 +297,9 @@ export async function POST(request: NextRequest) {
         carName: '',
         profilePictureUrl: '',
         wasDirectAssignment: false,
-        expired: true
+        expired: true,
+        message: 'No drivers accepted the request',
+        requestedVehicleType: vehicleType || 'car' // NEW: Include requested vehicle type
       }, MESSAGE_TYPES.BOOKING_REJECTED);
       
       return NextResponse.json({

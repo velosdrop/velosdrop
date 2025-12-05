@@ -1,0 +1,1 @@
+ALTER TABLE `delivery_requests` ADD `vehicle_type` text DEFAULT 'car' NOT NULL;
