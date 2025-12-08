@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+@import 'mapbox-gl/dist/mapbox-gl.css';
+
 /* Button Variants */
 .btn_purple {
   @apply bg-purple-600 border-purple-600 text-white hover:bg-purple-700 hover:border-purple-700 transition-colors duration-200;
@@ -184,4 +186,19 @@
   transition-property: color, background-color, border-color, transform, opacity;
   transition-duration: 200ms;
   transition-timing-function: ease-in-out;
+}
+
+/* Custom map styles */
+.mapbox-logo-custom {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 1000;
+}
+
+.mapbox-logo-custom img {
+  background: white;
+  padding: 4px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }

@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -17,6 +18,7 @@ import type { Driver } from '@/src/db/schema';
 import Wallet from '@/components/driver/wallet';
 import { usePubNubConnection } from '@/components/driver/PubNubConnection';
 import BookingNotification from '@/components/driver/BookingNotification';
+import DriverNavigationModal from '@/components/driver/DriverNavigationModal';
 
 const Map = dynamic(() => import('@/components/driver/Map'), {
   ssr: false,
@@ -155,6 +157,8 @@ export default function DriverDashboard() {
   const [hasNewNotification, setHasNewNotification] = useState(false);
   const [copiedNumber, setCopiedNumber] = useState<string | null>(null);
   const [activeDelivery, setActiveDelivery] = useState<ActiveDelivery | null>(null);
+  const [showNavigation, setShowNavigation] = useState(false);
+  const [activeNavigation, setActiveNavigation] = useState<ActiveDelivery | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [ratings] = useState({
     average: 4.5,
@@ -211,6 +215,14 @@ export default function DriverDashboard() {
       console.error('Location update error:', error instanceof Error ? error.message : error);
     }
   }, [driverData?.id, isOnline]);
+
+  // Function to start navigation from active delivery
+  const startActiveDeliveryNavigation = () => {
+    if (activeDelivery) {
+      setActiveNavigation(activeDelivery);
+      setShowNavigation(true);
+    }
+  };
 
   useEffect(() => {
     const isAuthenticated = sessionStorage.getItem('driver-auth-token') === 'true';
@@ -334,6 +346,8 @@ export default function DriverDashboard() {
   // Add delivery completion function
   const handleDeliveryComplete = () => {
     setActiveDelivery(null);
+    setActiveNavigation(null);
+    setShowNavigation(false);
     console.log('✅ Delivery completed, active delivery cleared');
   };
 
@@ -358,13 +372,17 @@ export default function DriverDashboard() {
     }
   };
 
-  // UPDATED: handleBookingAccept function with proper type
+  // UPDATED: handleBookingAccept function with automatic navigation
   const handleBookingAccept = async (deliveryData?: ActiveDelivery | number) => {
     // If deliveryData is provided as an ActiveDelivery object (from BookingNotification), use it
     if (deliveryData && typeof deliveryData !== 'number') {
       setActiveDelivery(deliveryData);
       console.log('📍 Active delivery set with chat data:', deliveryData);
       setActiveTab('map');
+      
+      // AUTOMATICALLY OPEN NAVIGATION MODAL
+      setActiveNavigation(deliveryData);
+      setShowNavigation(true);
       return;
     }
     
@@ -406,6 +424,10 @@ export default function DriverDashboard() {
 
         setActiveDelivery(newActiveDelivery);
         console.log('📍 Active delivery set with coordinates and chat data');
+
+        // AUTOMATICALLY OPEN NAVIGATION MODAL
+        setActiveNavigation(newActiveDelivery);
+        setShowNavigation(true);
 
         // Update notification and list
         if (bookingRequest?.id === requestToAccept.id) {
@@ -531,6 +553,8 @@ export default function DriverDashboard() {
           setBookingRequest(null);
           setHasNewNotification(false);
           setActiveDelivery(null); // Clear active delivery when going offline
+          setActiveNavigation(null); // Clear navigation when going offline
+          setShowNavigation(false); // Close navigation modal
         }
       } else {
         throw new Error('Failed to update online status');
@@ -907,7 +931,7 @@ export default function DriverDashboard() {
               <div className="relative">
                 <FiBell className="h-6 w-6 text-purple-600 animate-pulse" />
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
-              </div>
+            </div>
             )}
             <span className={`mr-3 text-sm font-medium ${isOnline ? 'text-purple-600' : 'text-gray-600'}`}>
               {isOnline ? 'Online - Available' : 'Offline'}
@@ -1068,8 +1092,20 @@ export default function DriverDashboard() {
               </div>
             </div>
           ) : activeTab === 'map' ? (
-            <div className="bg-white rounded-lg shadow-sm h-full border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-lg shadow-sm h-full border border-gray-200 overflow-hidden relative">
               <LocationPermissionRequest onGranted={() => setLocationGranted(true)} />
+              {/* Add Navigation Button when there's an active delivery */}
+              {activeDelivery && (
+                <div className="absolute top-4 right-4 z-10">
+                  <button
+                    onClick={startActiveDeliveryNavigation}
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-lg shadow-lg hover:from-blue-700 hover:to-indigo-700 flex items-center space-x-2 transition-all duration-200"
+                  >
+                    <FiNavigation className="h-4 w-4" />
+                    <span>Start Navigation</span>
+                  </button>
+                </div>
+              )}
               <Map
                 initialOptions={{
                   center: [31.033, -17.827],
@@ -1347,6 +1383,31 @@ export default function DriverDashboard() {
           )}
         </div>
       </div>
+
+      {/* Navigation Modal - Always render when activeNavigation exists */}
+      <AnimatePresence>
+        {activeNavigation && (
+          <DriverNavigationModal
+            isOpen={showNavigation}
+            onClose={() => {
+              setShowNavigation(false);
+              setActiveNavigation(null);
+            }}
+            navigationData={{
+              pickupLocation: activeNavigation.pickupLocation,
+              deliveryLocation: activeNavigation.deliveryLocation,
+              pickupAddress: activeNavigation.pickupAddress,
+              deliveryAddress: activeNavigation.deliveryAddress,
+              orderId: activeNavigation.id,
+              customerUsername: activeNavigation.customerUsername,
+              fare: activeNavigation.fare,
+              customerPhoneNumber: activeNavigation.customerPhoneNumber
+            }}
+            driverId={driverData?.id || 0}
+            onDeliveryComplete={handleDeliveryComplete}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

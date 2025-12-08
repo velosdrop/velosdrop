@@ -474,6 +474,38 @@ export const publishSystemMessageToAdmin = async (
   }
 };
 
+export const publishBookingStatusUpdate = async (
+  orderId: number,
+  status: string,
+  driverId?: number
+) => {
+  const message: PubNubPublishMessage = {
+    type: MESSAGE_TYPES.BOOKING_STATUS_UPDATE,
+    data: {
+      orderId,
+      status,
+      driverId,
+      timestamp: Date.now()
+    },
+  };
+
+  try {
+    // Publish to order-specific channel
+    await pubnub.publish({
+      channel: CHANNELS.booking(orderId),
+      message,
+    });
+
+    // Also publish to customer channel if we have the customer ID
+    // You might need to fetch customerId from your database
+    console.log(`Booking status update published for order ${orderId}: ${status}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Error publishing booking status update:', error);
+    return { success: false, error };
+  }
+};
+
 // NEW: Function to get all active delivery chats for admin
 export const getActiveDeliveryChats = async (): Promise<number[]> => {
   // This would typically query your database
