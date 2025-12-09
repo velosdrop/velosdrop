@@ -63,11 +63,11 @@ export async function POST(request: NextRequest) {
     if (
       !customerId || 
       !pickupAddress || 
-      !pickupLatitude === undefined ||
-      !pickupLongitude === undefined ||
+      pickupLatitude === undefined ||
+      pickupLongitude === undefined ||
       !dropoffAddress || 
-      !dropoffLatitude === undefined ||
-      !dropoffLongitude === undefined ||
+      dropoffLatitude === undefined ||
+      dropoffLongitude === undefined ||
       !fare || 
       !userLocation
     ) {
@@ -149,37 +149,83 @@ export async function POST(request: NextRequest) {
     // Publish booking request via PubNub
     if (driverIdsToNotify.length > 0) {
       try {
+        // ✅ FIXED: Updated field names to match driver expectations
         const bookingData = {
           bookingId: deliveryRequest.id,
           customerId: customerId,
           customerUsername: customerUsername || customer.username,
           customerProfilePictureUrl: customer.profilePictureUrl || '', 
           customerPhoneNumber: customer.phoneNumber || '',
-          pickupAddress: pickupAddress,
-          pickupLatitude: pickupLatitude,
-          pickupLongitude: pickupLongitude,
-          dropoffAddress: dropoffAddress,
-          dropoffLatitude: dropoffLatitude,
-          dropoffLongitude: dropoffLongitude,
+          
+          // ✅ REQUIRED: Separate latitude/longitude fields (must be included)
+          pickupLatitude: parseFloat(pickupLatitude),
+          pickupLongitude: parseFloat(pickupLongitude),
+          dropoffLatitude: parseFloat(dropoffLatitude),
+          dropoffLongitude: parseFloat(dropoffLongitude),
+          
+          // ✅ BACKWARD COMPATIBILITY: Old format fields
+          pickupLocation: pickupAddress, 
+          pickupAddress: pickupAddress,  
+          pickupCoords: [parseFloat(pickupLongitude), parseFloat(pickupLatitude)], // [lng, lat] for maps
+          
+          dropoffLocation: dropoffAddress,
+          dropoffAddress: dropoffAddress,  
+          dropoffCoords: [parseFloat(dropoffLongitude), parseFloat(dropoffLatitude)], // [lng, lat] for maps
+          
+          // ✅ ADDITIONAL: Structured objects for convenience
+          pickup: {
+            address: pickupAddress,
+            latitude: parseFloat(pickupLatitude),
+            longitude: parseFloat(pickupLongitude),
+            coordinates: [parseFloat(pickupLongitude), parseFloat(pickupLatitude)]
+          },
+          
+          dropoff: {
+            address: dropoffAddress,
+            latitude: parseFloat(dropoffLatitude),
+            longitude: parseFloat(dropoffLongitude),
+            coordinates: [parseFloat(dropoffLongitude), parseFloat(dropoffLatitude)]
+          },
+          
           fare: parseFloat(fare),
           distance: parseFloat(distance),
           vehicleType: vehicleType || 'car',
           expiresAt: expiresAt.toISOString(),
           packageDetails: packageDetails || '',
           isDirectAssignment: !!selectedDriverId,
-          recipientPhoneNumber: recipientPhone || ''
+          recipientPhoneNumber: recipientPhone || '',
+          
+          // ✅ Additional metadata for better driver UX
+          createdAt: new Date().toISOString(),
+          status: 'pending'
         };
-
+        
         console.log('Publishing booking data to drivers:', bookingData);
         
         const publishResult = await publishBookingRequest(driverIdsToNotify, bookingData);
         
         console.log('PubNub publish results:', publishResult);
+        
+        // ✅ DEBUGGING: Log what was sent
+        console.log('📤 Booking notification sent to drivers:', {
+          driverIds: driverIdsToNotify,
+          bookingId: deliveryRequest.id,
+          pickup: bookingData.pickup,
+          dropoff: bookingData.dropoff
+        });
+        
       } catch (publishError) {
-        console.error('PubNub publish error:', publishError);
+        console.error('❌ PubNub publish error:', publishError);
+        // Log more details about the error
+        if (publishError instanceof Error) {
+          console.error('Error details:', {
+            message: publishError.message,
+            stack: publishError.stack
+          });
+        }
       }
     } else {
-      console.log('No drivers available for notification');
+      console.log('⚠️ No drivers available for notification');
       
       await db.update(deliveryRequestsTable)
         .set({ status: 'expired' })
@@ -323,7 +369,10 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Error creating booking:', error);
+    console.error('❌ Error creating booking:', error);
+    if (error instanceof Error) {
+      console.error('Error stack:', error.stack);
+    }
     return NextResponse.json(
       { 
         error: 'Failed to create booking',

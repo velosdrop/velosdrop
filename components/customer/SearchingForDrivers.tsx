@@ -347,24 +347,49 @@ export default function SearchingForDrivers({
       }
     };
   }, [customerId, currentRequestId, handlePubNubMessage]);
-
   const createBookingRequest = useCallback(async (selectedDriver: Driver | null = null) => {
     setBookingStatus('waiting');
     try {
+      // ✅ FIXED: Extract coordinates from pickupCoords and deliveryCoords
+      const pickupLng = packageData.pickupCoords?.[0];
+      const pickupLat = packageData.pickupCoords?.[1];
+      const dropoffLng = packageData.deliveryCoords?.[0];
+      const dropoffLat = packageData.deliveryCoords?.[1];
+
+      // Validate we have coordinates
+      if (!pickupLat || !pickupLng || !dropoffLat || !dropoffLng) {
+        console.error('❌ Missing coordinate data:', {
+          pickupCoords: packageData.pickupCoords,
+          deliveryCoords: packageData.deliveryCoords
+        });
+        setBookingStatus('failed');
+        setError('Missing location coordinates. Please try again.');
+        return;
+      }
+
       const bookingData = {
         customerId,
         customerUsername,
-        pickupAddress: packageData.pickupAddress,
-        dropoffAddress: packageData.dropoffAddress,
+        pickupAddress: packageData.pickupAddress || packageData.pickupLocation,
+        pickupLatitude: pickupLat,      // ✅ NEW: Add separate latitude
+        pickupLongitude: pickupLng,     // ✅ NEW: Add separate longitude
+        dropoffAddress: packageData.dropoffAddress || packageData.deliveryLocation,
+        dropoffLatitude: dropoffLat,    // ✅ NEW: Add separate latitude
+        dropoffLongitude: dropoffLng,   // ✅ NEW: Add separate longitude
         fare: parseFloat(fare),
-        distance: packageData.routeDistance,
-        packageDetails: packageData.packageDescription,
-        vehicleType: packageData.vehicleType || 'car', // Add vehicle type
+        distance: packageData.routeDistance || 0,
+        packageDetails: packageData.packageDescription || '',
+        vehicleType: packageData.vehicleType || 'car',
+        recipientPhone: packageData.recipientPhone || '',
         userLocation: userLocation,
         ...(selectedDriver && { selectedDriverId: selectedDriver.id })
       };
 
-      console.log('🚗 Creating booking request with vehicle type:', bookingData.vehicleType);
+      console.log('🚗 Creating booking with coordinates:', {
+        pickup: { lat: pickupLat, lng: pickupLng, address: bookingData.pickupAddress },
+        dropoff: { lat: dropoffLat, lng: dropoffLng, address: bookingData.dropoffAddress },
+        vehicleType: bookingData.vehicleType
+      });
 
       const response = await fetch('/api/bookings/create', {
         method: 'POST',
@@ -376,7 +401,7 @@ export default function SearchingForDrivers({
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Booking creation failed:', errorText);
+        console.error('❌ Booking creation failed:', errorText);
         throw new Error('Failed to create booking');
       }
 
@@ -392,7 +417,7 @@ export default function SearchingForDrivers({
       }
 
     } catch (error) {
-      console.error('Error creating booking:', error);
+      console.error('❌ Error creating booking:', error);
       setBookingStatus('failed');
       setError('Failed to create booking request');
     }
