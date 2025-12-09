@@ -210,7 +210,7 @@ export async function POST(request: NextRequest) {
         fare: deliveryRequest.fare,
         distance: deliveryRequest.distance,
         packageDetails: deliveryRequest.packageDetails || '',
-        estimatedArrival: calculateEstimatedArrival(driver.lastLocation, deliveryRequest.pickupLocation),
+        estimatedArrival: calculateEstimatedArrival(driver.lastLocation, deliveryRequest.pickupAddress || deliveryRequest.pickupLocation || 'Unknown location'),
         timestamp: new Date().toISOString(),
         accepted: true,
         rejected: false,
@@ -421,10 +421,10 @@ export async function POST(request: NextRequest) {
 }
 
 // Enhanced helper function to calculate estimated arrival time
-function calculateEstimatedArrival(driverLocation: any, pickupLocation: string): string {
+function calculateEstimatedArrival(driverLocation: any, pickupLocation: string | null): string {
   const defaultEstimate = '10-15 minutes';
   
-  if (!driverLocation) {
+  if (!driverLocation || !pickupLocation) {
     return defaultEstimate;
   }
 
@@ -557,3 +557,4 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
+

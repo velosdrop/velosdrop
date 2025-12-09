@@ -141,6 +141,13 @@
       "when": 1764886210412,
       "tag": "0019_red_spitfire",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1765270344260,
+      "tag": "0020_parched_stryfe",
+      "breakpoints": true
     }
   ]
 }

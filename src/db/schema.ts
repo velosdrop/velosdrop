@@ -87,22 +87,34 @@ export const driversTable = sqliteTable('drivers', {
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
-// Delivery requests table
+//Delivery requests table
 export const deliveryRequestsTable = sqliteTable('delivery_requests', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
   customerId: integer('customer_id').notNull().references(() => customersTable.id, { onDelete: 'cascade' }),
   customerUsername: text('customer_username').notNull(),
-  pickupLocation: text('pickup_location').notNull(),
-  dropoffLocation: text('dropoff_location').notNull(),
+  
+  // OLD COLUMNS (keep for now - will be migrated and deleted later)
+  pickupLocation: text('pickup_location'),
+  dropoffLocation: text('dropoff_location'),
+  
+  // NEW COLUMNS (optional for backward compatibility with existing data)
+  pickupAddress: text('pickup_address'), // REMOVED .notNull()
+  pickupLatitude: real('pickup_latitude'), // REMOVED .notNull()
+  pickupLongitude: real('pickup_longitude'), // REMOVED .notNull()
+  
+  dropoffAddress: text('dropoff_address'), // REMOVED .notNull()
+  dropoffLatitude: real('dropoff_latitude'), // REMOVED .notNull()
+  dropoffLongitude: real('dropoff_longitude'), // REMOVED .notNull()
+  
   fare: real('fare').notNull(),
   distance: real('distance').notNull(),
   vehicleType: text('vehicle_type').notNull().default('car'), 
   packageDetails: text('package_details'),
   recipientPhoneNumber: text('recipient_phone_number'),
-  status: text('status').default('pending').notNull(), // pending, accepted, rejected, completed, expired
+  status: text('status').default('pending').notNull(),
   assignedDriverId: integer('assigned_driver_id').references(() => driversTable.id), 
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
-  expiresAt: text('expires_at').notNull(), // 30-second timeout
+  expiresAt: text('expires_at').notNull(),
 });
 
 // Driver responses table

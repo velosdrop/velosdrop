@@ -8,19 +8,16 @@ import { publishBookingRequest, publishBookingResponse, MESSAGE_TYPES } from '@/
 // Improved nearby driver matching
 const findNearbyDrivers = async (userLocation: { lat: number; lng: number }, vehicleType?: string, radius: number = 5) => {
   try {
-    // Build query parameters
     const params = new URLSearchParams({
       lat: userLocation.lat.toString(),
       lng: userLocation.lng.toString(),
       radius: radius.toString()
     });
     
-    // Add vehicleType filter if provided
     if (vehicleType) {
       params.append('vehicleType', vehicleType);
     }
 
-    // Use relative path instead of absolute URL for internal API calls
     const response = await fetch(
       `${process.env.NEXTAUTH_URL || ''}/api/drivers/nearby?${params.toString()}`
     );
@@ -44,31 +41,54 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('Booking request received:', body);
     
-    // Updated field names to include vehicleType
     const { 
       customerId, 
       customerUsername,
       recipientPhone,
       pickupAddress,
+      pickupLatitude,
+      pickupLongitude,
       dropoffAddress,
+      dropoffLatitude,
+      dropoffLongitude,
       fare, 
       distance,
       packageDetails,
-      vehicleType,          // NEW: Vehicle type parameter
+      vehicleType,
       userLocation,
       selectedDriverId
     } = body;
 
-    // Updated validation to include vehicleType
-    if (!customerId || !pickupAddress || !dropoffAddress || !fare || !userLocation) {
-      console.log('Missing required fields:', { customerId, pickupAddress, dropoffAddress, fare, userLocation });
+    // Updated validation to include all new fields
+    if (
+      !customerId || 
+      !pickupAddress || 
+      !pickupLatitude === undefined ||
+      !pickupLongitude === undefined ||
+      !dropoffAddress || 
+      !dropoffLatitude === undefined ||
+      !dropoffLongitude === undefined ||
+      !fare || 
+      !userLocation
+    ) {
+      console.log('Missing required fields:', { 
+        customerId, 
+        pickupAddress, 
+        pickupLatitude,
+        pickupLongitude,
+        dropoffAddress,
+        dropoffLatitude,
+        dropoffLongitude,
+        fare, 
+        userLocation 
+      });
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    // Get customer details with ALL required fields for driver notification
+    // Get customer details
     const customer = await db.query.customersTable.findFirst({
       where: eq(customersTable.id, customerId),
       columns: { 
@@ -87,18 +107,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create delivery request - ADD vehicleType to database insert
+    // Create delivery request with NEW schema fields
     const expiresAt = new Date(Date.now() + 30000);
     
-    // Map frontend field names to database field names
     const [deliveryRequest] = await db.insert(deliveryRequestsTable).values({
       customerId,
       customerUsername: customerUsername || customer.username,
-      pickupLocation: pickupAddress,
-      dropoffLocation: dropoffAddress,
+      pickupAddress: pickupAddress,
+      pickupLatitude: parseFloat(pickupLatitude),
+      pickupLongitude: parseFloat(pickupLongitude),
+      dropoffAddress: dropoffAddress,
+      dropoffLatitude: parseFloat(dropoffLatitude),
+      dropoffLongitude: parseFloat(dropoffLongitude),
       fare: parseFloat(fare),
       distance: parseFloat(distance),
-      vehicleType: vehicleType || 'car', // NEW: Store vehicle type
+      vehicleType: vehicleType || 'car',
       packageDetails: packageDetails || '',
       recipientPhoneNumber: recipientPhone || '',
       expiresAt: expiresAt.toISOString(),
@@ -115,31 +138,32 @@ export async function POST(request: NextRequest) {
     let driverIdsToNotify = [];
     
     if (selectedDriverId) {
-      // If a specific driver is selected, only notify that driver
       driverIdsToNotify = [selectedDriverId];
       console.log('Specific driver selected:', selectedDriverId);
     } else {
-      // Broadcast to nearby drivers with optional vehicleType filter
       const driverIds = await findNearbyDrivers(userLocation, vehicleType, 5);
       console.log(`Found ${driverIds.length} nearby drivers for vehicle type: ${vehicleType || 'all'}`);
       driverIdsToNotify = driverIds;
     }
 
-    // Publish booking request via PubNub - ADD vehicleType to notification data
+    // Publish booking request via PubNub
     if (driverIdsToNotify.length > 0) {
       try {
-        // Create the booking data object with all required fields
         const bookingData = {
           bookingId: deliveryRequest.id,
           customerId: customerId,
           customerUsername: customerUsername || customer.username,
           customerProfilePictureUrl: customer.profilePictureUrl || '', 
           customerPhoneNumber: customer.phoneNumber || '',
-          pickupLocation: pickupAddress,
-          dropoffLocation: dropoffAddress,
+          pickupAddress: pickupAddress,
+          pickupLatitude: pickupLatitude,
+          pickupLongitude: pickupLongitude,
+          dropoffAddress: dropoffAddress,
+          dropoffLatitude: dropoffLatitude,
+          dropoffLongitude: dropoffLongitude,
           fare: parseFloat(fare),
           distance: parseFloat(distance),
-          vehicleType: vehicleType || 'car', // NEW: Include vehicle type
+          vehicleType: vehicleType || 'car',
           expiresAt: expiresAt.toISOString(),
           packageDetails: packageDetails || '',
           isDirectAssignment: !!selectedDriverId,
@@ -155,15 +179,12 @@ export async function POST(request: NextRequest) {
         console.error('PubNub publish error:', publishError);
       }
     } else {
-      // No drivers found - handle this case
       console.log('No drivers available for notification');
       
-      // Update status immediately to expired
       await db.update(deliveryRequestsTable)
         .set({ status: 'expired' })
         .where(eq(deliveryRequestsTable.id, deliveryRequest.id));
       
-      // Notify customer via PubNub - Use updated interface
       await publishBookingResponse(customerId, {
         bookingId: deliveryRequest.id,
         driverId: 0,
@@ -186,7 +207,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // For direct assignments, return immediately without waiting for responses
     if (selectedDriverId) {
       return NextResponse.json({
         success: true,
@@ -202,7 +222,6 @@ export async function POST(request: NextRequest) {
       let responded = false;
       let timeoutHandled = false;
       
-      // Listen for driver responses
       const checkResponses = setInterval(async () => {
         if (timeoutHandled) {
           clearInterval(checkResponses);
@@ -220,7 +239,6 @@ export async function POST(request: NextRequest) {
             responded = true;
             clearInterval(checkResponses);
             
-            // Get driver details
             const driver = await db.query.driversTable.findFirst({
               where: eq(driversTable.id, acceptedResponse.driverId)
             });
@@ -236,7 +254,6 @@ export async function POST(request: NextRequest) {
         }
       }, 1000);
       
-      // Timeout if no response
       setTimeout(() => {
         if (!responded) {
           timeoutHandled = true;
@@ -250,11 +267,9 @@ export async function POST(request: NextRequest) {
       }, responseTimeout);
     });
 
-    // Wait for response or timeout
     const responseResult = await responsePromise as any;
 
     if (responseResult.accepted && responseResult.driver) {
-      // Update request status to accepted
       await db.update(deliveryRequestsTable)
         .set({ 
           status: 'accepted',
@@ -262,7 +277,6 @@ export async function POST(request: NextRequest) {
         })
         .where(eq(deliveryRequestsTable.id, deliveryRequest.id));
       
-      // Notify customer via PubNub - Use updated interface
       await publishBookingResponse(customerId, {
         bookingId: deliveryRequest.id,
         driverId: responseResult.driver.id,
@@ -272,7 +286,7 @@ export async function POST(request: NextRequest) {
         carName: responseResult.driver.carName || '',
         profilePictureUrl: responseResult.driver.profilePictureUrl,
         wasDirectAssignment: false,
-        requestedVehicleType: vehicleType || 'car' // NEW: Include requested vehicle type
+        requestedVehicleType: vehicleType || 'car'
       }, MESSAGE_TYPES.BOOKING_ACCEPTED);
       
       return NextResponse.json({
@@ -282,12 +296,10 @@ export async function POST(request: NextRequest) {
         status: 'accepted'
       });
     } else {
-      // No drivers accepted, set status to expired
       await db.update(deliveryRequestsTable)
         .set({ status: 'expired' })
         .where(eq(deliveryRequestsTable.id, deliveryRequest.id));
       
-      // Notify customer of expiration via PubNub - Use updated interface
       await publishBookingResponse(customerId, {
         bookingId: deliveryRequest.id,
         driverId: 0,
@@ -299,7 +311,7 @@ export async function POST(request: NextRequest) {
         wasDirectAssignment: false,
         expired: true,
         message: 'No drivers accepted the request',
-        requestedVehicleType: vehicleType || 'car' // NEW: Include requested vehicle type
+        requestedVehicleType: vehicleType || 'car'
       }, MESSAGE_TYPES.BOOKING_REJECTED);
       
       return NextResponse.json({

@@ -62,7 +62,7 @@ export interface PubNubMessage {
   data: any;
   timestamp: number;
   senderId: string;
-  [key: string]: any; // Index signature
+  [key: string]: any;
 }
 
 // Type for publishing messages
@@ -88,7 +88,7 @@ export interface ChatMessageForAdmin {
   };
 }
 
-// Booking request message - UPDATED: Add recipientPhoneNumber and vehicleType to the interface
+// UPDATED: Booking request message with separate address and coordinates
 export interface BookingRequestMessage extends PubNubMessage {
   type: typeof MESSAGE_TYPES.BOOKING_REQUEST;
   data: {
@@ -98,18 +98,23 @@ export interface BookingRequestMessage extends PubNubMessage {
     customerProfilePictureUrl: string;
     customerPhoneNumber?: string;
     recipientPhoneNumber?: string;
-    pickupLocation: string;
-    dropoffLocation: string;
+    // UPDATED: Now includes separate address and coordinates
+    pickupAddress: string;
+    pickupLatitude: number;
+    pickupLongitude: number;
+    dropoffAddress: string;
+    dropoffLatitude: number;
+    dropoffLongitude: number;
     fare: number;
     distance: number;
-    vehicleType?: string; // ADDED: Vehicle type
+    vehicleType?: string;
     packageDetails?: string;
     expiresAt: string;
     isDirectAssignment?: boolean;
   };
 }
 
-// Booking response message - UPDATED: Add message and requestedVehicleType properties
+// UPDATED: Booking response message
 export interface BookingResponseMessage extends PubNubMessage {
   type: typeof MESSAGE_TYPES.BOOKING_ACCEPTED | typeof MESSAGE_TYPES.BOOKING_REJECTED;
   data: {
@@ -123,8 +128,8 @@ export interface BookingResponseMessage extends PubNubMessage {
     wasDirectAssignment?: boolean;
     expired?: boolean;
     rejected?: boolean;
-    message?: string; // ADDED: Optional message
-    requestedVehicleType?: string; // ADDED: Optional requested vehicle type
+    message?: string;
+    requestedVehicleType?: string;
   };
 }
 
@@ -133,12 +138,12 @@ export const createPubNubClient = (userId: string) => {
   return pubnub;
 };
 
-// Export the getPubNubInstance function that was missing
+// Export the getPubNubInstance function
 export const getPubNubInstance = () => {
   return pubnub;
 };
 
-// Publish functions - UPDATED: Ensure recipientPhoneNumber is included in published data
+// UPDATED: Publish booking request with new address/coordinates schema
 export const publishBookingRequest = async (
   driverIds: number[],
   bookingData: BookingRequestMessage['data']
@@ -148,7 +153,7 @@ export const publishBookingRequest = async (
     data: {
       ...bookingData,
       recipientPhoneNumber: bookingData.recipientPhoneNumber || '',
-      vehicleType: bookingData.vehicleType || 'car' // ADDED: Default to car if not specified
+      vehicleType: bookingData.vehicleType || 'car'
     },
   };
 
@@ -169,9 +174,10 @@ export const publishBookingRequest = async (
     }
 
     console.log(`Booking request published to ${driverIds.length} drivers`, {
-      recipientPhoneNumber: bookingData.recipientPhoneNumber,
+      bookingId: bookingData.bookingId,
+      pickupAddress: bookingData.pickupAddress,
+      dropoffAddress: bookingData.dropoffAddress,
       vehicleType: bookingData.vehicleType,
-      bookingData: bookingData
     });
     return { success: true };
   } catch (error) {
@@ -231,7 +237,6 @@ export const publishDriverLocationUpdate = async (
   }
 };
 
-// NEW: Enhanced driver location update with order context
 export const publishDriverLocationUpdateWithOrder = async (
   driverId: number,
   location: { latitude: number; longitude: number; heading?: number; speed?: number },
@@ -242,7 +247,7 @@ export const publishDriverLocationUpdateWithOrder = async (
     data: {
       driverId,
       location,
-      orderId, // Add orderId to the context
+      orderId,
       timestamp: Date.now()
     },
   };
@@ -261,7 +266,6 @@ export const publishDriverLocationUpdateWithOrder = async (
   }
 };
 
-// Additional publish functions for driver notifications
 export const publishToDriversChannel = async (
   messageData: any,
   messageType: string
@@ -285,7 +289,6 @@ export const publishToDriversChannel = async (
   }
 };
 
-// Helper function to publish request accepted notification to other drivers
 export const publishRequestAccepted = async (
   requestId: number,
   driverId: number
@@ -300,7 +303,6 @@ export const publishRequestAccepted = async (
   );
 };
 
-// Helper function to publish request rebroadcast notification
 export const publishRequestRebroadcast = async (
   requestId: number,
   rejectedBy: number,
@@ -317,7 +319,6 @@ export const publishRequestRebroadcast = async (
   );
 };
 
-// NEW: Function to forward messages to admin monitoring
 export const forwardMessageToAdmin = async (
   deliveryId: number,
   messageData: {
@@ -340,13 +341,11 @@ export const forwardMessageToAdmin = async (
   };
 
   try {
-    // Publish to delivery-specific admin channel
     await pubnub.publish({
       channel: CHANNELS.deliveryAdmin(deliveryId),
       message,
     });
 
-    // Also publish to general admin chats monitor
     await pubnub.publish({
       channel: CHANNELS.adminChats,
       message: {
@@ -370,7 +369,6 @@ export const forwardMessageToAdmin = async (
   }
 };
 
-// NEW: Function to notify admin about new delivery chat
 export const notifyAdminAboutNewDeliveryChat = async (
   deliveryId: number,
   customerId: number,
@@ -392,7 +390,6 @@ export const notifyAdminAboutNewDeliveryChat = async (
   };
 
   try {
-    // Publish to admin chats channel
     await pubnub.publish({
       channel: CHANNELS.adminChats,
       message,
@@ -406,7 +403,6 @@ export const notifyAdminAboutNewDeliveryChat = async (
   }
 };
 
-// NEW: Function to subscribe admin to specific delivery chat
 export const subscribeAdminToDeliveryChat = async (
   adminId: number,
   deliveryId: number
@@ -427,7 +423,6 @@ export const subscribeAdminToDeliveryChat = async (
   }
 };
 
-// NEW: Function to unsubscribe admin from delivery chat
 export const unsubscribeAdminFromDeliveryChat = async (
   adminId: number,
   deliveryId: number
@@ -445,7 +440,6 @@ export const unsubscribeAdminFromDeliveryChat = async (
   }
 };
 
-// NEW: Function to publish system message to admin
 export const publishSystemMessageToAdmin = async (
   adminId: number,
   message: string,
@@ -490,14 +484,11 @@ export const publishBookingStatusUpdate = async (
   };
 
   try {
-    // Publish to order-specific channel
     await pubnub.publish({
       channel: CHANNELS.booking(orderId),
       message,
     });
 
-    // Also publish to customer channel if we have the customer ID
-    // You might need to fetch customerId from your database
     console.log(`Booking status update published for order ${orderId}: ${status}`);
     return { success: true };
   } catch (error) {
@@ -506,14 +497,10 @@ export const publishBookingStatusUpdate = async (
   }
 };
 
-// NEW: Function to get all active delivery chats for admin
 export const getActiveDeliveryChats = async (): Promise<number[]> => {
-  // This would typically query your database
-  // For now, return an empty array - implementation depends on your data structure
   return [];
 };
 
-// NEW: Function to broadcast to all admins
 export const broadcastToAllAdmins = async (
   messageType: string,
   messageData: any
@@ -527,10 +514,6 @@ export const broadcastToAllAdmins = async (
   };
 
   try {
-    // Get all admin IDs from your database
-    // For now, we'll publish to a general admin channel
-    // In production, you might want to iterate through all admin IDs
-    
     await pubnub.publish({
       channel: CHANNELS.adminChats,
       message,
@@ -544,7 +527,6 @@ export const broadcastToAllAdmins = async (
   }
 };
 
-// NEW: Helper function to format chat message for admin
 export const formatChatMessageForAdmin = (
   messageId: number,
   deliveryId: number,
@@ -574,7 +556,6 @@ export const formatChatMessageForAdmin = (
   };
 };
 
-// NEW: Export all message types as constants for easy import
 export const ADMIN_MESSAGE_TYPES = {
   ...MESSAGE_TYPES,
   SYSTEM_MESSAGE: 'system_message',
