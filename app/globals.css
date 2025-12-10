@@ -202,3 +202,376 @@
   border-radius: 4px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
+
+/* ===== PREMIUM WAZE BUTTON STYLING ===== */
+
+/* Waze Button Pulse Animation */
+@keyframes waze-pulse {
+  0%, 100% { 
+    box-shadow: 0 0 0 0 rgba(51, 204, 255, 0.7); 
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: 0 0 0 15px rgba(51, 204, 255, 0); 
+    transform: scale(1.05);
+  }
+}
+
+.waze-button-animate {
+  animation: waze-pulse 2s infinite;
+  transition: all 0.3s ease;
+}
+
+/* Waze Active State */
+.waze-active {
+  background: linear-gradient(135deg, #33CCFF, #2AA3CC);
+  box-shadow: 0 4px 20px rgba(51, 204, 255, 0.4);
+  position: relative;
+  overflow: hidden;
+}
+
+.waze-active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  animation: shine 3s infinite;
+}
+
+/* Shine effect for active state */
+@keyframes shine {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Premium Animations for Map Components */
+@keyframes bounce-subtle {
+  0%, 100% { 
+    transform: translateY(0); 
+  }
+  50% { 
+    transform: translateY(-5px); 
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse-scale {
+  0%, 100% { 
+    transform: scale(1); 
+    box-shadow: 0 10px 30px rgba(51, 204, 255, 0.4); 
+  }
+  50% { 
+    transform: scale(1.07); 
+    box-shadow: 0 15px 40px rgba(51, 204, 255, 0.6); 
+  }
+}
+
+@keyframes float {
+  0%, 100% { 
+    transform: translateY(0) rotate(0deg); 
+  }
+  33% { 
+    transform: translateY(-10px) rotate(5deg); 
+  }
+  66% { 
+    transform: translateY(-5px) rotate(-5deg); 
+  }
+}
+
+/* Animation Classes */
+.animate-bounce-subtle {
+  animation: bounce-subtle 2s infinite ease-in-out;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out forwards;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.4s ease-out forwards;
+}
+
+.animate-pulse-scale {
+  animation: pulse-scale 2s infinite;
+}
+
+.animate-float {
+  animation: float 6s infinite ease-in-out;
+}
+
+/* Map Marker Animations */
+.car-marker {
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.3));
+  transition: transform 0.3s ease;
+}
+
+.car-marker:hover {
+  transform: scale(1.1);
+}
+
+.pickup-marker, .delivery-marker, .customer-marker {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+  transition: all 0.3s ease;
+}
+
+.pickup-marker:hover, .delivery-marker:hover, .customer-marker:hover {
+  transform: scale(1.15);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+}
+
+/* Waze Modal Backdrop */
+.waze-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 40;
+  animation: fade-in 0.3s ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Premium Button Styles */
+.premium-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.premium-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.5);
+  opacity: 0;
+  border-radius: 100%;
+  transform: scale(1, 1) translate(-50%);
+  transform-origin: 50% 50%;
+}
+
+.premium-btn:focus:not(:active)::after {
+  animation: ripple 1s ease-out;
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(0, 0);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(20, 20);
+    opacity: 0;
+  }
+}
+
+/* Gradient Text Effect */
+.gradient-text-waze {
+  background: linear-gradient(135deg, #33CCFF 0%, #2AA3CC 50%, #1A8CB8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Loading Spinner for Waze */
+.waze-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(51, 204, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #33CCFF;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Notification Animation */
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.waze-notification {
+  animation: slide-down 0.3s ease-out;
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 768px) {
+  .waze-button-animate {
+    animation: waze-pulse 1.5s infinite;
+  }
+  
+  @keyframes waze-pulse-mobile {
+    0%, 100% { 
+      box-shadow: 0 0 0 0 rgba(51, 204, 255, 0.7); 
+      transform: scale(1);
+    }
+    50% { 
+      box-shadow: 0 0 0 8px rgba(51, 204, 255, 0); 
+      transform: scale(1.03);
+    }
+  }
+  
+  .mobile-waze-pulse {
+    animation: waze-pulse-mobile 2s infinite;
+  }
+}
+
+/* Glassmorphism effect for modals */
+.glass-effect {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.1);
+}
+
+/* Smooth transitions for map controls */
+.map-control-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hover effects for interactive elements */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Gradient border effect */
+.gradient-border {
+  position: relative;
+  border: double 2px transparent;
+  background-image: linear-gradient(white, white), 
+                    linear-gradient(135deg, #33CCFF, #2AA3CC);
+  background-origin: border-box;
+  background-clip: content-box, border-box;
+}
+
+/* Custom scrollbar for Waze modal */
+.waze-modal-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #33CCFF #f1f1f1;
+}
+
+.waze-modal-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.waze-modal-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.waze-modal-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #33CCFF, #2AA3CC);
+  border-radius: 10px;
+}
+
+.waze-modal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #2AA3CC, #1A8CB8);
+}
+
+/* Enhanced focus states for accessibility */
+.waze-focus:focus {
+  outline: 2px solid #33CCFF;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(51, 204, 255, 0.3);
+}
+
+/* Loading skeleton animation */
+@keyframes skeleton-loading {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200px 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+/* Confetti animation for completed navigation */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-100vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+.confetti {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #33CCFF;
+  animation: confetti-fall 3s linear forwards;
+}
+
+/* ===== RESPONSIVE UTILITIES ===== */
+
+@media (max-width: 640px) {
+  .waze-mobile-optimized {
+    padding: 12px !important;
+    font-size: 14px !important;
+  }
+  
+  .waze-button-mobile {
+    width: 50px !important;
+    height: 50px !important;
+  }
+}
+
+/* Print styles (optional) */
+@media print {
+  .waze-button-animate,
+  .waze-active {
+    display: none !important;
+  }
+}

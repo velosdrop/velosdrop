@@ -1,3 +1,4 @@
+//components/driver/Map.tsx
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
@@ -39,6 +40,17 @@ interface MapProps {
   } | null;
 }
 
+// Destination type for Waze navigation
+type WazeDestinationType = 'pickup' | 'delivery' | 'customer';
+
+// Waze navigation state
+interface WazeNavigationState {
+  destinationType: WazeDestinationType;
+  isNavigating: boolean;
+  lastUsedDestination: WazeDestinationType | null;
+  showReminder: boolean;
+}
+
 export default function Map({
   initialOptions = {},
   style,
@@ -66,6 +78,16 @@ export default function Map({
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
   const [pickupEta, setPickupEta] = useState<number | null>(null);
   const [pickupDistance, setPickupDistance] = useState<number | null>(null);
+  
+  // Premium Waze Navigation State
+  const [wazeState, setWazeState] = useState<WazeNavigationState>({
+    destinationType: 'pickup',
+    isNavigating: false,
+    lastUsedDestination: null,
+    showReminder: true
+  });
+  const [showWazeOptions, setShowWazeOptions] = useState(false);
+  const [wazeButtonPulse, setWazeButtonPulse] = useState(false);
 
   // Image upload handler for chat
   const handleImageUpload = async (file: File): Promise<string> => {
@@ -90,6 +112,262 @@ export default function Map({
       console.error('Error uploading image:', error);
       throw error;
     }
+  };
+
+  // PREMIUM FEATURE: Waze Navigation Function with all premium features
+  const openWazeNavigation = (
+    destinationType: WazeDestinationType = 'pickup',
+    options?: {
+      skipConfirmation?: boolean;
+      forceNewTab?: boolean;
+    }
+  ) => {
+    if (!activeDelivery) {
+      console.error('❌ No active delivery for Waze navigation');
+      return;
+    }
+
+    // Determine destination based on type
+    let destination: { longitude: number; latitude: number };
+    let destinationName: string;
+    let address: string;
+
+    switch (destinationType) {
+      case 'pickup':
+        destination = activeDelivery.pickupLocation;
+        destinationName = `Pickup: ${activeDelivery.customerUsername}`;
+        address = activeDelivery.pickupAddress;
+        break;
+      case 'delivery':
+        destination = activeDelivery.deliveryLocation;
+        destinationName = `Delivery: ${activeDelivery.customerUsername}`;
+        address = activeDelivery.deliveryAddress;
+        break;
+      case 'customer':
+        destination = activeDelivery.customerLocation || activeDelivery.deliveryLocation;
+        destinationName = `Customer: ${activeDelivery.customerUsername}`;
+        address = activeDelivery.deliveryAddress;
+        break;
+      default:
+        destination = activeDelivery.pickupLocation;
+        destinationName = `Pickup: ${activeDelivery.customerUsername}`;
+        address = activeDelivery.pickupAddress;
+    }
+
+    const { latitude, longitude } = destination;
+    
+    // Premium Waze Deep Link Construction with all recommended parameters[citation:2]
+    const wazeUrl = new URL('https://waze.com/ul');
+    
+    // Core navigation parameters[citation:2]
+    wazeUrl.searchParams.append('ll', `${latitude},${longitude}`);
+    wazeUrl.searchParams.append('navigate', 'yes');
+    wazeUrl.searchParams.append('zoom', '15'); // Optimal zoom level
+    
+    // Enhanced search query with context
+    const searchQuery = `${destinationName} - ${address.substring(0, 50)}`;
+    wazeUrl.searchParams.append('q', encodeURIComponent(searchQuery));
+    
+    // UTM tracking for partner support (recommended by Waze)[citation:2]
+    wazeUrl.searchParams.append('utm_source', 'delivery-driver-app');
+    wazeUrl.searchParams.append('utm_medium', 'web-deeplink');
+    wazeUrl.searchParams.append('utm_campaign', 'driver-navigation');
+    
+    console.log('🚗 Premium Waze URL:', wazeUrl.toString());
+    console.log('📍 Destination:', { destinationType, coordinates: destination, address });
+
+    // Set navigation state
+    setWazeState(prev => ({
+      ...prev,
+      destinationType,
+      isNavigating: true,
+      lastUsedDestination: destinationType
+    }));
+
+    // Start button pulsing animation
+    setWazeButtonPulse(true);
+    setTimeout(() => setWazeButtonPulse(false), 3000);
+
+    // Open in new tab strategy for web apps
+    const wazeWindow = window.open(
+      wazeUrl.toString(),
+      'waze-navigation',
+      'noopener,noreferrer,width=800,height=600'
+    );
+
+    if (wazeWindow) {
+      wazeWindow.focus();
+      
+      // Track tab/window for better user experience
+      const checkTabClosed = setInterval(() => {
+        if (wazeWindow.closed) {
+          clearInterval(checkTabClosed);
+          setWazeState(prev => ({ ...prev, isNavigating: false }));
+          console.log('🔙 Driver returned from Waze navigation');
+          
+          // Show return notification if needed
+          if (wazeState.showReminder) {
+            showReturnReminder();
+          }
+        }
+      }, 1000);
+    }
+
+    // Show smart reminder (only first time or based on user preference)
+    if (wazeState.showReminder && !options?.skipConfirmation) {
+      setTimeout(() => {
+        if (confirm(
+          `🚗 Waze Navigation Started!\n\n📱 Destination: ${destinationType.toUpperCase()}\n📍 ${address.substring(0, 60)}...\n\n💡 IMPORTANT FOR WEB APPS:\n1. Keep THIS browser tab open\n2. Return here to mark delivery complete\n3. Your location is still being tracked\n\n✅ Click OK to continue\n🔕 Click Cancel to disable reminders`
+        )) {
+          // User acknowledged
+        } else {
+          // User wants to disable reminders
+          setWazeState(prev => ({ ...prev, showReminder: false }));
+          localStorage.setItem('waze-reminder-disabled', 'true');
+        }
+      }, 1000);
+    }
+
+    // Log navigation event for analytics
+    logWazeNavigation(destinationType, destination, address);
+  };
+
+  // Premium: Show return reminder when driver might have completed navigation
+  const showReturnReminder = () => {
+    // Check if driver is near destination
+    const isNearDestination = checkProximityToDestination();
+    
+    if (isNearDestination && wazeState.showReminder) {
+      // Create a non-intrusive notification
+      const reminderDiv = document.createElement('div');
+      reminderDiv.className = 'waze-return-reminder';
+      reminderDiv.innerHTML = `
+        <div style="
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          padding: 16px 20px;
+          border-radius: 12px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+          z-index: 9999;
+          max-width: 320px;
+          backdrop-filter: blur(10px);
+          animation: slideIn 0.5s ease-out;
+        ">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="
+              width: 36px;
+              height: 36px;
+              background: white;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: bold;
+              color: #667eea;
+            ">✓</div>
+            <div>
+              <div style="font-weight: bold; margin-bottom: 4px;">Return to Delivery App</div>
+              <div style="font-size: 14px; opacity: 0.9;">Tap to mark delivery as complete</div>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(reminderDiv);
+      
+      // Auto-remove after 10 seconds
+      setTimeout(() => {
+        if (reminderDiv.parentNode) {
+          reminderDiv.remove();
+        }
+      }, 10000);
+      
+      // Click to remove
+      reminderDiv.onclick = () => reminderDiv.remove();
+    }
+  };
+
+  // Premium: Check if driver is near destination
+  const checkProximityToDestination = (): boolean => {
+    if (!lastLocation || !activeDelivery) return false;
+    
+    let destination: { longitude: number; latitude: number };
+    
+    switch (wazeState.destinationType) {
+      case 'pickup':
+        destination = activeDelivery.pickupLocation;
+        break;
+      case 'delivery':
+      case 'customer':
+        destination = activeDelivery.deliveryLocation;
+        break;
+      default:
+        return false;
+    }
+    
+    // Calculate distance in kilometers
+    const distance = calculateDistance(
+      lastLocation.latitude,
+      lastLocation.longitude,
+      destination.latitude,
+      destination.longitude
+    );
+    
+    // Consider within 0.2km (200m) as "near"
+    return distance < 0.2;
+  };
+
+  // Premium: Calculate distance between coordinates (Haversine formula)
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  // Premium: Log navigation events
+  const logWazeNavigation = (
+    destinationType: WazeDestinationType,
+    destination: { longitude: number; latitude: number },
+    address: string
+  ) => {
+    const logData = {
+      event: 'waze_navigation_started',
+      timestamp: new Date().toISOString(),
+      driverId,
+      deliveryId: activeDelivery?.deliveryId,
+      destinationType,
+      coordinates: destination,
+      address,
+      userAgent: navigator.userAgent,
+      platform: 'web'
+    };
+    
+    console.log('📊 Waze Navigation Log:', logData);
+    
+    // Send to analytics endpoint (optional)
+    fetch('/api/analytics/navigation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(logData)
+    }).catch(err => console.error('Analytics error:', err));
+  };
+
+  // Premium: Smart destination suggestion
+  const getSuggestedDestination = (): WazeDestinationType => {
+    if (!activeDelivery) return 'pickup';
+    
+    // Logic: Suggest delivery if pickup is complete (you need to track this state)
+    // For now, default to pickup
+    return 'pickup';
   };
 
   // Add this useEffect for debugging
@@ -496,7 +774,7 @@ export default function Map({
             'line-cap': 'round'
           },
           paint: {
-            'line-color': '#3b82f6', // Changed to blue for better visibility
+            'line-color': '#FF0000', // Changed to blue for better visibility
             'line-width': 4,
             'line-opacity': 0.8
           }
@@ -567,6 +845,14 @@ export default function Map({
     setRouteDistance(null);
     setPickupEta(null);
     setPickupDistance(null);
+
+    // Reset Waze state
+    setWazeState({
+      destinationType: 'pickup',
+      isNavigating: false,
+      lastUsedDestination: null,
+      showReminder: true
+    });
 
     console.log('🗑️ All delivery markers and routes cleared');
   };
@@ -753,6 +1039,17 @@ export default function Map({
     }
   }, [lastLocation, activeDelivery]);
 
+  // Check proximity when location updates (for return reminders)
+  useEffect(() => {
+    if (lastLocation && wazeState.isNavigating && activeDelivery) {
+      const isNear = checkProximityToDestination();
+      if (isNear) {
+        console.log('📍 Driver is near destination, showing return reminder');
+        showReturnReminder();
+      }
+    }
+  }, [lastLocation, wazeState.isNavigating]);
+
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
 
@@ -851,6 +1148,196 @@ export default function Map({
         </div>
       )}
 
+      {/* PREMIUM FEATURE: Waze Navigation Floating Action Button */}
+      {activeDelivery && (
+        <div className="absolute bottom-16 right-4 z-20">
+          {/* Waze Options Modal */}
+          {showWazeOptions && (
+            <div className="absolute bottom-full right-0 mb-3 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden animate-fade-in">
+              <div className="p-4 border-b border-gray-100">
+                <h3 className="font-bold text-gray-900 flex items-center">
+                  <span className="text-[#33CCFF] mr-2">Waze</span> Navigation
+                </h3>
+                <p className="text-xs text-gray-600 mt-1">Choose destination to open in Waze</p>
+              </div>
+              
+              <div className="p-2">
+                <button
+                  onClick={() => {
+                    openWazeNavigation('pickup');
+                    setShowWazeOptions(false);
+                  }}
+                  className="w-full flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors group"
+                >
+                  <div className="flex items-center">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">Pickup Location</p>
+                      <p className="text-xs text-gray-500 truncate max-w-[160px]">
+                        {activeDelivery.pickupAddress.substring(0, 40)}...
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-[#33CCFF] opacity-0 group-hover:opacity-100 transition-opacity">
+                    →
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => {
+                    openWazeNavigation('delivery');
+                    setShowWazeOptions(false);
+                  }}
+                  className="w-full flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors group"
+                >
+                  <div className="flex items-center">
+                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                      <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">Delivery Location</p>
+                      <p className="text-xs text-gray-500 truncate max-w-[160px]">
+                        {activeDelivery.deliveryAddress.substring(0, 40)}...
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-[#33CCFF] opacity-0 group-hover:opacity-100 transition-opacity">
+                    →
+                  </div>
+                </button>
+                
+                {activeDelivery.customerLocation && (
+                  <button
+                    onClick={() => {
+                      openWazeNavigation('customer');
+                      setShowWazeOptions(false);
+                    }}
+                    className="w-full flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors group"
+                  >
+                    <div className="flex items-center">
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                      </div>
+                      <div className="text-left">
+                        <p className="font-medium text-gray-900">Customer Location</p>
+                        <p className="text-xs text-gray-500">Real-time tracking</p>
+                      </div>
+                    </div>
+                    <div className="text-[#33CCFF] opacity-0 group-hover:opacity-100 transition-opacity">
+                      →
+                    </div>
+                  </button>
+                )}
+              </div>
+              
+              <div className="p-3 bg-gray-50 border-t border-gray-100">
+                <button
+                  onClick={() => {
+                    const suggested = getSuggestedDestination();
+                    openWazeNavigation(suggested, { skipConfirmation: true });
+                    setShowWazeOptions(false);
+                  }}
+                  className="w-full bg-[#33CCFF] hover:bg-[#2AA3CC] text-white py-2.5 px-4 rounded-lg font-medium transition-colors flex items-center justify-center"
+                >
+                  <span className="mr-2">Quick Start</span>
+                  <span className="text-xs bg-white/30 px-1.5 py-0.5 rounded">Smart</span>
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Main Waze FAB Button */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                if (wazeState.lastUsedDestination && !showWazeOptions) {
+                  // Quick re-navigate to last used destination
+                  openWazeNavigation(wazeState.lastUsedDestination);
+                } else {
+                  // Show options modal
+                  setShowWazeOptions(!showWazeOptions);
+                }
+              }}
+              onMouseEnter={() => setWazeButtonPulse(true)}
+              onMouseLeave={() => setWazeButtonPulse(false)}
+              className={`
+                relative w-14 h-14 rounded-full shadow-2xl flex items-center justify-center
+                transition-all duration-300 transform hover:scale-105 active:scale-95
+                ${wazeButtonPulse ? 'animate-pulse-scale' : ''}
+                ${wazeState.isNavigating 
+                  ? 'bg-gradient-to-br from-[#101111] to-black-500' 
+                  : 'bg-gradient-to-br from-[#0d0d0e] to-[#050505]'
+                }
+              `}
+            >
+              {/* Waze "W" Logo */}
+              <img
+                  src="/velosdroplogo.svg"
+                  alt="VelosDrop Logo"
+                  // We use h-8 (32px) to approximate the size of the previous text-2xl "W".
+                  // Adjust h-6, h-8, or h-10 as needed to fit your navbar.
+                  className="h-8 w-auto drop-shadow-md"
+              />
+              
+              {/* Navigation Active Indicator */}
+              {wazeState.isNavigating && (
+                <div className="absolute -top-1 -right-1">
+                  <div className="relative">
+                    <div className="w-5 h-5 bg-green-500 rounded-full border-2 border-white flex items-center justify-center">
+                      <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-75"></div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Pulsing Ring Effect */}
+              <div className={`absolute inset-0 rounded-full border-2 ${
+                wazeState.isNavigating 
+                  ? 'border-green-400 animate-ping' 
+                  : 'border-white/30'
+              }`}></div>
+              
+              {/* Tooltip */}
+              <div className="absolute bottom-full right-0 mb-3 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+                <div className="font-semibold">Waze Navigation</div>
+                <div className="text-xs text-gray-300">Click for destination options</div>
+                <div className="absolute top-full right-4 -mt-1 border-4 border-transparent border-t-gray-900"></div>
+              </div>
+            </button>
+            
+            {/* Quick Action Badge */}
+            {wazeState.lastUsedDestination && !showWazeOptions && (
+              <button
+                onClick={() => openWazeNavigation(wazeState.lastUsedDestination!)}
+                className="absolute -top-2 -right-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg hover:scale-105 transition-transform animate-bounce-subtle"
+              >
+                ↻
+              </button>
+            )}
+          </div>
+          
+          {/* Button Label */}
+          <div className="mt-2 flex flex-col items-center">
+            <div className="text-xs font-semibold text-gray-800 bg-white/95 px-3 py-1.5 rounded-full shadow-md border border-gray-200">
+              <span className="bg-gradient-to-r from-[#33CCFF] to-blue-600 bg-clip-text text-transparent font-bold">
+                WAZE NAV
+              </span>
+            </div>
+            {wazeState.isNavigating && (
+              <div className="text-[10px] text-green-600 font-medium mt-1 flex items-center">
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1 animate-pulse"></div>
+                Navigating to {wazeState.destinationType}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Find My Location Button - More compact */}
       {locationGranted && lastLocation && (
         <button
@@ -874,6 +1361,38 @@ export default function Map({
           customerId={activeDelivery.customerId}
         />
       )}
+
+      {/* Add custom styles for animations */}
+      <style jsx>{`
+        @keyframes pulse-scale {
+          0%, 100% { transform: scale(1); box-shadow: 0 10px 30px rgba(51, 204, 255, 0.4); }
+          50% { transform: scale(1.05); box-shadow: 0 15px 40px rgba(51, 204, 255, 0.6); }
+        }
+        @keyframes bounce-subtle {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-3px); }
+        }
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slide-in {
+          from { transform: translateX(100px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        .animate-pulse-scale {
+          animation: pulse-scale 2s infinite;
+        }
+        .animate-bounce-subtle {
+          animation: bounce-subtle 2s infinite;
+        }
+        .animate-fade-in {
+          animation: fade-in 0.3s ease-out;
+        }
+        .animate-slide-in {
+          animation: slide-in 0.5s ease-out;
+        }
+      `}</style>
 
       <div ref={mapContainer} style={style} className="h-full w-full" />
     </div>
