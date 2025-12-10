@@ -70,7 +70,7 @@ function ConnectionStatus({ isConnected, isOnline }: { isConnected: boolean; isO
     <div className="fixed bottom-4 right-4 bg-gray-800 p-3 rounded-lg text-xs text-white z-40">
       <div className="flex items-center space-x-2">
         <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-        <span>PubNub: {isConnected ? 'Connected' : 'Disconnected'}</span>
+        <span>{isConnected ? '' : ''}</span>
       </div>
       <div className="mt-1 text-gray-400">
         Status: {isOnline ? 'Online' : 'Offline'}
@@ -79,7 +79,7 @@ function ConnectionStatus({ isConnected, isOnline }: { isConnected: boolean; isO
         onClick={() => window.location.reload()}
         className="mt-2 text-blue-400 hover:text-blue-300"
       >
-        Refresh Connection
+        Refresh
       </button>
     </div>
   );

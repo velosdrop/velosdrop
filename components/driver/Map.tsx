@@ -1,10 +1,9 @@
-//components/driver/Map.tsx
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import LocationPermissionRequest from '@/components/driver/LocationPermissionRequest';
-import ChatBubble from '@/components/driver/ChatBubble'; // We'll create this next
+import ChatBubble from '@/components/driver/ChatBubble';
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 if (!MAPBOX_TOKEN) {
@@ -26,17 +25,17 @@ interface MapProps {
     };
   };
   activeDelivery?: {
-    id: number; // Added for chat
-    deliveryId: number; // Added for chat
-    customerId: number; // Added for chat
-    customerUsername: string; // Added for chat
+    id: number;
+    deliveryId: number;
+    customerId: number;
+    customerUsername: string;
     pickupLocation: { longitude: number; latitude: number };
     deliveryLocation: { longitude: number; latitude: number };
     customerLocation?: { longitude: number; latitude: number };
-    pickupAddress: string; // Added for chat context
-    deliveryAddress: string; // Added for chat context
-    fare: number; // Added for chat context
-    customerPhoneNumber?: string; // Added for chat
+    pickupAddress: string;
+    deliveryAddress: string;
+    fare: number;
+    customerPhoneNumber?: string;
   } | null;
 }
 
@@ -65,6 +64,8 @@ export default function Map({
   const [driverToCustomerRouteData, setDriverToCustomerRouteData] = useState<any>(null);
   const [currentEta, setCurrentEta] = useState<number | null>(null);
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
+  const [pickupEta, setPickupEta] = useState<number | null>(null);
+  const [pickupDistance, setPickupDistance] = useState<number | null>(null);
 
   // Image upload handler for chat
   const handleImageUpload = async (file: File): Promise<string> => {
@@ -104,12 +105,10 @@ export default function Map({
   useEffect(() => {
     if (activeDelivery && map.current) {
       console.log('🔄 Active delivery changed, updating map');
-      // Small delay to ensure map is ready
       setTimeout(() => {
         updateDeliveryMarkers();
       }, 100);
     } else if (!activeDelivery && map.current) {
-      // Clear markers when activeDelivery is null
       clearDeliveryMarkers();
     }
   }, [activeDelivery]);
@@ -185,7 +184,6 @@ export default function Map({
       essential: true
     });
 
-    // Reset locating state after animation
     setTimeout(() => setIsLocating(false), 1500);
   };
 
@@ -238,7 +236,7 @@ export default function Map({
             'line-cap': 'round'
           },
           paint: {
-            'line-color': '#f59e0b',
+            'line-color': '#f59e0b', // Amber color for pickup route
             'line-width': 5,
             'line-opacity': 0.8,
             'line-dasharray': [1, 1]
@@ -246,6 +244,8 @@ export default function Map({
         });
 
         setDriverToPickupRouteData(route);
+        setPickupEta(Math.round(route.duration / 60));
+        setPickupDistance(route.distance / 1000);
         console.log('📍 Driver to pickup route calculated and displayed');
       }
     } catch (error) {
@@ -289,7 +289,7 @@ export default function Map({
             'line-cap': 'round'
           },
           paint: {
-            'line-color': '#10b981',
+            'line-color': '#10b981', // Green color for customer route
             'line-width': 6,
             'line-opacity': 0.9,
             'line-dasharray': [0.5, 0.5]
@@ -300,7 +300,7 @@ export default function Map({
         
         // Update ETA and distance
         const eta = Math.round(route.duration / 60);
-        const distance = route.distance / 1000; // Convert to kilometers
+        const distance = route.distance / 1000;
         setCurrentEta(eta);
         setRouteDistance(distance);
         
@@ -320,12 +320,10 @@ export default function Map({
   const addCustomerMarker = (customerLocation: { longitude: number; latitude: number }) => {
     if (!map.current) return;
 
-    // Remove existing customer marker
     if (customerMarkerRef.current) {
       customerMarkerRef.current.remove();
     }
 
-    // Add customer marker
     customerMarkerRef.current = new mapboxgl.Marker({
       element: createCustomerMarkerElement()
     })
@@ -460,6 +458,7 @@ export default function Map({
     }
   };
 
+  // UPDATED: Change delivery route color to blue (#3b82f6) for better visibility
   const addDeliveryRoute = async (pickup: [number, number], delivery: [number, number]) => {
     if (!map.current) return;
 
@@ -478,7 +477,7 @@ export default function Map({
           map.current.removeSource('delivery-route');
         }
 
-        // Add route source and layer
+        // Add route source and layer with BLUE color
         map.current.addSource('delivery-route', {
           type: 'geojson',
           data: {
@@ -497,9 +496,9 @@ export default function Map({
             'line-cap': 'round'
           },
           paint: {
-            'line-color': '#8b5cf6',
+            'line-color': '#3b82f6', // Changed to blue for better visibility
             'line-width': 4,
-            'line-opacity': 0.7
+            'line-opacity': 0.8
           }
         });
 
@@ -566,6 +565,8 @@ export default function Map({
     setDriverToCustomerRouteData(null);
     setCurrentEta(null);
     setRouteDistance(null);
+    setPickupEta(null);
+    setPickupDistance(null);
 
     console.log('🗑️ All delivery markers and routes cleared');
   };
@@ -598,7 +599,7 @@ export default function Map({
       addCustomerMarker(activeDelivery.customerLocation);
     }
 
-    // Add route
+    // Add route with BLUE color
     addDeliveryRoute(
       [activeDelivery.pickupLocation.longitude, activeDelivery.pickupLocation.latitude],
       [activeDelivery.deliveryLocation.longitude, activeDelivery.deliveryLocation.latitude]
@@ -652,7 +653,6 @@ export default function Map({
       if (markerRef.current) {
         markerRef.current.setLngLat([longitude, latitude]);
         
-        // Apply rotation if heading is available
         if (heading !== null && heading !== undefined) {
           markerRef.current.setRotation(heading);
         }
@@ -680,7 +680,6 @@ export default function Map({
         }
       }
 
-      // FIXED: Convert null to undefined using nullish coalescing operator
       updateDriverLocation(longitude, latitude, heading ?? undefined);
     };
 
@@ -712,7 +711,7 @@ export default function Map({
       onError,
       { 
         enableHighAccuracy: true, 
-        maximumAge: 5000, // More frequent updates for real-time tracking
+        maximumAge: 5000,
         timeout: 15000
       }
     );
@@ -748,7 +747,6 @@ export default function Map({
       console.log('🔄 Updating driver to pickup route with current location');
       addDriverToPickupRoute(lastLocation, activeDelivery.pickupLocation);
       
-      // Update real-time route to customer
       if (activeDelivery.customerLocation) {
         updateRealTimeRoute(lastLocation, activeDelivery.customerLocation);
       }
@@ -776,7 +774,6 @@ export default function Map({
     mapInstance.on('load', () => {
       if (onLoaded) onLoaded(mapInstance);
       
-      // Add delivery markers if active delivery exists
       if (activeDelivery) {
         updateDeliveryMarkers();
       }
@@ -797,134 +794,79 @@ export default function Map({
         onGranted={() => setLocationGranted(true)}
       />
       
-      {/* Tracking Status Overlay */}
+      {/* Simple Tracking Status Indicator - Just green dot */}
       {isTracking && (
-        <div className="absolute top-4 left-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-sm font-medium">Live Tracking Active</span>
-          </div>
-          <p className="text-xs text-gray-400 mt-1">Sharing location with customers</p>
+        <div className="absolute top-4 left-4 z-10">
+          <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-lg"></div>
         </div>
       )}
 
-      {/* Current Location Info */}
+      {/* Compact Current Location Info - Mobile Friendly */}
       {lastLocation && (
-        <div className="absolute top-4 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm max-w-xs">
-          <h3 className="font-semibold text-purple-400 mb-2">Your Location</h3>
-          {currentAddress && (
-            <p className="text-sm mb-1">{currentAddress}</p>
-          )}
-          <p className="text-xs text-gray-400">
-            {lastLocation.latitude.toFixed(6)}, {lastLocation.longitude.toFixed(6)}
-          </p>
+        <div className="absolute top-4 right-4 z-10 bg-black/80 text-white p-2 rounded-lg backdrop-blur-sm max-w-[140px] sm:max-w-xs">
+          <div className="flex items-center justify-between">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-1"></div>
+            <p className="text-xs font-medium truncate">
+              {currentAddress ? currentAddress.split(',')[0] : 'Current Location'}
+            </p>
+          </div>
           {isLocating && (
-            <div className="flex items-center mt-2 text-purple-400 text-xs">
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-400 mr-2"></div>
-              Updating location...
+            <div className="flex items-center mt-1 text-green-400 text-xs">
+              <div className="animate-spin rounded-full h-2 w-2 border-b-2 border-green-400 mr-1"></div>
+              Updating...
             </div>
           )}
         </div>
       )}
 
-      {/* Enhanced ETA Display */}
-      {currentEta && (
-        <div className="absolute top-20 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
-          <h3 className="font-semibold text-green-400 mb-1">Estimated Arrival</h3>
-          <p className="text-lg font-bold">{currentEta} minutes</p>
-          {routeDistance && (
-            <p className="text-xs text-gray-400">{routeDistance.toFixed(1)} km to customer</p>
-          )}
+      {/* ETA Display - More compact */}
+      {pickupEta && activeDelivery && (
+        <div className="absolute top-12 right-4 z-10 bg-black/80 text-white p-2 rounded-lg backdrop-blur-sm">
+          <div className="flex items-center space-x-2">
+            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+            <div>
+              <p className="text-xs font-medium">To Pickup</p>
+              <p className="text-sm font-bold">{pickupEta} min</p>
+              {pickupDistance && (
+                <p className="text-xs text-gray-300">{pickupDistance.toFixed(1)} km</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Active Delivery Info */}
-      {activeDelivery && (
-        <div className="absolute top-24 right-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm max-w-xs">
-          <h3 className="font-semibold text-purple-400 mb-2">Active Delivery</h3>
-          <p className="text-sm">Follow the route to complete delivery</p>
-          <div className="flex items-center space-x-2 mt-2 text-xs">
+      {/* Customer ETA Display */}
+      {currentEta && activeDelivery && activeDelivery.customerLocation && (
+        <div className="absolute top-28 right-4 z-10 bg-black/80 text-white p-2 rounded-lg backdrop-blur-sm">
+          <div className="flex items-center space-x-2">
             <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span>Pickup Location</span>
+            <div>
+              <p className="text-xs font-medium">To Customer</p>
+              <p className="text-sm font-bold">{currentEta} min</p>
+              {routeDistance && (
+                <p className="text-xs text-gray-300">{routeDistance.toFixed(1)} km</p>
+              )}
+            </div>
           </div>
-          <div className="flex items-center space-x-2 mt-1 text-xs">
-            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-            <span>Delivery Location</span>
-          </div>
-          {activeDelivery.customerLocation && (
-            <div className="flex items-center space-x-2 mt-1 text-xs">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              <span>Customer Location</span>
-            </div>
-          )}
-          {driverToPickupRouteData && (
-            <div className="mt-2 pt-2 border-t border-gray-600">
-              <p className="text-xs text-yellow-400">
-                ETA to pickup: {Math.round(driverToPickupRouteData.duration / 60)} min
-              </p>
-              <p className="text-xs text-gray-400">
-                Distance: {(driverToPickupRouteData.distance / 1000).toFixed(1)} km
-              </p>
-            </div>
-          )}
-          {driverToCustomerRouteData && (
-            <div className="mt-2 pt-2 border-t border-gray-600">
-              <p className="text-xs text-green-400">
-                ETA to customer: {currentEta} min
-              </p>
-              <p className="text-xs text-gray-400">
-                Distance: {routeDistance?.toFixed(1)} km
-              </p>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Route Legend */}
-      {(driverToPickupRouteData || driverToCustomerRouteData) && (
-        <div className="absolute bottom-20 left-4 z-10 bg-black/80 text-white p-3 rounded-lg backdrop-blur-sm">
-          <h3 className="font-semibold text-purple-400 mb-2">Routes</h3>
-          {driverToPickupRouteData && (
-            <div className="flex items-center space-x-2 mb-2">
-              <div className="w-4 h-1 bg-yellow-500 rounded"></div>
-              <span className="text-xs">To Pickup</span>
-            </div>
-          )}
-          {driverToCustomerRouteData && (
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-1 bg-green-500 rounded"></div>
-              <span className="text-xs">To Customer</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Find My Location Button - Bottom Right Corner */}
+      {/* Find My Location Button - More compact */}
       {locationGranted && lastLocation && (
         <button
           onClick={flyToCurrentLocation}
           disabled={isLocating}
-          className="absolute bottom-4 right-4 z-10 bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="absolute bottom-4 right-4 z-10 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           title="Find my location"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
         </button>
       )}
 
-      {/* Location Accuracy Indicator */}
-      {isTracking && (
-        <div className="absolute bottom-4 left-4 z-10 bg-black/80 text-white p-2 rounded-lg backdrop-blur-sm">
-          <div className="flex items-center space-x-2">
-            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-            <span className="text-xs">High Accuracy GPS</span>
-          </div>
-        </div>
-      )}
-
-      {/* CHAT BUBBLE - Only show when we have an active delivery */}
+      {/* Chat Bubble - Only show when we have an active delivery */}
       {activeDelivery && driverId && activeDelivery.customerId && (
         <ChatBubble
           driverId={driverId}
