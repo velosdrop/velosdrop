@@ -115,6 +115,18 @@ export const deliveryRequestsTable = sqliteTable('delivery_requests', {
   assignedDriverId: integer('assigned_driver_id').references(() => driversTable.id), 
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   expiresAt: text('expires_at').notNull(),
+
+    // NEW FIELDS FOR DELIVERY COMPLETION FLOW
+  driverArrivedAt: text('driver_arrived_at'), // When driver enters geofence
+  deliveryCompletedAt: text('delivery_completed_at'), // When driver marks completed
+  deliveryPhotoUrl: text('delivery_photo_url'), // Photo proof
+  commissionTaken: integer('commission_taken', { mode: 'boolean' }).default(false),
+  commissionAmount: real('commission_amount').default(0), // Store 13.5% of fare
+  customerConfirmedAt: text('customer_confirmed_at'), // When customer confirms
+  autoConfirmedAt: text('auto_confirmed_at'), // If auto-confirmed after timeout
+  deliveryStatus: text('delivery_status').default('pending').notNull(), 
+    // Values: 'pending', 'en_route', 'arrived', 'awaiting_confirmation', 'completed', 'paid'
+    
 });
 
 // Driver responses table

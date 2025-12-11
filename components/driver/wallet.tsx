@@ -1,17 +1,19 @@
+// components/driver/wallet.tsx - FIXED VERSION
 'use client';
 
-import { FiPlus, FiArrowUpRight, FiRefreshCw } from 'react-icons/fi';
+import { FiPlus, FiArrowUpRight, FiRefreshCw, FiMinus } from 'react-icons/fi';
+import { MdOutlineMoneyOff } from 'react-icons/md';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { db } from '@/src/db/index';
 import { driversTable, driverTransactions } from '@/src/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm'; // ✅ ADDED 'desc' import
 
-// ✅ FIXED: Only use driverTransactions interface
+// Updated interface for better transaction typing
 interface DriverTransaction {
   id: number;
   driver_id: number;
-  amount: number;
+  amount: number; // in cents, positive for top-ups, negative for commissions
   payment_intent_id: string;
   status: string;
   created_at: string;
@@ -23,8 +25,10 @@ export default function Wallet() {
   const [refreshing, setRefreshing] = useState(false);
   const [transactions, setTransactions] = useState<DriverTransaction[]>([]);
   const [driverId, setDriverId] = useState<number | null>(null);
+  const [showCommissionAlert, setShowCommissionAlert] = useState(false);
+  const [recentCommission, setRecentCommission] = useState<number>(0);
 
-  // ✅ FIXED: Load driverId FIRST, then handle URL params
+  // Load driverId and check for commission alerts
   useEffect(() => {
     const loadDriverId = () => {
       if (typeof window !== 'undefined') {
@@ -44,7 +48,7 @@ export default function Wallet() {
 
     const currentDriverId = loadDriverId();
     
-    // Now check for refresh parameter
+    // Check for refresh parameter
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('refresh') === 'true' && currentDriverId) {
@@ -54,16 +58,13 @@ export default function Wallet() {
           console.log('💰 PAYMENT SUCCESS DETECTED, AMOUNT:', paymentAmount);
         }
         
-        // ✅ FIXED: Only refresh if we have driverId
         refreshWallet(currentDriverId);
-        
-        // Clean up URL
         window.history.replaceState({}, '', '/driver/wallet');
       }
     }
   }, []);
 
-  // ✅ FIXED: Separate useEffect for initial data load
+  // Separate useEffect for initial data load
   useEffect(() => {
     if (driverId) {
       fetchData(driverId);
@@ -76,6 +77,13 @@ export default function Wallet() {
       return () => clearInterval(interval);
     }
   }, [driverId]);
+
+  // Check for new commission transactions
+  useEffect(() => {
+    if (transactions.length > 0) {
+      checkForCommissionAlerts();
+    }
+  }, [transactions]);
 
   const fetchData = async (currentDriverId: number) => {
     try {
@@ -95,22 +103,18 @@ export default function Wallet() {
         setBalance(0);
       }
 
-      // ✅ FIXED: Use ONLY driverTransactions table (they have the actual balance updates)
+      // ✅ FIXED: Use proper Drizzle syntax for ordering
       const driverTxResult = await db.select()
         .from(driverTransactions)
         .where(eq(driverTransactions.driver_id, currentDriverId))
-        .orderBy(driverTransactions.created_at)
-        .limit(10);
+        .orderBy(desc(driverTransactions.created_at)) // ✅ FIXED: Use desc() function
+        .limit(20);
 
       console.log('📊 TRANSACTIONS FROM DATABASE:', {
         totalTransactions: driverTxResult.length,
-        transactions: driverTxResult.map(tx => ({
-          id: tx.id,
-          amount: tx.amount,
-          status: tx.status,
-          payment_intent_id: tx.payment_intent_id,
-          created_at: tx.created_at
-        }))
+        topUps: driverTxResult.filter(tx => tx.amount > 0).length,
+        commissions: driverTxResult.filter(tx => tx.amount < 0).length,
+        latestTransaction: driverTxResult[0]?.created_at
       });
 
       setTransactions(driverTxResult);
@@ -124,7 +128,6 @@ export default function Wallet() {
     }
   };
 
-  // ✅ FIXED: Enhanced manual refresh function that accepts driverId
   const refreshWallet = async (currentDriverId?: number) => {
     const idToUse = currentDriverId || driverId;
     
@@ -151,12 +154,12 @@ export default function Wallet() {
         console.error('❌ No driver found during refresh');
       }
 
-      // ✅ FIXED: Refresh transactions using ONLY driverTransactions
+      // ✅ FIXED: Use proper ordering here too
       const driverTxResult = await db.select()
         .from(driverTransactions)
         .where(eq(driverTransactions.driver_id, idToUse))
-        .orderBy(driverTransactions.created_at)
-        .limit(10);
+        .orderBy(desc(driverTransactions.created_at))
+        .limit(20);
 
       setTransactions(driverTxResult);
       console.log('✅ Transactions refreshed:', driverTxResult.length);
@@ -167,9 +170,34 @@ export default function Wallet() {
     }
   };
 
-  // Update the refresh button to use the current driverId
   const handleRefreshClick = () => {
     refreshWallet();
+  };
+
+  // Check for new commission deductions and show alert
+  const checkForCommissionAlerts = () => {
+    const lastSeenCommissionTime = localStorage.getItem('lastSeenCommissionTime') || '0';
+    
+    // Find commission transactions since last check
+    const newCommissions = transactions.filter(tx => 
+      (tx.payment_intent_id.startsWith('commission_') || tx.amount < 0) && 
+      new Date(tx.created_at).getTime() > parseInt(lastSeenCommissionTime)
+    );
+    
+    if (newCommissions.length > 0) {
+      const totalCommission = newCommissions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+      setRecentCommission(totalCommission / 100); // Convert to dollars
+      setShowCommissionAlert(true);
+      
+      // Update last seen time
+      const latestCommissionTime = Math.max(...newCommissions.map(tx => new Date(tx.created_at).getTime()));
+      localStorage.setItem('lastSeenCommissionTime', latestCommissionTime.toString());
+      
+      // Auto-hide alert after 10 seconds
+      setTimeout(() => {
+        setShowCommissionAlert(false);
+      }, 10000);
+    }
   };
 
   // Format transaction amount for display
@@ -213,9 +241,20 @@ export default function Wallet() {
     }
   };
 
-  // ✅ FIXED: Get transaction description based on status
-  const getTransactionDescription = (status: string) => {
-    switch (status) {
+  // Get transaction description based on transaction type
+  const getTransactionDescription = (transaction: DriverTransaction) => {
+    // Check if it's a commission transaction
+    if (transaction.payment_intent_id.startsWith('commission_')) {
+      return 'Commission Fee';
+    }
+    
+    // Check if it's a negative amount (could be commission or other deduction)
+    if (transaction.amount < 0) {
+      return 'Service Fee';
+    }
+    
+    // Regular top-up transactions
+    switch (transaction.status) {
       case 'completed':
         return 'Wallet Top Up';
       case 'pending':
@@ -227,14 +266,79 @@ export default function Wallet() {
     }
   };
 
+  // Get transaction icon based on transaction type
+  const getTransactionIcon = (transaction: DriverTransaction) => {
+    if (transaction.payment_intent_id.startsWith('commission_') || transaction.amount < 0) {
+      return (
+        <div className="w-12 h-12 rounded-full flex items-center justify-center mr-4 bg-red-100 text-red-600">
+          <FiMinus className="w-6 h-6" />
+        </div>
+      );
+    }
+    
+    return (
+      <div className="w-12 h-12 rounded-full flex items-center justify-center mr-4 bg-green-100 text-green-600">
+        <FiArrowUpRight className="w-6 h-6" />
+      </div>
+    );
+  };
+
+  // Get transaction amount color
+  const getTransactionAmountColor = (amount: number) => {
+    if (amount < 0) {
+      return 'text-red-600';
+    }
+    return 'text-green-600';
+  };
+
+  // Calculate wallet statistics
+  const calculateStats = () => {
+    const totalTopUps = transactions.filter(tx => tx.amount > 0).length;
+    const successfulTransactions = transactions.filter(tx => tx.status === 'completed').length;
+    const pendingTransactions = transactions.filter(tx => tx.status === 'pending').length;
+    const totalCommissionDeductions = transactions
+      .filter(tx => tx.amount < 0)
+      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0) / 100;
+    
+    return {
+      totalTopUps,
+      successfulTransactions,
+      pendingTransactions,
+      totalCommissionDeductions
+    };
+  };
+
+  const stats = calculateStats();
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
-        {/* Simple Header with Refresh Button Only */}
+        {/* Commission Alert Banner */}
+        {showCommissionAlert && (
+          <div className="mb-6 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-xl p-4 shadow-lg animate-fade-in">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <MdOutlineMoneyOff className="w-6 h-6 mr-3" />
+                <div>
+                  <h3 className="font-bold">Commission Deducted</h3>
+                  <p className="text-sm opacity-90">${recentCommission.toFixed(2)} was deducted from recent deliveries</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCommissionAlert(false)}
+                className="text-white opacity-80 hover:opacity-100"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Header with Refresh Button */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Wallet</h1>
-            <p className="text-gray-600">Manage your earnings and payments</p>
+            <p className="text-gray-600">Manage your earnings, payments, and commission fees</p>
           </div>
           <button
             onClick={handleRefreshClick}
@@ -253,8 +357,11 @@ export default function Wallet() {
             <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
               <div className="flex items-start justify-between mb-2">
                 <h3 className="text-lg font-medium">Available Balance</h3>
-                <div className="text-purple-200 text-sm font-medium">
-                  {refreshing ? 'Refreshing...' : 'Live'}
+                <div className="flex items-center">
+                  <div className={`w-2 h-2 rounded-full mr-2 ${refreshing ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`}></div>
+                  <span className="text-sm font-medium">
+                    {refreshing ? 'Refreshing...' : 'Live'}
+                  </span>
                 </div>
               </div>
               <div className="flex items-end justify-between">
@@ -263,7 +370,9 @@ export default function Wallet() {
                     {loading ? 'Loading...' : `$${balance.toFixed(2)}`}
                   </p>
                   <p className="text-purple-200 text-sm mt-1">
-                    {balance === 0 ? 'Start by adding funds to your wallet' : 'Your current available balance'}
+                    {balance === 0 
+                      ? 'Start by adding funds to your wallet' 
+                      : `Commission fee: 13.5% per delivery`}
                   </p>
                 </div>
                 <Link 
@@ -295,39 +404,38 @@ export default function Wallet() {
                   transactions.map((tx) => (
                     <div key={tx.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-purple-200 transition-colors">
                       <div className="flex items-center">
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center mr-4 ${
-                          tx.amount > 0 ? 'bg-green-100 text-green-600' : 'bg-purple-100 text-purple-600'
-                        }`}>
-                          {tx.amount > 0 ? (
-                            <FiArrowUpRight className="w-6 h-6" />
-                          ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-                              <path d="M4.5 3.75a3 3 0 00-3 3v.75h21v-.75a3 3 0 00-3-3h-15z" />
-                            </svg>
-                          )}
-                        </div>
+                        {getTransactionIcon(tx)}
                         <div className="flex-1">
                           <h4 className="font-medium text-gray-900">
-                            {getTransactionDescription(tx.status)}
+                            {getTransactionDescription(tx)}
                           </h4>
                           <p className="text-sm text-gray-500">
                             {formatTransactionDate(tx.created_at)}
                           </p>
-                          {/* ✅ FIXED: Show full payment reference */}
-                          {tx.payment_intent_id && (
-                            <p className="text-xs text-gray-400 font-mono break-all">
+                          {/* Show delivery ID for commission transactions */}
+                          {tx.payment_intent_id.startsWith('commission_') && (
+                            <p className="text-xs text-gray-400">
+                              Delivery #{tx.payment_intent_id.split('_')[1]}
+                            </p>
+                          )}
+                          {/* Show reference for regular payments */}
+                          {!tx.payment_intent_id.startsWith('commission_') && tx.payment_intent_id && (
+                            <p className="text-xs text-gray-400 font-mono truncate max-w-[200px]">
                               Ref: {tx.payment_intent_id}
                             </p>
                           )}
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className={`font-medium text-lg ${tx.amount > 0 ? 'text-green-600' : 'text-purple-600'}`}>
+                        <p className={`font-medium text-lg ${getTransactionAmountColor(tx.amount)}`}>
                           {formatTransactionAmount(tx.amount)}
                         </p>
                         <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(tx.status)}`}>
                           {tx.status}
                         </span>
+                        {tx.payment_intent_id.startsWith('commission_') && (
+                          <p className="text-xs text-gray-500 mt-1">13.5% fee</p>
+                        )}
                       </div>
                     </div>
                   ))
@@ -351,28 +459,63 @@ export default function Wallet() {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Quick Stats */}
+            {/* Wallet Statistics */}
             <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Wallet Overview</h3>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Total Top Ups</span>
                   <span className="font-semibold text-gray-900">
-                    {transactions.filter(tx => tx.amount > 0).length}
+                    {stats.totalTopUps}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Successful</span>
                   <span className="font-semibold text-green-600">
-                    {transactions.filter(tx => tx.status === 'completed').length}
+                    {stats.successfulTransactions}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Pending</span>
                   <span className="font-semibold text-yellow-600">
-                    {transactions.filter(tx => tx.status === 'pending').length}
+                    {stats.pendingTransactions}
                   </span>
                 </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Commission Deductions</span>
+                  <span className="font-semibold text-red-600">
+                    ${stats.totalCommissionDeductions.toFixed(2)}
+                  </span>
+                </div>
+                <div className="pt-4 border-t border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Current Balance</span>
+                    <span className="font-bold text-lg text-gray-900">
+                      ${balance.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Commission Info Card */}
+            <div className="bg-gradient-to-br from-red-50 to-orange-50 border border-red-200 rounded-lg p-6">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <MdOutlineMoneyOff className="w-6 h-6 text-red-600" />
+                </div>
+                <h4 className="font-semibold text-gray-900 mb-2">Commission Fees</h4>
+                <p className="text-gray-600 text-sm mb-4">
+                  13.5% of each cash delivery is deducted from your wallet balance upon customer confirmation.
+                </p>
+                <div className="text-xs text-gray-500 bg-white/50 p-2 rounded-lg mb-4">
+                  <p>• $10 fare = $1.35 commission</p>
+                  <p>• $20 fare = $2.70 commission</p>
+                  <p>• $50 fare = $6.75 commission</p>
+                </div>
+                <button className="w-full py-2 bg-white text-red-600 border border-red-200 rounded-lg font-medium hover:bg-red-50 transition-colors">
+                  View Commission History
+                </button>
               </div>
             </div>
 
@@ -394,6 +537,17 @@ export default function Wallet() {
           </div>
         </div>
       </div>
+
+      {/* Add CSS for animations */}
+      <style jsx>{`
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

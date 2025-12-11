@@ -6,6 +6,30 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import LocationPermissionRequest from '@/components/driver/LocationPermissionRequest';
 import ChatBubble from '@/components/driver/ChatBubble';
 
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
+
+const isInDeliveryZone = (driverLocation: { longitude: number; latitude: number }, 
+                          deliveryLocation: { longitude: number; latitude: number }, 
+                          radiusMeters = 100): boolean => {
+  const distanceKm = calculateDistance(
+    driverLocation.latitude,
+    driverLocation.longitude,
+    deliveryLocation.latitude,
+    deliveryLocation.longitude
+  );
+  return distanceKm * 1000 <= radiusMeters; // Convert km to meters
+};
+
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 if (!MAPBOX_TOKEN) {
   throw new Error('Missing NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN environment variable');
@@ -78,6 +102,9 @@ export default function Map({
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
   const [pickupEta, setPickupEta] = useState<number | null>(null);
   const [pickupDistance, setPickupDistance] = useState<number | null>(null);
+  
+  // Fixed: Moved showCompleteButton state INSIDE the component
+  const [showCompleteButton, setShowCompleteButton] = useState(false);
   
   // Premium Waze Navigation State
   const [wazeState, setWazeState] = useState<WazeNavigationState>({
@@ -321,7 +348,7 @@ export default function Map({
   };
 
   // Premium: Calculate distance between coordinates (Haversine formula)
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const calculateDistanceFunction = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
     const R = 6371; // Earth's radius in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -935,6 +962,33 @@ export default function Map({
       // Get address for current location
       const address = await getAddressFromCoords(longitude, latitude);
       setCurrentAddress(address);
+
+      // 🔥 ADD THIS GEOFENCING CHECK HERE 🔥
+      if (activeDelivery && activeDelivery.deliveryLocation) {
+        const targetLocation = activeDelivery.customerLocation || activeDelivery.deliveryLocation;
+        const isAtDeliveryZone = isInDeliveryZone(location, targetLocation);
+        
+        if (isAtDeliveryZone && !showCompleteButton) {
+          console.log('📍 Driver entered delivery zone, updating status');
+          
+          // Update order status to 'arrived'
+          try {
+            await fetch('/api/delivery/arrived', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ deliveryId: activeDelivery.deliveryId })
+            });
+          } catch (error) {
+            console.error('Error updating arrival status:', error);
+          }
+          
+          // Show "Mark as Completed" button
+          setShowCompleteButton(true);
+        } else if (!isAtDeliveryZone && showCompleteButton) {
+          // Driver left the zone, hide button
+          setShowCompleteButton(false);
+        }
+      }
       
       if (markerRef.current) {
         markerRef.current.setLngLat([longitude, latitude]);
@@ -1276,8 +1330,6 @@ export default function Map({
               <img
                   src="/velosdroplogo.svg"
                   alt="VelosDrop Logo"
-                  // We use h-8 (32px) to approximate the size of the previous text-2xl "W".
-                  // Adjust h-6, h-8, or h-10 as needed to fit your navbar.
                   className="h-8 w-auto drop-shadow-md"
               />
               
@@ -1335,6 +1387,33 @@ export default function Map({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* MARK AS COMPLETED BUTTON */}
+      {showCompleteButton && activeDelivery && (
+        <div className="absolute bottom-32 left-4 right-4 z-10">
+          <button
+            onClick={async () => {
+              try {
+                await fetch('/api/delivery/complete', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    deliveryId: activeDelivery.deliveryId,
+                    driverId: driverId 
+                  })
+                });
+                setShowCompleteButton(false);
+                alert('Delivery marked as completed! Waiting for customer confirmation.');
+              } catch (error) {
+                console.error('Error completing delivery:', error);
+              }
+            }}
+            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-6 rounded-xl font-bold text-lg shadow-xl hover:from-green-600 hover:to-emerald-700 transition-all animate-pulse"
+          >
+            ✅ MARK AS COMPLETED
+          </button>
         </div>
       )}
 

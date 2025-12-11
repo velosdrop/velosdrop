@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   FiMessageSquare, FiX, FiImage, FiSend, FiCheckCircle, 
   FiMapPin, FiClock, FiPaperclip, FiSmile, FiMoreVertical,
-  FiCamera, FiMic, FiMoreHorizontal
+  FiCamera, FiMic, FiMoreHorizontal, FiCheck, FiAlertCircle
 } from 'react-icons/fi';
 import { 
   FaTruck, FaMapMarkerAlt, FaCheckCircle, FaExclamationTriangle,
@@ -50,7 +50,17 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [driverInfo, setDriverInfo] = useState<any>(null);
+  const [deliveryStatus, setDeliveryStatus] = useState<'pending' | 'arrived' | 'completed' | 'confirmed'>('pending');
   
+  // New state for confirmation modal
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [deliveryDetails, setDeliveryDetails] = useState<{
+    fare: number;
+    commission: number;
+    driverName: string;
+  } | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -74,6 +84,13 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
           
           if (event.channel === channel && event.message.type === 'CHAT_MESSAGE') {
             const newMessage = event.message.data;
+            
+            // Update delivery status if driver marks as completed
+            if (newMessage.senderType === 'driver' && 
+                newMessage.messageType === 'status_update' &&
+                newMessage.content.includes('Delivery completed!')) {
+              setDeliveryStatus('completed');
+            }
             
             // Only add if not already in messages
             setMessages(prev => {
@@ -113,12 +130,20 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
     }
   }, [customerId, deliveryId]);
 
-  // Fetch driver info
+  // Fetch driver info and delivery details
   useEffect(() => {
-    if (driverId) {
+    if (driverId && deliveryId) {
       fetchDriverInfo();
+      fetchDeliveryDetails();
     }
-  }, [driverId]);
+  }, [driverId, deliveryId]);
+
+  // Check delivery status on load
+  useEffect(() => {
+    if (deliveryId && isOpen) {
+      checkDeliveryStatus();
+    }
+  }, [deliveryId, isOpen]);
 
   const fetchDriverInfo = async () => {
     try {
@@ -129,6 +154,35 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
       }
     } catch (error) {
       console.error('Error fetching driver info:', error);
+    }
+  };
+
+  const fetchDeliveryDetails = async () => {
+    try {
+      const response = await fetch(`/api/delivery/${deliveryId}`);
+      if (response.ok) {
+        const data = await response.json();
+        // Store delivery details for confirmation modal
+        setDeliveryDetails({
+          fare: data.fare,
+          commission: data.fare * 0.135, // 13.5%
+          driverName: `${data.driver?.firstName || ''} ${data.driver?.lastName || ''}`.trim()
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching delivery details:', error);
+    }
+  };
+
+  const checkDeliveryStatus = async () => {
+    try {
+      const response = await fetch(`/api/delivery/status/${deliveryId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setDeliveryStatus(data.status);
+      }
+    } catch (error) {
+      console.error('Error checking delivery status:', error);
     }
   };
 
@@ -290,6 +344,57 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
     } finally {
       setIsUploading(false);
       setShowAttachmentMenu(false);
+    }
+  };
+
+  // **NEW: Handle delivery confirmation**
+  const confirmDelivery = async () => {
+    if (!deliveryDetails) return;
+    
+    setIsConfirming(true);
+    try {
+      const response = await fetch('/api/delivery/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          deliveryId,
+          customerId 
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Update local status
+        setDeliveryStatus('confirmed');
+        setShowConfirmationModal(false);
+        
+        // Send confirmation message
+        await sendMessage("✅ I confirm I received my delivery and paid in cash.", 'status_update');
+        
+        // Show success message
+        alert(`Delivery confirmed! Commission of $${deliveryDetails.commission.toFixed(2)} deducted from driver's wallet.`);
+        
+        // Add system message locally
+        setMessages(prev => [...prev, {
+          deliveryId,
+          senderType: 'system',
+          senderId: 0,
+          messageType: 'status_update',
+          content: `Customer confirmed delivery. Commission of $${deliveryDetails.commission.toFixed(2)} (13.5%) deducted from driver balance.`,
+          isRead: false,
+          createdAt: new Date().toISOString()
+        }]);
+        
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to confirm delivery: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error confirming delivery:', error);
+      alert('Failed to confirm delivery. Please try again.');
+    } finally {
+      setIsConfirming(false);
     }
   };
 
@@ -514,7 +619,7 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
                         </span>
                         <span className="w-1 h-1 bg-white/60 rounded-full"></span>
                         <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                          {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
+                          {deliveryStatus === 'completed' ? 'Awaiting Confirmation' : deliveryStatus}
                         </span>
                       </div>
                     </div>
@@ -577,13 +682,20 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
                               className={`max-w-[85%] rounded-2xl p-3 relative ${
                                 msg.senderType === 'customer'
                                   ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-br-none'
+                                  : msg.senderType === 'system'
+                                  ? 'bg-yellow-100 border border-yellow-200 text-yellow-800 rounded-xl mx-auto'
                                   : 'bg-white text-gray-800 rounded-bl-none border border-gray-200'
                               }`}
                             >
                               {/* Sender indicator */}
                               <div className="flex items-center mb-1">
                                 <span className="text-xs font-medium opacity-90">
-                                  {msg.senderType === 'customer' ? 'You' : 'Driver'}
+                                  {msg.senderType === 'customer' 
+                                    ? 'You' 
+                                    : msg.senderType === 'system'
+                                    ? 'System'
+                                    : 'Driver'
+                                  }
                                 </span>
                               </div>
                               
@@ -620,6 +732,30 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
                   </div>
                 )}
               </div>
+
+              {/* Confirmation Button (Only when delivery is completed but not confirmed) */}
+              {deliveryStatus === 'completed' && (
+                <div className="px-4 py-3 bg-gradient-to-r from-green-50 to-emerald-50 border-t border-green-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                        <FiCheckCircle className="text-green-600" size={16} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Delivery completed by driver</p>
+                        <p className="text-xs text-gray-600">Please confirm receipt to finalize</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowConfirmationModal(true)}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                    >
+                      <FiCheck size={16} />
+                      Confirm Delivery
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Camera Preview Modal */}
               <AnimatePresence>
@@ -691,6 +827,112 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
                       </div>
                     )}
                   </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Confirmation Modal */}
+              <AnimatePresence>
+                {showConfirmationModal && (
+                  <>
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute inset-0 bg-black/70 backdrop-blur-sm z-[60]"
+                      onClick={() => setShowConfirmationModal(false)}
+                    />
+                    
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                      className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[70] w-[90vw] max-w-md"
+                    >
+                      <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-5 text-white">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
+                              <FiCheckCircle className="text-green-600" size={24} />
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-lg">Confirm Delivery</h3>
+                              <p className="text-sm text-green-100">Order #{deliveryId}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-6">
+                          <div className="mb-6 space-y-4">
+                            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                              <span className="text-gray-700">Cash Payment Received</span>
+                              <span className="font-bold text-green-600">${deliveryDetails?.fare.toFixed(2)}</span>
+                            </div>
+                            
+                            <div className="border border-gray-200 rounded-lg p-4">
+                              <h4 className="font-bold text-gray-900 mb-2">Commission Details</h4>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Delivery fare:</span>
+                                  <span className="font-medium">${deliveryDetails?.fare.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Platform commission (13.5%):</span>
+                                  <span className="font-medium text-red-600">-${deliveryDetails?.commission.toFixed(2)}</span>
+                                </div>
+                                <div className="border-t pt-2 mt-2">
+                                  <div className="flex justify-between">
+                                    <span className="font-bold text-gray-900">Driver receives:</span>
+                                    <span className="font-bold text-green-600">
+                                      ${deliveryDetails ? (deliveryDetails.fare - deliveryDetails.commission).toFixed(2) : '0.00'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                              <FiAlertCircle className="text-blue-600 mt-0.5 flex-shrink-0" size={18} />
+                              <div>
+                                <p className="text-sm text-gray-700">
+                                  <span className="font-medium">Important:</span> By confirming, you acknowledge that you received the delivery and paid cash. The commission will be automatically deducted from the driver's wallet balance.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex flex-col gap-3">
+                            <button
+                              onClick={confirmDelivery}
+                              disabled={isConfirming}
+                              className="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isConfirming ? (
+                                <>
+                                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                  <span>Confirming...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FiCheck size={18} />
+                                  <span>Yes, I Confirm Delivery</span>
+                                </>
+                              )}
+                            </button>
+                            
+                            <button
+                              onClick={() => setShowConfirmationModal(false)}
+                              className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-4 rounded-xl font-medium transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  </>
                 )}
               </AnimatePresence>
 
