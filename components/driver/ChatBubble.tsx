@@ -1,3 +1,4 @@
+//components/driver/ChatBubble.tsx
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
@@ -289,7 +290,7 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
 
   const markDeliveryAsComplete = async () => {
     try {
-      await fetch('/api/delivery/complete', {
+      const response = await fetch('/api/delivery/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -298,8 +299,22 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
         })
       });
       
-      // Send completion message
+      const result = await response.json();
+      
+      if (!response.ok) {
+        // Handle insufficient balance error
+        if (result.error === 'Insufficient balance') {
+          alert(`❌ ${result.message}\n\nPlease top up your wallet to continue.`);
+          return;
+        }
+        throw new Error(result.error || 'Failed to complete delivery');
+      }
+      
+      // Send completion message to chat
       await sendMessage("Delivery completed!", 'status_update');
+      
+      // Show success message with commission details
+      alert(`✅ Delivery marked as complete!\n\nCommission: $${result.commissionDeducted.toFixed(2)} deducted.\nNew balance: $${result.newBalance.toFixed(2)}`);
       
       // Close modal
       setCompletionModal({
@@ -308,14 +323,17 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
         photoUploaded: false
       });
       
-      alert('Delivery marked as completed successfully!');
+      // Refresh wallet balance if on wallet page
+      if (typeof window !== 'undefined' && window.location.pathname.includes('/wallet')) {
+        window.location.reload();
+      }
       
     } catch (error) {
       console.error('Error completing delivery:', error);
-      alert('Failed to mark delivery as complete. Please try again.');
+      alert(`Failed to mark delivery as complete: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
-
+  
   const quickActions = [
     { 
       text: 'Arrived', 

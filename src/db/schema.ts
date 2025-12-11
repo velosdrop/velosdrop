@@ -204,6 +204,30 @@ export const messagesTable = sqliteTable('messages', {
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+// Driver commission deductions table
+export const driverCommissionDeductions = sqliteTable('driver_commission_deductions', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  driver_id: integer('driver_id').notNull().references(() => driversTable.id, { onDelete: 'cascade' }),
+  delivery_id: integer('delivery_id').notNull().references(() => deliveryRequestsTable.id, { onDelete: 'cascade' }),
+  fare_amount: real('fare_amount').notNull(),
+  commission_percentage: real('commission_percentage').default(0.135).notNull(),
+  commission_amount: real('commission_amount').notNull(),
+  driver_balance_before: integer('driver_balance_before').notNull(),
+  driver_balance_after: integer('driver_balance_after').notNull(),
+  status: text('status').default('completed').notNull(),
+  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+// Platform earnings table (to track commission earnings)
+export const platformEarnings = sqliteTable('platform_earnings', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  delivery_id: integer('delivery_id').notNull().references(() => deliveryRequestsTable.id, { onDelete: 'cascade' }),
+  commission_amount: real('commission_amount').notNull(),
+  driver_id: integer('driver_id').notNull().references(() => driversTable.id, { onDelete: 'cascade' }),
+  customer_id: integer('customer_id').notNull().references(() => customersTable.id, { onDelete: 'cascade' }),
+  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 
 
 export type InsertAdminWalletAdjustment = typeof adminWalletAdjustments.$inferInsert;
