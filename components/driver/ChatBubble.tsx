@@ -1,4 +1,3 @@
-//components/driver/ChatBubble.tsx
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
@@ -380,14 +379,14 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
         disabled={isUploading || isSending}
       />
 
-      {/* Floating Toggle Button */}
+      {/* Floating Toggle Button - FIXED POSITION */}
       <motion.button
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-40 bg-gray-900 text-white p-4 rounded-full shadow-xl shadow-gray-900/30 flex items-center justify-center transition-all duration-300 hover:bg-black"
+        className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 bg-gray-900 text-white p-4 rounded-full shadow-xl shadow-gray-900/30 flex items-center justify-center transition-all duration-300 hover:bg-black"
       >
         <FiMessageSquare size={24} />
         {messages.some(m => !m.isRead && m.senderType === 'customer') && (
@@ -410,13 +409,17 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
               onClick={() => setIsOpen(false)}
             />
             
-            {/* Modal Container */}
+            {/* Modal Container - IMPROVED MOBILE LAYOUT */}
             <motion.div
               initial={{ opacity: 0, y: 50, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 50, scale: 0.95 }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="fixed bottom-24 right-4 md:right-6 z-50 w-[95vw] md:w-96 max-h-[80vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+              className="fixed bottom-4 left-4 right-4 top-4 md:bottom-auto md:right-6 md:left-auto md:top-auto md:max-h-[80vh] md:w-96 z-50 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+              style={{ 
+                height: 'calc(100vh - 120px)', // Leave space for system UI
+                maxHeight: 'calc(100vh - 120px)'
+              }}
             >
               
               {/* Header */}
@@ -564,7 +567,7 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
         )}
       </AnimatePresence>
 
-      {/* Completion Modal */}
+      {/* Completion Modal - FIXED FOR MOBILE */}
       <AnimatePresence>
         {completionModal.isOpen && (
           <>
@@ -580,7 +583,7 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[70] w-[90vw] max-w-md"
+              className="fixed left-4 right-4 top-1/2 -translate-y-1/2 z-[70] max-h-[85vh] overflow-y-auto mx-auto max-w-md"
             >
               <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
                 {/* Header */}
@@ -749,6 +752,17 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Add CSS for no-scrollbar */}
+      <style jsx>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
     </>
   );
 }

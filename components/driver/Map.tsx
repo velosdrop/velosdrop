@@ -1,4 +1,3 @@
-//components/driver/Map.tsx
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
@@ -183,10 +182,10 @@ export default function Map({
 
     const { latitude, longitude } = destination;
     
-    // Premium Waze Deep Link Construction with all recommended parameters[citation:2]
+    // Premium Waze Deep Link Construction with all recommended parameters
     const wazeUrl = new URL('https://waze.com/ul');
     
-    // Core navigation parameters[citation:2]
+    // Core navigation parameters
     wazeUrl.searchParams.append('ll', `${latitude},${longitude}`);
     wazeUrl.searchParams.append('navigate', 'yes');
     wazeUrl.searchParams.append('zoom', '15'); // Optimal zoom level
@@ -195,7 +194,7 @@ export default function Map({
     const searchQuery = `${destinationName} - ${address.substring(0, 50)}`;
     wazeUrl.searchParams.append('q', encodeURIComponent(searchQuery));
     
-    // UTM tracking for partner support (recommended by Waze)[citation:2]
+    // UTM tracking for partner support (recommended by Waze)
     wazeUrl.searchParams.append('utm_source', 'delivery-driver-app');
     wazeUrl.searchParams.append('utm_medium', 'web-deeplink');
     wazeUrl.searchParams.append('utm_campaign', 'driver-navigation');
@@ -1202,12 +1201,54 @@ export default function Map({
         </div>
       )}
 
-      {/* PREMIUM FEATURE: Waze Navigation Floating Action Button */}
+      {/* MARK AS COMPLETED BUTTON */}
+      {showCompleteButton && activeDelivery && (
+        <div className="absolute bottom-32 left-4 right-4 z-10">
+          <button
+            onClick={async () => {
+              try {
+                await fetch('/api/delivery/complete', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    deliveryId: activeDelivery.deliveryId,
+                    driverId: driverId 
+                  })
+                });
+                setShowCompleteButton(false);
+                alert('Delivery marked as completed! Waiting for customer confirmation.');
+              } catch (error) {
+                console.error('Error completing delivery:', error);
+              }
+            }}
+            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-6 rounded-xl font-bold text-lg shadow-xl hover:from-green-600 hover:to-emerald-700 transition-all animate-pulse"
+          >
+            ✅ MARK AS COMPLETED
+          </button>
+        </div>
+      )}
+
+      {/* Find My Location Button - More compact */}
+      {locationGranted && lastLocation && (
+        <button
+          onClick={flyToCurrentLocation}
+          disabled={isLocating}
+          className="absolute bottom-4 right-4 z-10 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          title="Find my location"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+      )}
+
+      {/* PREMIUM FEATURE: Waze Navigation Floating Action Button - MOVED TO BOTTOM LEFT */}
       {activeDelivery && (
-        <div className="absolute bottom-16 right-4 z-20">
+        <div className="absolute bottom-16 left-4 z-20">
           {/* Waze Options Modal */}
           {showWazeOptions && (
-            <div className="absolute bottom-full right-0 mb-3 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden animate-fade-in">
+            <div className="absolute bottom-full left-0 mb-3 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden animate-fade-in">
               <div className="p-4 border-b border-gray-100">
                 <h3 className="font-bold text-gray-900 flex items-center">
                   <span className="text-[#33CCFF] mr-2">Waze</span> Navigation
@@ -1355,10 +1396,10 @@ export default function Map({
               }`}></div>
               
               {/* Tooltip */}
-              <div className="absolute bottom-full right-0 mb-3 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+              <div className="absolute bottom-full left-0 mb-3 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
                 <div className="font-semibold">Waze Navigation</div>
                 <div className="text-xs text-gray-300">Click for destination options</div>
-                <div className="absolute top-full right-4 -mt-1 border-4 border-transparent border-t-gray-900"></div>
+                <div className="absolute top-full left-4 -mt-1 border-4 border-transparent border-t-gray-900"></div>
               </div>
             </button>
             
@@ -1390,55 +1431,15 @@ export default function Map({
         </div>
       )}
 
-      {/* MARK AS COMPLETED BUTTON */}
-      {showCompleteButton && activeDelivery && (
-        <div className="absolute bottom-32 left-4 right-4 z-10">
-          <button
-            onClick={async () => {
-              try {
-                await fetch('/api/delivery/complete', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ 
-                    deliveryId: activeDelivery.deliveryId,
-                    driverId: driverId 
-                  })
-                });
-                setShowCompleteButton(false);
-                alert('Delivery marked as completed! Waiting for customer confirmation.');
-              } catch (error) {
-                console.error('Error completing delivery:', error);
-              }
-            }}
-            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-6 rounded-xl font-bold text-lg shadow-xl hover:from-green-600 hover:to-emerald-700 transition-all animate-pulse"
-          >
-            ✅ MARK AS COMPLETED
-          </button>
-        </div>
-      )}
-
-      {/* Find My Location Button - More compact */}
-      {locationGranted && lastLocation && (
-        <button
-          onClick={flyToCurrentLocation}
-          disabled={isLocating}
-          className="absolute bottom-4 right-4 z-10 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          title="Find my location"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </button>
-      )}
-
       {/* Chat Bubble - Only show when we have an active delivery */}
       {activeDelivery && driverId && activeDelivery.customerId && (
-        <ChatBubble
-          driverId={driverId}
-          deliveryId={activeDelivery.deliveryId}
-          customerId={activeDelivery.customerId}
-        />
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-20">
+          <ChatBubble
+            driverId={driverId}
+            deliveryId={activeDelivery.deliveryId}
+            customerId={activeDelivery.customerId}
+          />
+        </div>
       )}
 
       {/* Add custom styles for animations */}
