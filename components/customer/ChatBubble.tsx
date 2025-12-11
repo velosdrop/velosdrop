@@ -85,10 +85,18 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
           if (event.channel === channel && event.message.type === 'CHAT_MESSAGE') {
             const newMessage = event.message.data;
             
-            // Update delivery status if driver marks as completed
+            // ✅ FIXED: Check for driver's completion message
             if (newMessage.senderType === 'driver' && 
                 newMessage.messageType === 'status_update' &&
                 newMessage.content.includes('Delivery completed!')) {
+              console.log('✅ Driver marked delivery as complete, showing button');
+              setDeliveryStatus('completed');
+            }
+            
+            // ✅ FIXED: Also check for system message about completion
+            if (newMessage.senderType === 'system' && 
+                newMessage.content.includes('Driver has marked the delivery as complete')) {
+              console.log('✅ System message received, showing button');
               setDeliveryStatus('completed');
             }
             
@@ -145,6 +153,13 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
     }
   }, [deliveryId, isOpen]);
 
+  // Debug delivery status when chat opens
+  useEffect(() => {
+    if (isOpen) {
+      debugDeliveryStatus();
+    }
+  }, [isOpen, deliveryId]);
+
   const fetchDriverInfo = async () => {
     try {
       const response = await fetch(`/api/drivers/${driverId}`);
@@ -176,13 +191,68 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
 
   const checkDeliveryStatus = async () => {
     try {
-      const response = await fetch(`/api/delivery/status/${deliveryId}`);
+      const response = await fetch(`/api/delivery/${deliveryId}`);
       if (response.ok) {
         const data = await response.json();
-        setDeliveryStatus(data.status);
+        console.log('📊 Delivery data from API:', {
+          id: data.id,
+          status: data.status,
+          deliveryStatus: data.deliveryStatus,
+          deliveryCompletedAt: data.deliveryCompletedAt,
+          customerConfirmedAt: data.customerConfirmedAt,
+          autoConfirmedAt: data.autoConfirmedAt
+        });
+        
+        // ✅ FIXED: Check the actual fields from your API
+        // Check if delivery has been completed by driver but not confirmed by customer
+        const isAwaitingConfirmation = (
+          (data.deliveryStatus === 'awaiting_confirmation' || 
+           data.status === 'completed') && 
+          data.deliveryCompletedAt && 
+          !data.customerConfirmedAt && 
+          !data.autoConfirmedAt
+        );
+        
+        if (isAwaitingConfirmation) {
+          console.log('✅ Delivery is awaiting customer confirmation, showing button');
+          setDeliveryStatus('completed');
+        } else if (data.customerConfirmedAt || data.autoConfirmedAt) {
+          console.log('✅ Delivery already confirmed');
+          setDeliveryStatus('confirmed');
+        } else {
+          console.log('❌ Delivery not completed yet');
+          setDeliveryStatus('pending');
+        }
       }
     } catch (error) {
       console.error('Error checking delivery status:', error);
+    }
+  };
+
+  // Debug helper function
+  const debugDeliveryStatus = async () => {
+    console.log('🔍 Debugging delivery status...');
+    
+    try {
+      const response = await fetch(`/api/delivery/${deliveryId}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📊 Full delivery data:', data);
+        console.log('📊 Conditions check:');
+        console.log('  - deliveryStatus:', data.deliveryStatus);
+        console.log('  - status:', data.status);
+        console.log('  - deliveryCompletedAt:', data.deliveryCompletedAt);
+        console.log('  - customerConfirmedAt:', data.customerConfirmedAt);
+        console.log('  - autoConfirmedAt:', data.autoConfirmedAt);
+        console.log('  - Should show button?:', 
+          (data.deliveryStatus === 'awaiting_confirmation' || data.status === 'completed') && 
+          data.deliveryCompletedAt && 
+          !data.customerConfirmedAt && 
+          !data.autoConfirmedAt
+        );
+      }
+    } catch (error) {
+      console.error('Debug error:', error);
     }
   };
 
@@ -221,6 +291,29 @@ export default function CustomerChatBubble({ customerId, deliveryId, driverId, o
       if (response.ok) {
         const data = await response.json();
         setMessages(data);
+        
+        // ✅ FIXED: Check if any message indicates delivery completion
+        const hasCompletionMessage = data.some((msg: Message) => 
+          (msg.senderType === 'driver' && 
+           msg.messageType === 'status_update' && 
+           msg.content.includes('Delivery completed!')) ||
+          (msg.senderType === 'system' && 
+           msg.content.includes('Driver has marked the delivery as complete'))
+        );
+        
+        if (hasCompletionMessage) {
+          console.log('📨 Found completion message in chat history');
+          
+          // Also check database to ensure delivery is actually completed
+          const statusResponse = await fetch(`/api/delivery/${deliveryId}`);
+          if (statusResponse.ok) {
+            const deliveryData = await statusResponse.json();
+            if (deliveryData.deliveryCompletedAt && !deliveryData.customerConfirmedAt) {
+              console.log('✅ Delivery is awaiting confirmation, showing button');
+              setDeliveryStatus('completed');
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading chat history:', error);
