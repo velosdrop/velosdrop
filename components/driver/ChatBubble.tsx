@@ -60,6 +60,7 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
   const fileInputRef = useRef<HTMLInputElement>(null);
   const completionFileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatButtonRef = useRef<HTMLButtonElement>(null);
 
   // --- PubNub Initialization ---
   useEffect(() => {
@@ -379,14 +380,20 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
         disabled={isUploading || isSending}
       />
 
-      {/* Floating Toggle Button - FIXED POSITION */}
+      {/* Floating Toggle Button - FIXED with higher z-index */}
       <motion.button
+        ref={chatButtonRef}
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 bg-gray-900 text-white p-4 rounded-full shadow-xl shadow-gray-900/30 flex items-center justify-center transition-all duration-300 hover:bg-black"
+        onClick={(e) => {
+          e.stopPropagation();
+          console.log('Chat button clicked, setting isOpen to:', !isOpen);
+          setIsOpen(true);
+        }}
+        className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-50 bg-gray-900 text-white p-4 rounded-full shadow-xl shadow-gray-900/30 flex items-center justify-center transition-all duration-300 hover:bg-black"
+        style={{ zIndex: 9999 }}
       >
         <FiMessageSquare size={24} />
         {messages.some(m => !m.isRead && m.senderType === 'customer') && (
@@ -400,26 +407,30 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* Backdrop */}
+            {/* Backdrop - FIXED with higher z-index */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
-              onClick={() => setIsOpen(false)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[9990]"
+              onClick={() => {
+                console.log('Backdrop clicked, closing chat');
+                setIsOpen(false);
+              }}
             />
             
-            {/* Modal Container - IMPROVED MOBILE LAYOUT */}
+            {/* Modal Container - FIXED with proper positioning */}
             <motion.div
               initial={{ opacity: 0, y: 50, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 50, scale: 0.95 }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="fixed bottom-4 left-4 right-4 top-4 md:bottom-auto md:right-6 md:left-auto md:top-auto md:max-h-[80vh] md:w-96 z-50 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+              className="fixed bottom-24 left-4 right-4 md:left-auto md:right-6 md:w-96 z-[9991] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
               style={{ 
-                height: 'calc(100vh - 120px)', // Leave space for system UI
-                maxHeight: 'calc(100vh - 120px)'
+                maxHeight: 'calc(100vh - 180px)',
+                height: 'auto'
               }}
+              onClick={(e) => e.stopPropagation()}
             >
               
               {/* Header */}
@@ -442,10 +453,10 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
               </div>
 
               {/* Chat List Interface */}
-              <div className="flex-1 overflow-hidden relative bg-gray-50 flex flex-col">
+              <div className="flex-1 overflow-hidden relative bg-gray-50 flex flex-col min-h-0">
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                   {messages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-60">
+                    <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-60 py-8">
                       <FiMessageSquare size={48} className="mb-2" />
                       <p>Start messaging</p>
                     </div>
@@ -499,7 +510,7 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
                 </div>
 
                 {/* Quick Actions */}
-                <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 overflow-x-auto no-scrollbar">
+                <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 overflow-x-auto no-scrollbar shrink-0">
                   <div className="flex gap-2">
                     {quickActions.map((action, i) => (
                       <button
@@ -575,7 +586,7 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60]"
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10000]"
               onClick={() => setCompletionModal(prev => ({ ...prev, isOpen: false }))}
             />
             
@@ -583,7 +594,8 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="fixed left-4 right-4 top-1/2 -translate-y-1/2 z-[70] max-h-[85vh] overflow-y-auto mx-auto max-w-md"
+              className="fixed left-4 right-4 top-1/2 -translate-y-1/2 z-[10001] max-h-[85vh] overflow-y-auto mx-auto max-w-md"
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
                 {/* Header */}
@@ -722,7 +734,7 @@ export default function ChatBubble({ driverId, deliveryId, customerId }: ChatBub
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-4"
+            className="fixed inset-0 z-[10002] bg-black/90 flex items-center justify-center p-4"
             onClick={() => setPreviewImage(null)}
           >
             <div className="relative max-w-4xl max-h-[80vh]">

@@ -1,3 +1,4 @@
+//components/driver/Map.tsx
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
@@ -1433,13 +1434,11 @@ export default function Map({
 
       {/* Chat Bubble - Only show when we have an active delivery */}
       {activeDelivery && driverId && activeDelivery.customerId && (
-        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-20">
           <ChatBubble
             driverId={driverId}
             deliveryId={activeDelivery.deliveryId}
             customerId={activeDelivery.customerId}
           />
-        </div>
       )}
 
       {/* Add custom styles for animations */}
