@@ -16,7 +16,8 @@ import {
   FileText,
   Shield,
   Bell,
-  HelpCircle
+  HelpCircle,
+  DollarSign 
 } from 'lucide-react';
 
 export default function AdminLayout({
@@ -218,6 +219,15 @@ export default function AdminLayout({
             <p className="text-xs text-purple-400/60 font-medium px-3 pb-2 uppercase tracking-wider">
               Management
             </p>
+
+             {/* Add Earnings Dashboard link here */}
+            <NavLink 
+            href="/admin/earnings" 
+            icon={<DollarSign className="w-5 h-5" />}
+            label="Earnings"
+            isActive={currentPath.startsWith('/admin/earnings')}
+            />
+  
             <NavLink 
               href="/admin/driver-transactions" 
               icon={<CreditCard className="w-5 h-5" />}
@@ -226,10 +236,10 @@ export default function AdminLayout({
             />
             
             <NavLink 
-              href="/admin/reports" 
+              href="/admin/analytics" 
               icon={<BarChart3 className="w-5 h-5" />}
               label="Analytics"
-              isActive={currentPath.startsWith('/admin/reports')}
+              isActive={currentPath.startsWith('/admin/analytics')}
             />
             
             <NavLink 
@@ -415,7 +425,7 @@ function getPageTitle(pathname: string) {
     '/admin/drivers': 'Driver Management',
     '/admin/chats': 'Chat Monitoring',
     '/admin/driver-transactions': 'Driver Transactions',
-    '/admin/reports': 'Analytics & Reports',
+    '/admin/analytics': 'Analytics & Reports',
     '/admin/live-tracking': 'Live Delivery Tracking',
     '/admin/settings': 'System Settings',
     '/admin/logs': 'Audit Logs',
@@ -435,7 +445,7 @@ function getPageDescription(pathname: string) {
     '/admin/drivers': 'Approve, manage, and monitor drivers',
     '/admin/chats': 'Monitor customer-driver conversations in real-time',
     '/admin/driver-transactions': 'Manage payments, earnings, and transactions',
-    '/admin/reports': 'Detailed analytics and performance insights',
+    '/admin/analytics': 'Detailed analytics and performance insights',
     '/admin/live-tracking': 'Track active deliveries on map',
     '/admin/settings': 'Configure system preferences',
     '/admin/logs': 'View system activity and audit trails',

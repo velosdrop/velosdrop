@@ -1,4 +1,3 @@
-// components/admin/DriverCard.tsx
 'use client';
 import { useState } from 'react';
 import { SelectDriver } from '@/src/db/schema';
@@ -19,15 +18,22 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  Wallet
+  Wallet,
+  TrendingUp,
+  Package
 } from 'lucide-react';
 import WalletAdjustmentModal from './WalletAdjustmentModal';
 
 interface DriverWithStats extends SelectDriver {
-  totalDeliveries?: number;
+  totalDeliveries?: number; // All assigned deliveries
   averageRating?: number;
   totalEarnings?: number;
-  completedDeliveries?: number;
+  completedDeliveries?: number; // Actually completed deliveries
+  totalDeliveriesDisplay?: number; // For backward compatibility
+  completionRate?: number;
+  onTimeRate?: number;
+  totalFareValue?: number;
+  totalCommissionPaid?: number;
 }
 
 interface DriverCardProps {
@@ -40,6 +46,17 @@ export default function DriverCard({ driver, onStatusChange, onViewDetails }: Dr
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
+
+  // Use the correct field for completed deliveries
+  const completedDeliveries = driver.completedDeliveries || driver.totalDeliveriesDisplay || 0;
+  
+  // Use totalDeliveries for all assigned deliveries
+  const totalAssignedDeliveries = driver.totalDeliveries || 0;
+  
+  // Calculate completion percentage
+  const completionPercentage = totalAssignedDeliveries > 0 
+    ? Math.round((completedDeliveries / totalAssignedDeliveries) * 100) 
+    : 0;
 
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -131,6 +148,16 @@ export default function DriverCard({ driver, onStatusChange, onViewDetails }: Dr
     }).format(balance / 100);
   };
 
+  const formatEarnings = (earnings?: number) => {
+    if (!earnings) return '$0.00';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(earnings);
+  };
+
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName[0]?.toUpperCase() || ''}${lastName[0]?.toUpperCase() || ''}`;
   };
@@ -140,6 +167,12 @@ export default function DriverCard({ driver, onStatusChange, onViewDetails }: Dr
     if (rating >= 4.5) return 'text-emerald-400';
     if (rating >= 4.0) return 'text-amber-400';
     if (rating >= 3.0) return 'text-orange-400';
+    return 'text-red-400';
+  };
+
+  const getCompletionColor = (percentage: number) => {
+    if (percentage >= 90) return 'text-emerald-400';
+    if (percentage >= 75) return 'text-amber-400';
     return 'text-red-400';
   };
 
@@ -190,20 +223,23 @@ export default function DriverCard({ driver, onStatusChange, onViewDetails }: Dr
             </div>
             <div className="flex items-center space-x-3 mt-2">
               {/* Rating */}
-              {driver.averageRating && (
+              {driver.averageRating && driver.averageRating > 0 ? (
                 <div className={`flex items-center space-x-1 text-sm font-medium ${getRatingColor(driver.averageRating)}`}>
                   <Star className="w-3 h-3 fill-current" />
                   <span>{driver.averageRating.toFixed(1)}</span>
                 </div>
+              ) : (
+                <div className="flex items-center space-x-1 text-gray-400 text-sm">
+                  <Star className="w-3 h-3" />
+                  <span>No ratings</span>
+                </div>
               )}
               
               {/* Deliveries Count */}
-              {driver.totalDeliveries !== undefined && (
-                <div className="flex items-center space-x-1 text-cyan-400 text-sm">
-                  <CheckCircle2 className="w-3 h-3" />
-                  <span>{driver.totalDeliveries}</span>
-                </div>
-              )}
+              <div className="flex items-center space-x-1 text-cyan-400 text-sm">
+                <Package className="w-3 h-3" />
+                <span>{completedDeliveries} completed</span>
+              </div>
             </div>
           </div>
         </div>
@@ -263,24 +299,44 @@ export default function DriverCard({ driver, onStatusChange, onViewDetails }: Dr
       {/* Stats Bar */}
       <div className="flex items-center justify-between mb-6 p-3 bg-gray-700/30 rounded-xl border border-gray-600/30 backdrop-blur-sm">
         <div className="text-center">
-          <div className="text-white font-bold text-lg">{driver.totalDeliveries || 0}</div>
-          <div className="text-purple-300 text-xs">Deliveries</div>
+          <div className="text-white font-bold text-lg">{completedDeliveries}</div>
+          <div className="text-purple-300 text-xs">Completed</div>
         </div>
         <div className="w-px h-8 bg-gray-600/50"></div>
         <div className="text-center">
           <div className={`font-bold text-lg ${getRatingColor(driver.averageRating)}`}>
-            {driver.averageRating ? driver.averageRating.toFixed(1) : 'N/A'}
+            {driver.averageRating && driver.averageRating > 0 ? driver.averageRating.toFixed(1) : 'N/A'}
           </div>
           <div className="text-purple-300 text-xs">Rating</div>
         </div>
         <div className="w-px h-8 bg-gray-600/50"></div>
         <div className="text-center">
-          <div className="text-white font-bold text-lg">
-            {driver.completedDeliveries || 0}
+          <div className={`font-bold text-lg ${getCompletionColor(completionPercentage)}`}>
+            {completionPercentage}%
           </div>
-          <div className="text-purple-300 text-xs">Completed</div>
+          <div className="text-purple-300 text-xs">Completion</div>
         </div>
       </div>
+
+      {/* Completion Progress Bar */}
+      {totalAssignedDeliveries > 0 && (
+        <div className="mb-4">
+          <div className="flex justify-between text-xs text-purple-300 mb-1">
+            <span>Delivery Completion</span>
+            <span>{completedDeliveries} of {totalAssignedDeliveries}</span>
+          </div>
+          <div className="w-full bg-gray-700 rounded-full h-2">
+            <div 
+              className={`h-2 rounded-full ${
+                completionPercentage >= 90 ? 'bg-emerald-500' :
+                completionPercentage >= 75 ? 'bg-amber-500' :
+                'bg-red-500'
+              } transition-all duration-1000 ease-out`}
+              style={{ width: `${Math.min(completionPercentage, 100)}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
 
       {/* Online Status with Animation */}
       <div className="flex items-center justify-between mb-6 p-4 bg-gradient-to-r from-gray-700/50 to-gray-800/50 rounded-xl border border-gray-600/30 backdrop-blur-sm group-hover:border-purple-500/30 transition-all duration-300">
@@ -296,6 +352,28 @@ export default function DriverCard({ driver, onStatusChange, onViewDetails }: Dr
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
           )}
         </div>
+      </div>
+
+      {/* Earnings Summary */}
+      <div className="mb-6 p-4 bg-gradient-to-r from-gray-700/50 to-gray-800/50 rounded-xl border border-gray-600/30 backdrop-blur-sm">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-purple-300 text-sm font-medium">Total Earnings</span>
+          <span className="text-emerald-400 text-sm font-semibold">
+            {formatEarnings(driver.totalEarnings)}
+          </span>
+        </div>
+        {driver.totalFareValue && driver.totalFareValue > 0 && (
+          <div className="flex items-center justify-between text-xs text-gray-400">
+            <span>Total Fare Value</span>
+            <span>${driver.totalFareValue.toFixed(2)}</span>
+          </div>
+        )}
+        {driver.totalCommissionPaid && driver.totalCommissionPaid > 0 && (
+          <div className="flex items-center justify-between text-xs text-gray-400">
+            <span>Commission Paid</span>
+            <span>-${driver.totalCommissionPaid.toFixed(2)}</span>
+          </div>
+        )}
       </div>
 
       {/* Actions */}

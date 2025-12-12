@@ -1,4 +1,3 @@
-//app/admin/dashboard/page.tsx
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -39,6 +38,8 @@ interface DashboardStats {
   completedOrders: number;
   onlineDrivers: number;
   newCustomers: number;
+  revenueChange: number;
+  yesterdayRevenue: number;
 }
 
 interface Driver {
@@ -72,6 +73,18 @@ interface Order {
   driverAvatar: string;
 }
 
+interface EarningsData {
+  totalEarnings: number;
+  totalDeliveries: number;
+  averageCommission: number;
+  trends: {
+    today: number;
+    yesterday: number;
+    thisWeek: number;
+    thisMonth: number;
+  };
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     totalOrders: 0,
@@ -81,7 +94,9 @@ export default function Dashboard() {
     pendingOrders: 0,
     completedOrders: 0,
     onlineDrivers: 0,
-    newCustomers: 0
+    newCustomers: 0,
+    revenueChange: 0,
+    yesterdayRevenue: 0
   });
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [systemHealth, setSystemHealth] = useState({
@@ -110,6 +125,30 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  const fetchEarningsData = async (): Promise<EarningsData> => {
+    try {
+      const response = await fetch('/api/admin/earnings');
+      if (!response.ok) {
+        throw new Error(`Earnings API returned ${response.status}`);
+      }
+      const data = await response.json();
+      return data.data || {
+        totalEarnings: 0,
+        totalDeliveries: 0,
+        averageCommission: 0,
+        trends: { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0 }
+      };
+    } catch (error) {
+      console.error('Error fetching earnings:', error);
+      return {
+        totalEarnings: 0,
+        totalDeliveries: 0,
+        averageCommission: 0,
+        trends: { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0 }
+      };
+    }
+  };
+
   const loadDashboardData = async () => {
     try {
       setLoading(true);
@@ -117,12 +156,22 @@ export default function Dashboard() {
       
       console.log('Fetching dashboard data...');
       
-      // Fetch drivers data
-      const driversResponse = await fetch('/api/admin/drivers');
+      // Fetch all data in parallel
+      const [driversResponse, customersResponse, earningsData] = await Promise.all([
+        fetch('/api/admin/drivers'),
+        fetch('/api/admin/customers'),
+        fetchEarningsData()
+      ]);
+      
       console.log('Drivers response status:', driversResponse.status);
+      console.log('Customers response status:', customersResponse.status);
       
       if (!driversResponse.ok) {
         throw new Error(`Drivers API returned ${driversResponse.status}: ${driversResponse.statusText}`);
+      }
+      
+      if (!customersResponse.ok) {
+        throw new Error(`Customers API returned ${customersResponse.status}: ${customersResponse.statusText}`);
       }
       
       const driversData = await driversResponse.json();
@@ -131,14 +180,6 @@ export default function Dashboard() {
       const drivers: Driver[] = driversData.drivers || [];
       console.log('Processed drivers:', drivers);
 
-      // Fetch customers data
-      const customersResponse = await fetch('/api/admin/customers');
-      console.log('Customers response status:', customersResponse.status);
-      
-      if (!customersResponse.ok) {
-        throw new Error(`Customers API returned ${customersResponse.status}: ${driversResponse.statusText}`);
-      }
-      
       const customersData = await customersResponse.json();
       console.log('Customers data:', customersData);
       
@@ -153,6 +194,7 @@ export default function Dashboard() {
       }
       
       console.log('Processed customers:', customers);
+      console.log('Earnings data:', earningsData);
 
       // Calculate dynamic stats
       const onlineDrivers = drivers.filter(driver => driver.isOnline === true).length;
@@ -170,11 +212,17 @@ export default function Dashboard() {
         }
       }).length;
 
-      // Calculate total revenue from drivers' earnings
-      const totalRevenue = drivers.reduce((sum, driver) => sum + (Number(driver.totalEarnings) || 0), 0);
+      // Use actual platform commission earnings instead of driver earnings
+      const totalRevenue = earningsData.totalEarnings || 0;
+      const yesterdayRevenue = earningsData.trends?.yesterday || 0;
       
-      // Calculate total orders from customers
-      const totalOrders = customers.reduce((sum, customer) => sum + (Number(customer.totalOrders) || 0), 0);
+      // Calculate percentage change from yesterday
+      const revenueChange = yesterdayRevenue > 0 
+        ? Math.round(((totalRevenue - yesterdayRevenue) / yesterdayRevenue) * 100)
+        : totalRevenue > 0 ? 100 : 0;
+      
+      // Calculate total orders from earnings data (commission deliveries) OR from customers
+      const totalOrders = earningsData.totalDeliveries || customers.reduce((sum, customer) => sum + (Number(customer.totalOrders) || 0), 0);
 
       // For demo purposes, we'll calculate some derived stats
       const completedOrders = Math.floor(totalOrders * 0.8); // 80% completion rate
@@ -188,7 +236,9 @@ export default function Dashboard() {
         pendingOrders,
         completedOrders,
         onlineDrivers,
-        newCustomers
+        newCustomers,
+        revenueChange,
+        yesterdayRevenue
       };
 
       console.log('Calculated stats:', dynamicStats);
@@ -418,10 +468,13 @@ export default function Dashboard() {
           delay={300}
         />
         <StatsCard
-          title="Total Revenue"
-          value={`$${stats.totalRevenue.toLocaleString()}`}
-          change="+15%"
-          trend="up"
+          title="Platform Revenue"
+          value={`$${stats.totalRevenue.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          })}`}
+          change={`${stats.revenueChange >= 0 ? '+' : ''}${stats.revenueChange}%`}
+          trend={stats.revenueChange >= 0 ? 'up' : 'down'}
           icon={<DollarSign className="w-6 h-6" />}
           color="green"
           delay={400}
@@ -538,22 +591,61 @@ export default function Dashboard() {
 
         {/* Right Sidebar */}
         <div className="space-y-6">
-          {/* System Health */}
-          <div className="bg-gray-800 rounded-2xl border border-purple-500/20 p-6 hover:border-purple-500/40 transition-all duration-300">
+          {/* Revenue Overview */}
+          <div className="bg-gray-800 rounded-2xl border border-emerald-500/20 p-6 hover:border-emerald-500/40 transition-all duration-300">
             <div className="flex items-center space-x-3 mb-6">
               <div className="p-2 bg-emerald-500/20 rounded-lg">
-                <Activity className="w-5 h-5 text-emerald-400" />
+                <DollarSign className="w-5 h-5 text-emerald-400" />
               </div>
-              <h2 className="text-xl font-bold text-white">System Health</h2>
+              <h2 className="text-xl font-bold text-white">Revenue Overview</h2>
             </div>
             <div className="space-y-4">
-              {Object.entries(systemHealth).map(([service, data]) => (
-                <HealthItem 
-                  key={service} 
-                  service={service} 
-                  data={data} 
-                />
-              ))}
+              <div className="flex justify-between items-center">
+                <div>
+                  <div className="text-emerald-300 text-sm">Today's Revenue</div>
+                  <div className="text-white text-2xl font-bold">
+                    ${stats.totalRevenue.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    })}
+                  </div>
+                </div>
+                <div className={`flex items-center space-x-1 px-3 py-1 rounded-full ${
+                  stats.revenueChange >= 0 
+                    ? 'bg-emerald-500/20 text-emerald-400' 
+                    : 'bg-red-500/20 text-red-400'
+                }`}>
+                  {stats.revenueChange >= 0 ? (
+                    <TrendingUp className="w-4 h-4" />
+                  ) : (
+                    <TrendingUp className="w-4 h-4 rotate-180" />
+                  )}
+                  <span className="font-medium">{stats.revenueChange}%</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-700/30 rounded-lg p-3">
+                  <div className="text-emerald-300 text-xs mb-1">Yesterday</div>
+                  <div className="text-white font-medium">
+                    ${stats.yesterdayRevenue.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    })}
+                  </div>
+                </div>
+                <div className="bg-gray-700/30 rounded-lg p-3">
+                  <div className="text-blue-300 text-xs mb-1">Avg per Order</div>
+                  <div className="text-white font-medium">
+                    ${(stats.totalOrders > 0 ? stats.totalRevenue / stats.totalOrders : 0).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+              <div className="pt-4 border-t border-gray-700">
+                <div className="flex items-center space-x-2 text-emerald-300 text-sm">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                  <span>Commission Rate: 13.5% per delivery</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -773,38 +865,6 @@ function OrderItem({ order, delay }: OrderItemProps) {
           <div className="text-purple-300 text-sm">{order.time}</div>
         </div>
         <MoreHorizontal className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-      </div>
-    </div>
-  );
-}
-
-// Health Item Component
-interface HealthItemProps {
-  service: string;
-  data: any;
-}
-
-function HealthItem({ service, data }: HealthItemProps) {
-  return (
-    <div className="flex items-center justify-between p-3 bg-gray-700/30 rounded-lg hover:bg-gray-700/50 transition-all duration-200">
-      <div className="flex items-center space-x-3">
-        <div className={`w-2 h-2 rounded-full ${getHealthColor(data.status)} animate-pulse`}></div>
-        <span className="text-purple-300 capitalize font-medium">{service}</span>
-      </div>
-      <div className="flex items-center space-x-3">
-        <span className="text-white text-sm">
-          {service === 'api' && data.responseTime}
-          {service === 'database' && `${data.connections} conn`}
-          {service === 'payments' && data.successRate}
-          {service === 'notifications' && data.deliveryRate}
-        </span>
-        <span className={`text-xs px-2 py-1 rounded-full ${
-          data.status === 'healthy' ? 'bg-emerald-500/20 text-emerald-400' :
-          data.status === 'degraded' ? 'bg-amber-500/20 text-amber-400' :
-          'bg-red-500/20 text-red-400'
-        }`}>
-          {data.status}
-        </span>
       </div>
     </div>
   );
