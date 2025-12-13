@@ -17,6 +17,9 @@ export const CHANNELS = {
   
   // Location channels
   driverLocations: 'driver_locations',
+
+  //See Realtime Feed
+  LIVE_DELIVERY_FEED: 'live_delivery_feed', 
   
   // General drivers broadcast channel
   drivers: 'drivers',
@@ -31,6 +34,8 @@ export const CHANNELS = {
 export const MESSAGE_TYPES = {
   // Customer -> Drivers
   BOOKING_REQUEST: 'booking_request',
+
+  LIVE_FEED_UPDATE: 'live_feed_update', 
 
   // Driver -> Customer
   BOOKING_ACCEPTED: 'booking_accepted',
@@ -63,6 +68,27 @@ export interface PubNubMessage {
   timestamp: number;
   senderId: string;
   [key: string]: any;
+}
+
+//interface for live feed messages
+export interface LiveFeedMessage extends PubNubMessage {
+  type: typeof MESSAGE_TYPES.LIVE_FEED_UPDATE;
+  data: {
+    eventType: 'new_request' | 'request_accepted' | 'request_rejected' | 'delivery_completed';
+    requestId: number;
+    generalArea: string; // e.g., "Downtown", "Westside"
+    fare: number;
+    customerInitial?: string; // Optional: "J" for John
+    driverName?: string; // Only for acceptance events
+    timestamp: number;
+    status: string;
+    // Map data (optional)
+    pickupZone?: {
+      latitude: number;
+      longitude: number;
+      radius?: number; // in meters
+    };
+  };
 }
 
 // Type for publishing messages

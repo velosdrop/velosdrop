@@ -3,7 +3,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/src/db';
 import { deliveryRequestsTable, customersTable, driverResponsesTable, driversTable } from '@/src/db/schema';
 import { eq } from 'drizzle-orm';
-import { publishBookingRequest, publishBookingResponse, MESSAGE_TYPES } from '@/lib/pubnub-booking';
+import { publishBookingRequest, publishBookingResponse, MESSAGE_TYPES, getPubNubInstance } from '@/lib/pubnub-booking';
+import { getGeneralAreaFromCoordinates, getCachedAreaName, cacheAreaName } from '@/lib/location-utils';
+
+//Function to generate the area in realtime 
+async function getGeneralArea(latitude: number, longitude: number): Promise<string> {
+  // Use the new utility with real Zimbabwe data
+  const areaName = await getGeneralAreaFromCoordinates(latitude, longitude);
+  return areaName;
+}
 
 // Improved nearby driver matching
 const findNearbyDrivers = async (userLocation: { lat: number; lng: number }, vehicleType?: string, radius: number = 5) => {
@@ -33,6 +41,54 @@ const findNearbyDrivers = async (userLocation: { lat: number; lng: number }, veh
   } catch (error) {
     console.error('Error fetching nearby drivers:', error);
     return [];
+  }
+};
+
+// NEW FUNCTION: Publish to Live Feed - FIXED TYPE ISSUE
+const publishToLiveFeed = async (
+  eventType: 'new_request' | 'request_accepted' | 'request_rejected' | 'delivery_completed',
+  data: {
+    requestId: number;
+    generalArea: string;
+    fare: number;
+    customerInitial?: string;
+    driverName?: string;
+    pickupLatitude?: number;
+    pickupLongitude?: number;
+    status?: string;
+  }
+) => {
+  try {
+    const pubnub = getPubNubInstance();
+    
+    // FIX: Create properly typed message for PubNub
+    const liveFeedMessage = {
+      type: 'live_feed_update',
+      data: JSON.stringify({
+        eventType,
+        requestId: data.requestId,
+        generalArea: data.generalArea,
+        fare: data.fare,
+        customerInitial: data.customerInitial || '',
+        driverName: data.driverName || '',
+        timestamp: Date.now(),
+        status: data.status || 'active',
+        pickupZone: data.pickupLatitude && data.pickupLongitude ? {
+          latitude: data.pickupLatitude,
+          longitude: data.pickupLongitude,
+          radius: 500
+        } : null
+      })
+    };
+
+    await pubnub.publish({
+      channel: 'live_delivery_feed',
+      message: liveFeedMessage
+    });
+
+    console.log(`✅ Live feed update published: ${eventType} for request #${data.requestId}`);
+  } catch (error) {
+    console.error('❌ Failed to publish to live feed:', error);
   }
 };
 
@@ -107,6 +163,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get general area for live feed (for privacy)
+    const generalArea = await getGeneralArea(parseFloat(pickupLatitude), parseFloat(pickupLongitude));
+
     // Create delivery request with NEW schema fields
     const expiresAt = new Date(Date.now() + 30000);
     
@@ -135,6 +194,17 @@ export async function POST(request: NextRequest) {
       throw new Error('Failed to create booking');
     }
 
+    // PUBLISH TO LIVE FEED: New Request
+    await publishToLiveFeed('new_request', {
+      requestId: deliveryRequest.id,
+      generalArea,
+      fare: parseFloat(fare),
+      customerInitial: (customerUsername || customer.username).charAt(0).toUpperCase(),
+      pickupLatitude: parseFloat(pickupLatitude),
+      pickupLongitude: parseFloat(pickupLongitude),
+      status: 'pending'
+    });
+
     let driverIdsToNotify = [];
     
     if (selectedDriverId) {
@@ -149,44 +219,22 @@ export async function POST(request: NextRequest) {
     // Publish booking request via PubNub
     if (driverIdsToNotify.length > 0) {
       try {
-        // ✅ FIXED: Updated field names to match driver expectations
         const bookingData = {
           bookingId: deliveryRequest.id,
           customerId: customerId,
           customerUsername: customerUsername || customer.username,
           customerProfilePictureUrl: customer.profilePictureUrl || '', 
           customerPhoneNumber: customer.phoneNumber || '',
-          
-          // ✅ REQUIRED: Separate latitude/longitude fields (must be included)
           pickupLatitude: parseFloat(pickupLatitude),
           pickupLongitude: parseFloat(pickupLongitude),
           dropoffLatitude: parseFloat(dropoffLatitude),
           dropoffLongitude: parseFloat(dropoffLongitude),
-          
-          // ✅ BACKWARD COMPATIBILITY: Old format fields
           pickupLocation: pickupAddress, 
           pickupAddress: pickupAddress,  
-          pickupCoords: [parseFloat(pickupLongitude), parseFloat(pickupLatitude)], // [lng, lat] for maps
-          
+          pickupCoords: [parseFloat(pickupLongitude), parseFloat(pickupLatitude)],
           dropoffLocation: dropoffAddress,
           dropoffAddress: dropoffAddress,  
-          dropoffCoords: [parseFloat(dropoffLongitude), parseFloat(dropoffLatitude)], // [lng, lat] for maps
-          
-          // ✅ ADDITIONAL: Structured objects for convenience
-          pickup: {
-            address: pickupAddress,
-            latitude: parseFloat(pickupLatitude),
-            longitude: parseFloat(pickupLongitude),
-            coordinates: [parseFloat(pickupLongitude), parseFloat(pickupLatitude)]
-          },
-          
-          dropoff: {
-            address: dropoffAddress,
-            latitude: parseFloat(dropoffLatitude),
-            longitude: parseFloat(dropoffLongitude),
-            coordinates: [parseFloat(dropoffLongitude), parseFloat(dropoffLatitude)]
-          },
-          
+          dropoffCoords: [parseFloat(dropoffLongitude), parseFloat(dropoffLatitude)],
           fare: parseFloat(fare),
           distance: parseFloat(distance),
           vehicleType: vehicleType || 'car',
@@ -194,8 +242,6 @@ export async function POST(request: NextRequest) {
           packageDetails: packageDetails || '',
           isDirectAssignment: !!selectedDriverId,
           recipientPhoneNumber: recipientPhone || '',
-          
-          // ✅ Additional metadata for better driver UX
           createdAt: new Date().toISOString(),
           status: 'pending'
         };
@@ -206,17 +252,13 @@ export async function POST(request: NextRequest) {
         
         console.log('PubNub publish results:', publishResult);
         
-        // ✅ DEBUGGING: Log what was sent
         console.log('📤 Booking notification sent to drivers:', {
           driverIds: driverIdsToNotify,
-          bookingId: deliveryRequest.id,
-          pickup: bookingData.pickup,
-          dropoff: bookingData.dropoff
+          bookingId: deliveryRequest.id
         });
         
       } catch (publishError) {
         console.error('❌ PubNub publish error:', publishError);
-        // Log more details about the error
         if (publishError instanceof Error) {
           console.error('Error details:', {
             message: publishError.message,
@@ -263,7 +305,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Wait for driver responses with timeout (only for broadcast requests)
-    const responseTimeout = 30000; // 30 seconds
+    const responseTimeout = 30000;
     const responsePromise = new Promise((resolve) => {
       let responded = false;
       let timeoutHandled = false;
@@ -323,6 +365,15 @@ export async function POST(request: NextRequest) {
         })
         .where(eq(deliveryRequestsTable.id, deliveryRequest.id));
       
+      // PUBLISH TO LIVE FEED: Request Accepted
+      await publishToLiveFeed('request_accepted', {
+        requestId: deliveryRequest.id,
+        generalArea,
+        fare: parseFloat(fare),
+        driverName: `${responseResult.driver.firstName} ${responseResult.driver.lastName}`.substring(0, 12) + '...',
+        status: 'accepted'
+      });
+      
       await publishBookingResponse(customerId, {
         bookingId: deliveryRequest.id,
         driverId: responseResult.driver.id,
@@ -345,6 +396,14 @@ export async function POST(request: NextRequest) {
       await db.update(deliveryRequestsTable)
         .set({ status: 'expired' })
         .where(eq(deliveryRequestsTable.id, deliveryRequest.id));
+      
+      // PUBLISH TO LIVE FEED: Request Expired
+      await publishToLiveFeed('request_rejected', {
+        requestId: deliveryRequest.id,
+        generalArea,
+        fare: parseFloat(fare),
+        status: 'expired'
+      });
       
       await publishBookingResponse(customerId, {
         bookingId: deliveryRequest.id,

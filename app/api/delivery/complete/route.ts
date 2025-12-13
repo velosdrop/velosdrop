@@ -1,4 +1,4 @@
-// app/api/delivery/complete/route.ts - ENHANCED VERSION
+//app/api/delivery/complete/route.ts
 import { db } from '@/src/db';
 import { 
   deliveryRequestsTable, 
@@ -9,6 +9,63 @@ import {
   platformEarnings 
 } from '@/src/db/schema';
 import { eq } from 'drizzle-orm';
+import { getPubNubInstance } from '@/lib/pubnub-booking';
+import { getGeneralAreaFromCoordinates, getCachedAreaName, cacheAreaName } from '@/lib/location-utils';
+
+//Function for Live Feed Requests
+async function getGeneralArea(latitude: number, longitude: number): Promise<string> {
+  // Use the new utility with real Zimbabwe data
+  const areaName = await getGeneralAreaFromCoordinates(latitude, longitude);
+  return areaName;
+}
+
+// NEW FUNCTION: Publish to Live Feed - FIXED TYPE ISSUE
+const publishToLiveFeed = async (
+  eventType: 'new_request' | 'request_accepted' | 'request_rejected' | 'delivery_completed',
+  data: {
+    requestId: number;
+    generalArea: string;
+    fare: number;
+    customerInitial?: string;
+    driverName?: string;
+    pickupLatitude?: number;
+    pickupLongitude?: number;
+    status?: string;
+  }
+) => {
+  try {
+    const pubnub = getPubNubInstance();
+    
+    // FIX: Create properly typed message for PubNub
+    const liveFeedMessage = {
+      type: 'live_feed_update',
+      data: JSON.stringify({
+        eventType,
+        requestId: data.requestId,
+        generalArea: data.generalArea,
+        fare: data.fare,
+        customerInitial: data.customerInitial || '',
+        driverName: data.driverName || '',
+        timestamp: Date.now(),
+        status: data.status || 'active',
+        pickupZone: data.pickupLatitude && data.pickupLongitude ? {
+          latitude: data.pickupLatitude,
+          longitude: data.pickupLongitude,
+          radius: 500
+        } : null
+      })
+    };
+
+    await pubnub.publish({
+      channel: 'live_delivery_feed',
+      message: liveFeedMessage
+    });
+
+    console.log(`✅ Live feed update published: ${eventType} for request #${data.requestId}`);
+  } catch (error) {
+    console.error('❌ Failed to publish to live feed:', error);
+  }
+};
 
 export async function POST(request: Request) {
   try {
@@ -16,7 +73,6 @@ export async function POST(request: Request) {
     
     console.log('💰 Processing delivery completion with commission:', { deliveryId, driverId });
     
-    // Get delivery details including fare
     const delivery = await db.select()
       .from(deliveryRequestsTable)
       .where(eq(deliveryRequestsTable.id, deliveryId))
@@ -28,12 +84,15 @@ export async function POST(request: Request) {
     
     const deliveryData = delivery[0];
     
-    // Check if already completed
+    const generalArea = await getGeneralArea(
+      deliveryData.pickupLatitude || 0,
+      deliveryData.pickupLongitude || 0
+    );
+    
     if (deliveryData.deliveryStatus === 'completed' || deliveryData.status === 'completed') {
       return Response.json({ error: 'Delivery already completed' }, { status: 400 });
     }
     
-    // Get driver's current balance
     const driver = await db.select()
       .from(driversTable)
       .where(eq(driversTable.id, driverId))
@@ -44,15 +103,13 @@ export async function POST(request: Request) {
     }
     
     const driverData = driver[0];
-    const currentBalance = driverData.balance; // Stored in cents
+    const currentBalance = driverData.balance;
     
-    // Calculate commission (13.5% of fare)
-    const fare = deliveryData.fare; // e.g., $10.00
-    const commissionPercentage = 0.135; // 13.5%
-    const commissionAmount = fare * commissionPercentage; // e.g., $1.35
+    const fare = deliveryData.fare;
+    const commissionPercentage = 0.135;
+    const commissionAmount = fare * commissionPercentage;
     const commissionInCents = Math.round(commissionAmount * 100);
     
-    // Check if driver has sufficient balance
     if (currentBalance < commissionInCents) {
       return Response.json({ 
         error: 'Insufficient balance',
@@ -63,7 +120,6 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
     
-    // Calculate new balance after commission deduction
     const newBalance = currentBalance - commissionInCents;
     
     console.log('💰 Commission calculation:', {
@@ -76,23 +132,19 @@ export async function POST(request: Request) {
       driverId
     });
     
-    // Process everything in a single transaction
     await db.transaction(async (tx) => {
-      // 1. Update driver's balance (deduct commission)
       await tx.update(driversTable)
         .set({ balance: newBalance })
         .where(eq(driversTable.id, driverId));
       
-      // 2. Create commission deduction transaction
       await tx.insert(driverTransactions).values({
         driver_id: driverId,
-        amount: -commissionInCents, // Negative for deduction
+        amount: -commissionInCents,
         payment_intent_id: `commission_${deliveryId}_${Date.now()}`,
         status: 'completed',
         created_at: new Date().toISOString()
       });
       
-      // 3. Record commission deduction details
       await tx.insert(driverCommissionDeductions).values({
         driver_id: driverId,
         delivery_id: deliveryId,
@@ -105,7 +157,6 @@ export async function POST(request: Request) {
         created_at: new Date().toISOString()
       });
       
-      // 4. Record platform earnings
       await tx.insert(platformEarnings).values({
         delivery_id: deliveryId,
         commission_amount: commissionAmount,
@@ -114,7 +165,6 @@ export async function POST(request: Request) {
         created_at: new Date().toISOString()
       });
       
-      // 5. Update delivery status
       await tx.update(deliveryRequestsTable)
         .set({ 
           status: 'completed',
@@ -125,7 +175,6 @@ export async function POST(request: Request) {
         })
         .where(eq(deliveryRequestsTable.id, deliveryId));
       
-      // 6. Add driver message to chat
       await tx.insert(messagesTable).values({
         deliveryId,
         senderType: 'driver',
@@ -135,7 +184,7 @@ export async function POST(request: Request) {
         isRead: false,
         createdAt: new Date().toISOString()
       });      
-      // 8. Notify customer that delivery is complete
+      
       await tx.insert(messagesTable).values({
         deliveryId,
         senderType: 'system',
@@ -148,6 +197,15 @@ export async function POST(request: Request) {
     });
     
     console.log('✅ Delivery completed with commission deducted successfully');
+    
+    // PUBLISH TO LIVE FEED: Delivery Completed
+    await publishToLiveFeed('delivery_completed', {
+      requestId: deliveryId,
+      generalArea,
+      fare: fare,
+      driverName: `${driverData.firstName} ${driverData.lastName}`.substring(0, 12) + '...',
+      status: 'completed'
+    });
     
     return Response.json({ 
       success: true,

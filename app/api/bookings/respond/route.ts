@@ -4,6 +4,62 @@ import { db } from '@/src/db';
 import { deliveryRequestsTable, driverResponsesTable, driversTable, customersTable, driverRatingsTable } from '@/src/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { publishBookingResponse, MESSAGE_TYPES, getPubNubInstance, publishRequestAccepted, publishRequestRebroadcast } from '@/lib/pubnub-booking';
+import { getGeneralAreaFromCoordinates, getCachedAreaName, cacheAreaName } from '@/lib/location-utils';
+
+//Function for the live feed
+async function getGeneralArea(latitude: number, longitude: number): Promise<string> {
+  // Use the new utility with real Zimbabwe data
+  const areaName = await getGeneralAreaFromCoordinates(latitude, longitude);
+  return areaName;
+}
+
+// NEW FUNCTION: Publish to Live Feed - FIXED TYPE ISSUE
+const publishToLiveFeed = async (
+  eventType: 'new_request' | 'request_accepted' | 'request_rejected' | 'delivery_completed',
+  data: {
+    requestId: number;
+    generalArea: string;
+    fare: number;
+    customerInitial?: string;
+    driverName?: string;
+    pickupLatitude?: number;
+    pickupLongitude?: number;
+    status?: string;
+  }
+) => {
+  try {
+    const pubnub = getPubNubInstance();
+    
+    // FIX: Create properly typed message for PubNub
+    const liveFeedMessage = {
+      type: 'live_feed_update',
+      data: JSON.stringify({
+        eventType,
+        requestId: data.requestId,
+        generalArea: data.generalArea,
+        fare: data.fare,
+        customerInitial: data.customerInitial || '',
+        driverName: data.driverName || '',
+        timestamp: Date.now(),
+        status: data.status || 'active',
+        pickupZone: data.pickupLatitude && data.pickupLongitude ? {
+          latitude: data.pickupLatitude,
+          longitude: data.pickupLongitude,
+          radius: 500
+        } : null
+      })
+    };
+
+    await pubnub.publish({
+      channel: 'live_delivery_feed',
+      message: liveFeedMessage
+    });
+
+    console.log(`✅ Live feed update published: ${eventType} for request #${data.requestId}`);
+  } catch (error) {
+    console.error('❌ Failed to publish to live feed:', error);
+  }
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,7 +68,6 @@ export async function POST(request: NextRequest) {
 
     console.log('📨 Processing driver response:', { requestId, driverId, response });
 
-    // Validate required fields
     if (!requestId || !driverId || !response) {
       console.error('❌ Missing required fields:', { requestId, driverId, response });
       return NextResponse.json(
@@ -21,7 +76,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate response type
     if (!['accepted', 'rejected'].includes(response)) {
       console.error('❌ Invalid response type:', response);
       return NextResponse.json(
@@ -30,7 +84,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate data types
     const parsedRequestId = Number(requestId);
     const parsedDriverId = Number(driverId);
 
@@ -50,7 +103,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if driver exists and is online
     const driver = await db.query.driversTable.findFirst({
       where: eq(driversTable.id, parsedDriverId)
     });
@@ -71,7 +123,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if request is still valid
     const deliveryRequest = await db.query.deliveryRequestsTable.findFirst({
       where: eq(deliveryRequestsTable.id, parsedRequestId)
     });
@@ -92,18 +143,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if request has expired
     if (new Date(deliveryRequest.expiresAt) < new Date()) {
       console.error('❌ Request expired:', { requestId: parsedRequestId, expiresAt: deliveryRequest.expiresAt });
       
-      // Update request status to expired
       await db.update(deliveryRequestsTable)
         .set({ status: 'expired' })
         .where(eq(deliveryRequestsTable.id, parsedRequestId));
 
-      // Create proper driver data for expired notification
+      const generalArea = await getGeneralArea(
+        deliveryRequest.pickupLatitude || 0,
+        deliveryRequest.pickupLongitude || 0
+      );
+      
+      // PUBLISH TO LIVE FEED: Request Expired
+      await publishToLiveFeed('request_rejected', {
+        requestId: parsedRequestId,
+        generalArea,
+        fare: deliveryRequest.fare,
+        status: 'expired'
+      });
+
       const expiredDriverData = {
-        driverId: 0, // Use 0 or null for system expiration
+        driverId: 0,
         driverName: 'System',
         driverPhone: '',
         vehicleType: '',
@@ -134,7 +195,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if this driver has already responded to this request
     const existingResponse = await db.query.driverResponsesTable.findFirst({
       where: and(
         eq(driverResponsesTable.requestId, parsedRequestId),
@@ -150,7 +210,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Record driver response
     await db.insert(driverResponsesTable).values({
       requestId: parsedRequestId,
       driverId: parsedDriverId,
@@ -160,12 +219,15 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Driver response recorded:', { requestId: parsedRequestId, driverId: parsedDriverId, response });
 
-    // Get customer details for notification
+    const generalArea = await getGeneralArea(
+      deliveryRequest.pickupLatitude || 0,
+      deliveryRequest.pickupLongitude || 0
+    );
+
     const customer = await db.query.customersTable.findFirst({
       where: eq(customersTable.id, deliveryRequest.customerId)
     });
 
-    // Get driver rating info from ratings table
     const driverRatings = await db.query.driverRatingsTable.findMany({
       where: eq(driverRatingsTable.driverId, parsedDriverId)
     });
@@ -175,7 +237,6 @@ export async function POST(request: NextRequest) {
       ? driverRatings.reduce((sum, rating) => sum + rating.rating, 0) / totalRatings 
       : 4.5;
 
-    // Prepare base driver data for notifications
     const driverData = {
       driverId: parsedDriverId,
       driverName: `${driver.firstName} ${driver.lastName}`.trim(),
@@ -189,7 +250,6 @@ export async function POST(request: NextRequest) {
     };
 
     if (response === 'accepted') {
-      // Update request status and assign driver
       await db.update(deliveryRequestsTable)
         .set({ 
           status: 'accepted',
@@ -199,7 +259,15 @@ export async function POST(request: NextRequest) {
 
       console.log('✅ Request accepted and assigned to driver:', { requestId: parsedRequestId, driverId: parsedDriverId });
 
-      // Prepare comprehensive notification data for acceptance
+      // PUBLISH TO LIVE FEED: Request Accepted
+      await publishToLiveFeed('request_accepted', {
+        requestId: parsedRequestId,
+        generalArea,
+        fare: deliveryRequest.fare,
+        driverName: driverData.driverName.substring(0, 12) + '...',
+        status: 'accepted'
+      });
+
       const notificationData = {
         bookingId: parsedRequestId,
         ...driverData,
@@ -217,12 +285,10 @@ export async function POST(request: NextRequest) {
         expired: false
       };
 
-      // Notify customer with complete driver information via PubNub
       try {
         await publishBookingResponse(deliveryRequest.customerId, notificationData, MESSAGE_TYPES.BOOKING_ACCEPTED);
         console.log('✅ Customer notified of acceptance via PubNub:', deliveryRequest.customerId);
         
-        // Also publish to booking-specific channel for redundancy
         await getPubNubInstance().publish({
           channel: `booking_${parsedRequestId}`,
           message: {
@@ -234,10 +300,8 @@ export async function POST(request: NextRequest) {
         
       } catch (pubnubError) {
         console.error('❌ Failed to notify customer via PubNub:', pubnubError);
-        // Continue - the booking is still accepted even if PubNub fails
       }
 
-      // Notify other drivers that this request is no longer available
       try {
         await publishRequestAccepted(parsedRequestId, parsedDriverId);
         console.log('✅ Other drivers notified that request was accepted');
@@ -258,10 +322,17 @@ export async function POST(request: NextRequest) {
       });
 
     } else {
-      // For rejection - Enhanced rejection handling
       console.log('✅ Request rejected by driver:', { requestId: parsedRequestId, driverId: parsedDriverId });
 
-      // Enhanced rejection notification data
+      // PUBLISH TO LIVE FEED: Request Rejected
+      await publishToLiveFeed('request_rejected', {
+        requestId: parsedRequestId,
+        generalArea,
+        fare: deliveryRequest.fare,
+        driverName: driverData.driverName.substring(0, 12) + '...',
+        status: 'rejected'
+      });
+
       const rejectionData = {
         bookingId: parsedRequestId,
         ...driverData,
@@ -278,13 +349,10 @@ export async function POST(request: NextRequest) {
         retryAvailable: true
       };
 
-      // Enhanced PubNub notification for rejection
       try {
-        // Primary notification to customer channel
         await publishBookingResponse(deliveryRequest.customerId, rejectionData, MESSAGE_TYPES.BOOKING_REJECTED);
         console.log('✅ Customer notified of rejection via PubNub');
         
-        // Secondary notification to booking channel
         await getPubNubInstance().publish({
           channel: `booking_${parsedRequestId}`,
           message: {
@@ -294,36 +362,17 @@ export async function POST(request: NextRequest) {
         });
         console.log('✅ Redundant rejection notification sent to booking channel');
         
-        // Additional broadcast for real-time updates
-        await getPubNubInstance().publish({
-          channel: `customer_${deliveryRequest.customerId}_updates`,
-          message: {
-            type: 'DRIVER_DECLINED',
-            data: {
-              requestId: parsedRequestId,
-              driverId: parsedDriverId,
-              driverName: `${driver.firstName} ${driver.lastName}`.trim(),
-              action: 'continue_search',
-              timestamp: new Date().toISOString()
-            }
-          }
-        });
-        console.log('✅ Additional update sent to customer updates channel');
-        
       } catch (pubnubError) {
         console.error('❌ Failed to notify customer of rejection via PubNub:', pubnubError);
       }
 
-      // Calculate remaining time for the request
       const availableFor = Math.floor((new Date(deliveryRequest.expiresAt).getTime() - Date.now()) / 1000);
       
-      // Enhanced rebroadcast logic - FIXED: Only rebroadcast if there's meaningful time left AND request is still pending
       if (availableFor > 10 && deliveryRequest.status === 'pending') {
         try {
           await publishRequestRebroadcast(parsedRequestId, parsedDriverId, availableFor);
           console.log('✅ Request rebroadcast to other drivers, remaining time:', availableFor, 'seconds');
           
-          // Also notify that search should continue
           await getPubNubInstance().publish({
             channel: `search_${deliveryRequest.customerId}`,
             message: {
@@ -362,7 +411,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('❌ Error processing driver response:', error);
     
-    // More detailed error logging
     if (error instanceof Error) {
       console.error('Error details:', {
         name: error.name,
@@ -371,13 +419,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Try to notify customer of system error if we have the request context
     try {
       const body = await request.json();
       const { requestId, customerId } = body;
       
       if (requestId && customerId) {
-        // Create proper driver data structure for error notification
         const errorDriverData = {
           driverId: 0,
           driverName: 'System',
@@ -396,7 +442,6 @@ export async function POST(request: NextRequest) {
           timestamp: new Date().toISOString()
         };
         
-        // Use direct PubNub publishing for system errors
         await getPubNubInstance().publish({
           channel: `customer_${customerId}`,
           message: {
@@ -420,7 +465,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Enhanced helper function to calculate estimated arrival time
 function calculateEstimatedArrival(driverLocation: any, pickupLocation: string | null): string {
   const defaultEstimate = '10-15 minutes';
   
@@ -429,16 +473,13 @@ function calculateEstimatedArrival(driverLocation: any, pickupLocation: string |
   }
 
   try {
-    // Parse driver location if it's stored as string
     const location = typeof driverLocation === 'string' 
       ? JSON.parse(driverLocation) 
       : driverLocation;
     
     if (location && location.latitude && location.longitude) {
-      // Simple distance-based calculation
-      // In a real app, you'd use a proper distance calculation or routing API
-      const baseTime = 8; // Base minutes
-      const trafficBuffer = 4; // Traffic buffer minutes
+      const baseTime = 8;
+      const trafficBuffer = 4;
       
       return `${baseTime}-${baseTime + trafficBuffer} minutes`;
     }
@@ -449,7 +490,6 @@ function calculateEstimatedArrival(driverLocation: any, pickupLocation: string |
   return defaultEstimate;
 }
 
-// Enhanced GET endpoint to check response status with more details
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const requestId = searchParams.get('requestId');
@@ -480,7 +520,6 @@ export async function GET(request: NextRequest) {
       )
     });
 
-    // Also get request status for comprehensive response
     const deliveryRequest = await db.query.deliveryRequestsTable.findFirst({
       where: eq(deliveryRequestsTable.id, parsedRequestId)
     });
@@ -515,7 +554,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Optional: DELETE endpoint to cleanup responses (for testing/development)
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -537,7 +575,6 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Delete all responses for this request
     await db.delete(driverResponsesTable)
       .where(eq(driverResponsesTable.requestId, parsedRequestId));
 

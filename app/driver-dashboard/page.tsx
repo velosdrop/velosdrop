@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
+import LiveFeedPopup from '@/components/driver/LiveFeedPopup';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,7 +12,7 @@ import { driversTable } from '@/src/db/schema';
 import {
   FiMenu, FiX, FiTruck, FiDollarSign, FiUser, FiCamera,
   FiUpload, FiStar, FiMap, FiBell, FiPackage, FiSearch,
-  FiClock, FiNavigation, FiCheckCircle, FiXCircle, FiMapPin, FiPhone, FiCopy
+  FiClock, FiNavigation, FiCheckCircle, FiXCircle, FiMapPin, FiPhone, FiCopy,  FiActivity 
 } from 'react-icons/fi';
 import dynamic from 'next/dynamic';
 import LocationPermissionRequest from '@/components/driver/LocationPermissionRequest';
@@ -157,6 +158,7 @@ export default function DriverDashboard() {
   const [hasNewNotification, setHasNewNotification] = useState(false);
   const [copiedNumber, setCopiedNumber] = useState<string | null>(null);
   const [activeDelivery, setActiveDelivery] = useState<ActiveDelivery | null>(null);
+  const [showLiveFeed, setShowLiveFeed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [ratings] = useState({
     average: 4.5,
@@ -899,6 +901,16 @@ export default function DriverDashboard() {
             </h1>
           </div>
           <div className="flex items-center space-x-4">
+            {/* Add Live Feed button here */}
+  <button
+    onClick={() => setShowLiveFeed(true)}
+    className="p-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all flex items-center space-x-2 shadow-md"
+    title="View Live Activity"
+  >
+    <FiActivity className="h-5 w-5" />
+    <span className="hidden md:inline text-sm font-medium">Live Feed</span>
+  </button>
+
             {hasNewNotification && (
               <div className="relative">
                 <FiBell className="h-6 w-6 text-purple-600 animate-pulse" />
@@ -986,7 +998,7 @@ export default function DriverDashboard() {
             </div>
           )}
         </AnimatePresence>
-
+        <LiveFeedPopup isOpen={showLiveFeed} onClose={() => setShowLiveFeed(false)} />
         <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
           {activeTab === 'profile' ? (
             <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
@@ -1309,40 +1321,40 @@ export default function DriverDashboard() {
                 </div>
               )}
             </div>
-          ) : (
-            <div className="bg-white rounded-lg shadow-sm h-full flex items-center justify-center border border-gray-200">
-              <div className="text-center p-6">
-                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <FiTruck className="h-8 w-8 text-purple-600" />
+             ) : (
+              <div className="bg-white rounded-lg shadow-sm h-full flex items-center justify-center border border-gray-200">
+                <div className="text-center p-6">
+                  <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FiTruck className="h-8 w-8 text-purple-600" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Ready to Deliver?
+                  </h3>
+                  <p className="text-gray-600 mb-4">
+                    Go online to start receiving delivery requests from customers in your area.
+                  </p>
+                  <button
+                    onClick={toggleOnlineStatus}
+                    disabled={isUpdatingStatus}
+                    className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                      isOnline
+                        ? 'bg-red-600 text-white hover:bg-red-700'
+                        : 'bg-green-600 text-white hover:bg-green-700'
+                    } ${isUpdatingStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {isUpdatingStatus ? (
+                      <span>Updating...</span>
+                    ) : isOnline ? (
+                      <span>Go Offline</span>
+                    ) : (
+                      <span>Go Online</span>
+                    )}
+                  </button>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Ready to Deliver?
-                </h3>
-                <p className="text-gray-600 mb-4">
-                  Go online to start receiving delivery requests from customers in your area.
-                </p>
-                <button
-                  onClick={toggleOnlineStatus}
-                  disabled={isUpdatingStatus}
-                  className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                    isOnline
-                      ? 'bg-red-600 text-white hover:bg-red-700'
-                      : 'bg-green-600 text-white hover:bg-green-700'
-                  } ${isUpdatingStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  {isUpdatingStatus ? (
-                    <span>Updating...</span>
-                  ) : isOnline ? (
-                    <span>Go Offline</span>
-                  ) : (
-                    <span>Go Online</span>
-                  )}
-                </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
