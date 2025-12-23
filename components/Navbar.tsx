@@ -69,7 +69,7 @@ const Navbar = () => {
                 </span>
                 {!isScrolled && (
                   <span className="hidden sm:block text-xs text-purple-300 font-medium tracking-wide">
-                    Premium Delivery
+                    Premium-Delivery
                   </span>
                 )}
               </div>
