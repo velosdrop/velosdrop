@@ -219,11 +219,16 @@ export async function POST(request: NextRequest) {
     // Publish booking request via PubNub
     if (driverIdsToNotify.length > 0) {
       try {
+        // FIX: Only send profile picture URL if it's already a valid HTTP URL, not base64
+        const profilePictureUrl = customer.profilePictureUrl?.startsWith('http') 
+          ? customer.profilePictureUrl 
+          : '/default-avatar.png';
+
         const bookingData = {
           bookingId: deliveryRequest.id,
           customerId: customerId,
           customerUsername: customerUsername || customer.username,
-          customerProfilePictureUrl: customer.profilePictureUrl || '', 
+          customerProfilePictureUrl: profilePictureUrl, // FIXED: Use filtered URL
           customerPhoneNumber: customer.phoneNumber || '',
           pickupLatitude: parseFloat(pickupLatitude),
           pickupLongitude: parseFloat(pickupLongitude),
