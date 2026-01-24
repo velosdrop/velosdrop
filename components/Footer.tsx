@@ -19,6 +19,7 @@ const Footer = () => {
                   <li><Link href="/about" className="hover:text-purple-400 transition-colors">About Us</Link></li>
                   <li><Link href="/careers" className="hover:text-purple-400 transition-colors">Careers</Link></li>
                   <li><Link href="/blog" className="hover:text-purple-400 transition-colors">Blog</Link></li>
+                  <li><Link href="/privacy-policy" className="hover:text-purple-400 transition-colors">Privacy Policy</Link></li>
                 </ul>
               </FooterColumn>
             </div>
@@ -75,7 +76,7 @@ const Footer = () => {
 
         <div className="border border-gray-800" />
         <p className="regular-14 w-full text-center text-gray-400">
-          © {new Date().getFullYear()} VelosDrop | All rights reserved
+          © 2025-{new Date().getFullYear()} VelosDrop | All rights reserved
         </p>
       </div>
     </footer>

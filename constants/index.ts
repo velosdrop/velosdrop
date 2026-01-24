@@ -35,8 +35,7 @@ export const FEATURES = [
 export const FOOTER_CONTACT_INFO = {
   title: 'Contact Us',
   links: [
-    { label: 'Customer Service', value: '123-456-7890' },
-    { label: 'Email', value: 'support@velosdrop.com' },
+    { label: 'Email', value: 'admin@velosdrop.com' },
   ],
 };
 
