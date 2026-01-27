@@ -32,20 +32,26 @@ const calculateDistance = (
 const VEHICLE_COMPATIBILITY = {
   motorcycle: ['motorcycle'], // Motorcycles can only handle motorcycle requests
   car: ['motorcycle', 'car'], // Cars can handle motorcycle and car requests
+  van: ['motorcycle', 'car', 'van'], // Vans can handle all smaller vehicle requests
   truck: ['truck'] // Trucks can only handle truck requests
 } as const;
 
 // Get compatible vehicle types
 const getCompatibleVehicleTypes = (requestedVehicle: string): string[] => {
-  switch (requestedVehicle) {
+  // Handle case-insensitive input
+  const normalizedRequest = requestedVehicle.toLowerCase().trim();
+  
+  switch (normalizedRequest) {
     case 'motorcycle':
-      return ['motorcycle', 'car']; // Motorcycle requests can be handled by motorcycles AND cars
+      return ['motorcycle', 'car', 'van']; // Motorcycle requests can be handled by motorcycles, cars AND vans
     case 'car':
-      return ['car']; // Car requests can only be handled by cars (not trucks)
+      return ['car', 'van']; // Car requests can be handled by cars AND vans
+    case 'van':
+      return ['van']; // Van requests can only be handled by vans
     case 'truck':
       return ['truck']; // Truck requests can only be handled by trucks
     default:
-      return ['motorcycle', 'car', 'truck']; // Show all if no specific type
+      return ['motorcycle', 'car', 'van', 'truck']; // Show all if no specific type
   }
 };
 
@@ -94,7 +100,7 @@ export async function GET(request: NextRequest) {
     // Get compatible vehicle types
     const compatibleVehicleTypes = vehicleType 
       ? getCompatibleVehicleTypes(vehicleType)
-      : ['motorcycle', 'car', 'truck']; // Default to all types
+      : ['motorcycle', 'car', 'van', 'truck']; // Default to all types (INCLUDING VAN)
 
     console.log('Compatible vehicle types for', vehicleType, ':', compatibleVehicleTypes);
 
@@ -171,7 +177,23 @@ export async function GET(request: NextRequest) {
       console.log(`Driver ${driver.id}: ${driver.vehicleType} - ${driver.distance.toFixed(2)}km away`);
     });
 
-    return NextResponse.json(driversWithDistance);
+    // Return with transformed field names for frontend compatibility
+    const transformedDrivers = driversWithDistance.map(driver => ({
+      ...driver,
+      // Add aliases for frontend compatibility
+      first_name: driver.firstName,
+      last_name: driver.lastName,
+      phone_number: driver.phoneNumber,
+      vehicle_type: driver.vehicleType,
+      car_name: driver.carName,
+      number_plate: driver.numberPlate,
+      profile_picture_url: driver.profilePictureUrl,
+      averageRating: driver.rating,
+      total_ratings: driver.totalRatings,
+      distance_km: driver.distance
+    }));
+
+    return NextResponse.json(transformedDrivers);
   } catch (error) {
     console.error('Error fetching nearby drivers:', error);
     return NextResponse.json(
