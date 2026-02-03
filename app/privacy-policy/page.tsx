@@ -1,324 +1,503 @@
 // app/privacy-policy/page.tsx
 export default function PrivacyPolicy() {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-12">
-        <h1 className="text-4xl font-bold mb-8">Privacy Policy for Velosdrop Driver</h1>
-        
-        <p className="text-gray-600 mb-8">
-          <strong>Last Updated:</strong> January 25, 2026
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-12">
+      <h1 className="text-4xl font-bold mb-4">Privacy Policy for Velosdrop Delivery Service</h1>
+      <p className="text-gray-600 mb-2">For Customers and Delivery Drivers</p>
+      
+      <p className="text-gray-600 mb-8">
+        <strong>Last Updated:</strong> February 3, 2026
+      </p>
+
+      <div className="bg-yellow-50 border-l-4 border-yellow-500 p-6 mb-8 rounded-lg">
+        <p className="text-yellow-800 font-semibold text-lg">
+          ⚠️ IMPORTANT: This app is for users 18 years and older only. By using this app, 
+          you confirm you meet this age requirement.
         </p>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">1. Introduction</h2>
-          <p className="text-gray-700 leading-relaxed mb-4">
-            Velosdrop Inc ("we," "our," or "us") operates the Velosdrop Driver mobile application. 
-            This Privacy Policy explains how we collect, use, disclose, and safeguard your 
-            information when you use our mobile application for delivery services.
+      </div>
+
+      {/* Introduction with both user types */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-4">1. Introduction</h2>
+        <p className="text-gray-700 leading-relaxed mb-4">
+          Velosdrop Inc ("we," "our," or "us") operates the Velosdrop delivery service 
+          mobile applications for both customers and delivery drivers. This Privacy Policy 
+          explains how we collect, use, disclose, and safeguard information for all users 
+          of our platform.
+        </p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-blue-800 font-medium">
+            This Privacy Policy applies to:
           </p>
-          <p className="text-gray-700 leading-relaxed font-semibold bg-yellow-50 border-l-4 border-yellow-500 p-4">
-            ⚠️ This app is intended ONLY for adults aged 18 and over. By using this app, 
-            you confirm you meet this age requirement and possess a valid driver's license.
-          </p>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">2. Information We Collect</h2>
+          <ul className="list-disc list-inside text-blue-700 space-y-1 ml-4 mt-2">
+            <li><strong>Customers</strong> - Users who order delivery services</li>
+            <li><strong>Delivery Drivers</strong> - Users who provide delivery services</li>
+          </ul>
+        </div>
+      </section>
+
+      {/* Information We Collect - FIXED VERSION */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-6">2. Information We Collect</h2>
+        
+        <div className="space-y-8">
+          {/* Customer Information */}
+          <div>
+            <h3 className="text-xl font-semibold text-blue-700 mb-4 flex items-center">
+              <span className="mr-2">👤</span> Customer Information
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+              <ul className="space-y-3 text-gray-700">
+                <li><strong>Account Details:</strong> Name, phone, email, profile photo</li>
+                <li><strong>Delivery Addresses:</strong> Home, work, favorites</li>
+                <li><strong>Payment Info:</strong> Mobile money details, wallet balance</li>
+                <li><strong>Order History:</strong> Past deliveries, preferences</li>
+                <li><strong>Location Data:</strong> For finding nearby services</li>
+                <li><strong>Ratings & Reviews:</strong> Feedback for drivers</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Driver Information */}
+          <div>
+            <h3 className="text-xl font-semibold text-green-700 mb-4 flex items-center">
+              <span className="mr-2">🚗</span> Driver Information
+            </h3>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+              <ul className="space-y-3 text-gray-700">
+                <li><strong>Personal Details:</strong> Name, phone, email, profile photo</li>
+                <li><strong>Verification Data:</strong> Driver's license, vehicle info, ID</li>
+                <li><strong>Payment Info:</strong> Mobile money, earnings, payout history</li>
+                <li><strong>Performance Data:</strong> Delivery history, ratings, metrics</li>
+                <li><strong>Location Data:</strong> Real-time tracking during deliveries</li>
+                <li><strong>Background Check:</strong> For platform safety and compliance</li>
+              </ul>
+            </div>
+          </div>
+
+        {/* Common Information for Both */}
+<div className="mt-8">
+  <h3 className="text-xl font-semibold text-purple-800 mb-4">Common Information We Collect</h3>
+  <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
+    <div className="space-y-3">
+      <div className="flex items-start">
+        <span className="text-purple-600 mr-2 mt-1">•</span>
+        <span className="text-gray-800"><strong>App Performance:</strong> Crash reports, error logs</span>
+      </div>
+    </div>
+  </div>
+</div>
+        </div>
+      </section>
+
+      {/* How We Use Information - FIXED VERSION */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-6">3. How We Use Your Information</h2>
+        
+        <div className="space-y-6">
+          <div className="bg-white border border-gray-300 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">For Service Delivery</h3>
+            <div className="space-y-3">
+              <div className="flex items-start">
+                <span className="text-green-600 mr-2 mt-1">✓</span>
+                <span className="text-gray-700">Match customers with drivers for deliveries</span>
+              </div>
+              <div className="flex items-start">
+                <span className="text-green-600 mr-2 mt-1">✓</span>
+                <span className="text-gray-700">Process payments and manage wallets</span>
+              </div>
+              <div className="flex items-start">
+                <span className="text-green-600 mr-2 mt-1">✓</span>
+                <span className="text-gray-700">Provide real-time tracking and updates</span>
+              </div>
+              <div className="flex items-start">
+                <span className="text-green-600 mr-2 mt-1">✓</span>
+                <span className="text-gray-700">Calculate fares and delivery estimates</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-300 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">For Safety and Security</h3>
+            <div className="space-y-3">
+              <div className="flex items-start">
+                <span className="text-green-600 mr-2 mt-1">✓</span>
+                <span className="text-gray-700">Verify identities and credentials</span>
+              </div>
+              <div className="flex items-start">
+                <span className="text-green-600 mr-2 mt-1">✓</span>
+                <span className="text-gray-700">Prevent fraud and ensure platform integrity</span>
+              </div>
+              <div className="flex items-start">
+                <span className="text-green-600 mr-2 mt-1">✓</span>
+                <span className="text-gray-700">Conduct background checks (drivers)</span>
+              </div>
+              <div className="flex items-start">
+                <span className="text-green-600 mr-2 mt-1">✓</span>
+                <span className="text-gray-700">Maintain delivery quality standards</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-300 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">For Communication and Support</h3>
+            <div className="space-y-3">
+              <div className="flex items-start">
+                <span className="text-green-600 mr-2 mt-1">✓</span>
+                <span className="text-gray-700">Send order/delivery updates</span>
+              </div>
+              <div className="flex items-start">
+                <span className="text-green-600 mr-2 mt-1">✓</span>
+                <span className="text-gray-700">Provide customer/driver support</span>
+              </div>
+              <div className="flex items-start">
+                <span className="text-green-600 mr-2 mt-1">✓</span>
+                <span className="text-gray-700">Send important platform announcements</span>
+              </div>
+              <div className="flex items-start">
+                <span className="text-green-600 mr-2 mt-1">✓</span>
+                <span className="text-gray-700">Handle disputes and complaints</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* How We Share Information - Clear separation */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-6">4. How We Share Your Information</h2>
+        
+        <div className="space-y-6">
+          {/* Between Users */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-blue-800 mb-3">Between Customers and Drivers</h3>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <p className="font-medium text-blue-700 mb-2">Customer → Driver:</p>
+                <ul className="text-sm text-blue-600 space-y-1">
+                  <li>• Name for order confirmation</li>
+                  <li>• Delivery address for pickup/drop-off</li>
+                  <li>• Contact number for coordination</li>
+                  <li>• Delivery instructions</li>
+                </ul>
+              </div>
+              <div>
+                <p className="font-medium text-green-700 mb-2">Driver → Customer:</p>
+                <ul className="text-sm text-green-600 space-y-1">
+                  <li>• Name and profile photo</li>
+                  <li>• Vehicle information</li>
+                  <li>• Real-time location during delivery</li>
+                  <li>• Driver rating and reviews</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* With Service Providers */}
+          <div className="bg-gray-50 border border-gray-300 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">With Service Providers</h3>
+            <ul className="grid md:grid-cols-2 gap-4">
+              <li>
+                <strong>Payment Processors:</strong>
+                <p className="text-sm text-gray-600">Mobile money transactions, payout processing</p>
+              </li>
+              <li>
+                <strong>Mapping Services:</strong>
+                <p className="text-sm text-gray-600">Navigation, route optimization, location services</p>
+              </li>
+              <li>
+                <strong>Cloud Services:</strong>
+                <p className="text-sm text-gray-600">Data storage, backup, app hosting</p>
+              </li>
+              <li>
+                <strong>Verification Services:</strong>
+                <p className="text-sm text-gray-600">Background checks, ID verification (drivers)</p>
+              </li>
+            </ul>
+          </div>
+
+          {/* Legal Requirements */}
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-red-800 mb-3">Legal Requirements</h3>
+            <p className="text-red-700">
+              We may disclose information when required by law, to protect rights and safety, 
+              or in connection with business transfers like mergers or acquisitions.
+            </p>
+          </div>
+
+          <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+            <p className="text-green-800 font-semibold text-center">
+              ✅ We do NOT sell your personal information to third parties for marketing purposes.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Data Security - Same for both */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-4">5. Data Security</h2>
+        <p className="text-gray-700 leading-relaxed mb-4">
+          We implement robust security measures to protect information for all users:
+        </p>
+        <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
+          <li><strong>Encryption:</strong> All data is encrypted in transit and at rest</li>
+          <li><strong>Access Controls:</strong> Strict role-based access to user data</li>
+          <li><strong>Secure Storage:</strong> Data stored on secure servers with limited access</li>
+          <li><strong>Regular Audits:</strong> Security assessments and vulnerability testing</li>
+          <li><strong>Staff Training:</strong> Privacy and security training for all employees</li>
+          <li><strong>Background Checks:</strong> For employees handling sensitive data</li>
+        </ul>
+        <p className="text-gray-700 leading-relaxed mt-4">
+          While we implement industry-standard security measures, no system is completely 
+          secure. We cannot guarantee absolute security of your data.
+        </p>
+      </section>
+
+      {/* Your Rights - Same for both */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-6">6. Your Rights and Choices</h2>
+        
+        <div className="grid md:grid-cols-3 gap-4 mb-8">
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h3 className="font-semibold text-gray-800 mb-2 flex items-center">
+              <span className="mr-2">📱</span> In-App Controls
+            </h3>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>• Update profile information</li>
+              <li>• Manage notifications</li>
+              <li>• Control location permissions</li>
+              <li>• Delete saved addresses</li>
+            </ul>
+          </div>
           
-          <h3 className="text-xl font-medium mt-6 mb-3">Personal Information</h3>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li>Name and contact information (email, phone number)</li>
-            <li>Driver's license and vehicle information</li>
-            <li>Profile photo</li>
-            <li>Government-issued ID for verification</li>
-            <li>Date of birth (to verify 18+ age requirement)</li>
-          </ul>
-  
-          <h3 className="text-xl font-medium mt-6 mb-3">Location Data</h3>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li>Real-time location when app is in use (for delivery tracking)</li>
-            <li>Background location (when accepting deliveries)</li>
-            <li>Pickup and delivery addresses</li>
-            <li>Route history and navigation data</li>
-          </ul>
-  
-          <h3 className="text-xl font-medium mt-6 mb-3">Financial Information</h3>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li>Mobile money payment information</li>
-            <li>Wallet balance and transaction history</li>
-            <li>Earnings and payment records</li>
-            <li>Top-up and withdrawal history</li>
-          </ul>
-  
-          <h3 className="text-xl font-medium mt-6 mb-3">Usage Data</h3>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li>Delivery history and performance metrics</li>
-            <li>App usage statistics</li>
-            <li>Device information and identifiers</li>
-            <li>Login and authentication logs</li>
-          </ul>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">3. How We Use Your Information</h2>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li>To verify you are 18 years or older and legally authorized to work</li>
-            <li>To facilitate delivery services and match you with customers</li>
-            <li>To process payments and manage your wallet</li>
-            <li>To provide real-time tracking and navigation</li>
-            <li>To verify your identity and maintain platform safety</li>
-            <li>To communicate important updates about deliveries</li>
-            <li>To improve our services and user experience</li>
-            <li>To comply with legal and regulatory obligations</li>
-            <li>To prevent fraud and ensure platform security</li>
-          </ul>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">4. Data Sharing and Disclosure</h2>
-          <p className="text-gray-700 leading-relaxed mb-4">
-            We share your information only in the following circumstances:
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h3 className="font-semibold text-gray-800 mb-2 flex items-center">
+              <span className="mr-2">📧</span> Contact Us For
+            </h3>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>• Access your personal data</li>
+              <li>• Correct inaccurate information</li>
+              <li>• Delete your account</li>
+              <li>• Export your data</li>
+            </ul>
+          </div>
+          
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h3 className="font-semibold text-gray-800 mb-2 flex items-center">
+              <span className="mr-2">⚖️</span> Your Rights
+            </h3>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>• Right to access</li>
+              <li>• Right to correction</li>
+              <li>• Right to deletion</li>
+              <li>• Right to object</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
+          <p className="text-purple-800 text-center">
+            <strong>To exercise your rights:</strong> Email us at admin@velosdrop.com
           </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li><strong>With Customers:</strong> Name, profile photo, vehicle info, and real-time location during active deliveries</li>
-            <li><strong>Service Providers:</strong> Trusted third-party service providers who assist us in operating our app, processing payments, providing mapping and navigation services, and storing data securely</li>
-            <li><strong>Business Partners:</strong> For service delivery and platform operations</li>
-            <li><strong>Legal Requirements:</strong> When required by law, court order, or to protect rights, safety, and security</li>
-            <li><strong>Business Transfers:</strong> In the event of merger, acquisition, or asset sale</li>
-          </ul>
-          <p className="text-gray-700 leading-relaxed mt-4 font-semibold">
-            We do NOT sell your personal information to third parties for marketing purposes.
+        </div>
+      </section>
+
+      {/* Age Restrictions - Important for both */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-4">7. Age Restrictions (18+)</h2>
+        <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6 mb-6">
+          <p className="text-red-800 font-bold text-xl mb-2 text-center">🚫 STRICTLY 18+ ONLY</p>
+          <p className="text-red-700 leading-relaxed text-center">
+            The Velosdrop platform is exclusively for users 18 years and older.
+            This applies to both customers and delivery drivers.
           </p>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">5. Data Security</h2>
-          <p className="text-gray-700 leading-relaxed mb-3">
-            We implement appropriate technical and organizational measures to protect your data:
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="bg-white border border-gray-300 rounded-lg p-5">
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">For Customers</h3>
+            <ul className="list-disc list-inside text-gray-700 space-y-2">
+              <li>Must confirm age during registration</li>
+              <li>May be asked for age verification</li>
+              <li>Using false age information violates Terms</li>
+            </ul>
+          </div>
+          
+          <div className="bg-white border border-gray-300 rounded-lg p-5">
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">For Drivers</h3>
+            <ul className="list-disc list-inside text-gray-700 space-y-2">
+              <li>Must be 18+ and legally eligible to work</li>
+              <li>Government ID verification required</li>
+              <li>Valid driver's license mandatory</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mt-6">
+          <p className="text-yellow-800 font-semibold">
+            ⚠️ Underage use results in immediate account termination, data deletion, 
+            and may include notification to authorities.
           </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li>Encryption of data in transit using industry-standard protocols</li>
-            <li>Encryption of sensitive data at rest</li>
-            <li>Secure authentication with password hashing</li>
-            <li>Role-based access controls for internal systems</li>
-            <li>Regular security assessments and audits</li>
-            <li>Limited employee access to personal data on need-to-know basis</li>
-            <li>Secure cloud infrastructure with regular backups</li>
-          </ul>
-          <p className="text-gray-700 leading-relaxed mt-4">
-            However, no method of transmission over the internet is 100% secure. While we 
-            strive to protect your data, we cannot guarantee absolute security.
-          </p>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">6. Data Retention</h2>
-          <p className="text-gray-700 leading-relaxed mb-3">
-            We retain your information for as long as necessary to:
-          </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li>Provide and improve our services</li>
-            <li>Comply with legal, tax, and accounting obligations (7 years for financial records)</li>
-            <li>Resolve disputes and enforce our agreements</li>
-            <li>Prevent fraud and maintain security</li>
-          </ul>
-          <p className="text-gray-700 leading-relaxed mt-4">
-            You may request deletion of your account and personal data at any time by 
-            contacting us. Some information may be retained in backup systems for a limited 
-            period or as required by law.
-          </p>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">7. Your Rights</h2>
-          <p className="text-gray-700 leading-relaxed mb-3">You have the right to:</p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li><strong>Access:</strong> Request a copy of your personal data</li>
-            <li><strong>Correct:</strong> Update inaccurate or incomplete information</li>
-            <li><strong>Delete:</strong> Request deletion of your data (subject to legal obligations)</li>
-            <li><strong>Withdraw Consent:</strong> Revoke consent for data processing where applicable</li>
-            <li><strong>Data Portability:</strong> Export your data in a machine-readable format</li>
-            <li><strong>Object:</strong> Object to certain data uses, including direct marketing</li>
-            <li><strong>Restrict Processing:</strong> Request limitation of data processing in certain situations</li>
-          </ul>
-          <p className="text-gray-700 leading-relaxed mt-4">
-            To exercise these rights, contact us at privacy@velosdrop.com. We will respond 
-            within 30 days of receiving your request.
-          </p>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">8. Location Data</h2>
-          <p className="text-gray-700 leading-relaxed mb-3">
-            Location tracking is essential for delivery services. We collect location data:
-          </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li><strong>When Active:</strong> Real-time location when you're online and available</li>
-            <li><strong>During Deliveries:</strong> Continuous tracking for navigation and customer updates</li>
-            <li><strong>Background:</strong> Limited background location when app is closed (with your permission)</li>
-          </ul>
-          <p className="text-gray-700 leading-relaxed mt-4">
-            You can control location permissions in your device settings. However, disabling 
-            location services will prevent you from accepting and completing deliveries. 
-            We do NOT track your location when you're offline or outside of work hours.
-          </p>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">9. Third-Party Services</h2>
-          <p className="text-gray-700 leading-relaxed mb-3">
-            Our app integrates with trusted third-party service providers to deliver core functionality:
-          </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li><strong>Mapping and Navigation:</strong> For route planning and location services</li>
-            <li><strong>Payment Processing:</strong> For secure mobile money transactions</li>
-            <li><strong>Cloud Storage:</strong> For secure data storage and file uploads</li>
-            <li><strong>Real-time Communication:</strong> For instant messaging and notifications</li>
-          </ul>
-          <p className="text-gray-700 leading-relaxed mt-4">
-            These service providers have their own privacy policies which govern their use of your data. 
-            We ensure all third-party providers meet appropriate security standards. We are not 
-            responsible for the privacy practices of third-party services.
-          </p>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">10. Age Restriction</h2>
-          <div className="bg-red-50 border-2 border-red-500 rounded-lg p-6 mb-4">
-            <p className="text-red-800 font-bold text-lg mb-2">
-              ⚠️ ADULTS ONLY - 18+ STRICTLY REQUIRED
-            </p>
-            <p className="text-red-700 leading-relaxed">
-              The Velosdrop Driver app is STRICTLY for users aged 18 years and older. 
-              This is a professional delivery service requiring legal adult status, 
-              valid driver's license, and ability to enter into employment contracts.
+        </div>
+      </section>
+
+      {/* Third-Party Services - Updated table */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-6">8. Third-Party Services</h2>
+        <p className="text-gray-700 leading-relaxed mb-6">
+          Our app integrates with third-party services for various functionalities:
+        </p>
+        
+        <div className="border border-gray-300 rounded-lg overflow-hidden mb-6">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-300">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">Service</th>
+                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">Purpose</th>
+                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">Data Shared</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                <tr>
+                  <td className="py-3 px-4 text-sm text-gray-900">Payment Processors</td>
+                  <td className="py-3 px-4 text-sm text-gray-700">Mobile money transactions</td>
+                  <td className="py-3 px-4 text-sm text-gray-700">Payment details, reference numbers</td>
+                </tr>
+                <tr>
+                  <td className="py-3 px-4 text-sm text-gray-900">Mapping Services</td>
+                  <td className="py-3 px-4 text-sm text-gray-700">Navigation and location</td>
+                  <td className="py-3 px-4 text-sm text-gray-700">Addresses, GPS coordinates</td>
+                </tr>
+                <tr>
+                  <td className="py-3 px-4 text-sm text-gray-900">Cloud Storage</td>
+                  <td className="py-3 px-4 text-sm text-gray-700">Data hosting and backup</td>
+                  <td className="py-3 px-4 text-sm text-gray-700">App data, user content</td>
+                </tr>
+                <tr>
+                  <td className="py-3 px-4 text-sm text-gray-900">Verification Services</td>
+                  <td className="py-3 px-4 text-sm text-gray-700">Driver background checks</td>
+                  <td className="py-3 px-4 text-sm text-gray-700">ID documents, license info</td>
+                </tr>
+                <tr>
+                  <td className="py-3 px-4 text-sm text-gray-900">Analytics</td>
+                  <td className="py-3 px-4 text-sm text-gray-700">App improvement</td>
+                  <td className="py-3 px-4 text-sm text-gray-700">Usage statistics, crash reports</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <p className="text-gray-700 leading-relaxed">
+          These services have their own privacy policies. We recommend reviewing them 
+          for information about their data practices.
+        </p>
+      </section>
+
+      {/* Continue with other sections, keeping them combined */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-4">9. Data Retention</h2>
+        <div className="grid md:grid-cols-2 gap-6 mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">General Retention</h3>
+            <ul className="list-disc list-inside text-gray-700 space-y-2">
+              <li><strong>Active Accounts:</strong> While account is active</li>
+              <li><strong>Financial Records:</strong> 7 years (tax compliance)</li>
+              <li><strong>Delivery History:</strong> 2 years</li>
+              <li><strong>Inactive Accounts:</strong> 2 years then deletion</li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">Driver-Specific</h3>
+            <ul className="list-disc list-inside text-gray-700 space-y-2">
+              <li><strong>Verification Data:</strong> 7 years (legal requirement)</li>
+              <li><strong>Performance Metrics:</strong> 2 years</li>
+              <li><strong>Background Checks:</strong> 7 years</li>
+              <li><strong>Earnings Records:</strong> 7 years (tax purposes)</li>
+            </ul>
+          </div>
+        </div>
+        <p className="text-gray-700 leading-relaxed">
+          When we no longer need information, it is securely deleted or anonymized.
+        </p>
+      </section>
+
+      {/* Contact Section */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-4">10. Contact Us</h2>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-8">
+          <h3 className="text-xl font-semibold text-gray-800 mb-6">We're Here to Help</h3>
+          
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="font-medium text-gray-700 mb-2">Customer Support</h4>
+              <p className="text-blue-600 text-lg">admin@velosdrop.com</p>
+              <p className="text-gray-600 text-sm mt-1">For delivery issues, complaints, general inquiries</p>
+            </div>
+            
+            <div>
+              <h4 className="font-medium text-gray-700 mb-2">Driver Support</h4>
+              <p className="text-blue-600 text-lg">admin@velosdrop.com</p>
+              <p className="text-gray-600 text-sm mt-1">For driver issues, earnings, account management</p>
+            </div>
+            
+            <div>
+              <h4 className="font-medium text-gray-700 mb-2">Privacy Inquiries</h4>
+              <p className="text-blue-600 text-lg">admin@velosdrop.com</p>
+              <p className="text-gray-600 text-sm mt-1">For data access, deletion requests, privacy questions</p>
+            </div>
+            
+            <div>
+              <h4 className="font-medium text-gray-700 mb-2">Website</h4>
+              <a 
+                href="https://www.velosdrop.com" 
+                className="text-blue-600 hover:underline text-lg"
+              >
+                https://www.velosdrop.com
+              </a>
+            </div>
+          </div>
+          
+          <div className="mt-6 pt-6 border-t border-gray-300">
+            <p className="text-sm text-gray-600">
+              We aim to respond to all inquiries within 48 hours.
             </p>
           </div>
-          <p className="text-gray-700 leading-relaxed mb-3">
-            <strong>We explicitly prohibit:</strong>
-          </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li>Use by anyone under 18 years of age</li>
-            <li>Collection of data from minors</li>
-            <li>Registration by underage individuals</li>
-            <li>Sharing of accounts with minors</li>
-          </ul>
-          <p className="text-gray-700 leading-relaxed mt-4 font-semibold">
-            By registering for and using this app, you confirm that you are at least 18 years 
-            old and legally authorized to work as a delivery driver in your jurisdiction. 
-            We verify age during the registration process using government-issued identification.
-          </p>
-          <p className="text-gray-700 leading-relaxed mt-4">
-            If we discover that a user is under 18, we will immediately:
-          </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4 mt-2">
-            <li>Terminate their account</li>
-            <li>Delete all associated personal data</li>
-            <li>Refund any wallet balance</li>
-            <li>Report the violation if required by law</li>
-          </ul>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">11. Changes to This Policy</h2>
-          <p className="text-gray-700 leading-relaxed mb-3">
-            We may update this Privacy Policy from time to time to reflect changes in:
-          </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li>Our data practices</li>
-            <li>Legal or regulatory requirements</li>
-            <li>Features and functionality of the app</li>
-            <li>Third-party service integrations</li>
-          </ul>
-          <p className="text-gray-700 leading-relaxed mt-4">
-            We will notify you of significant changes via:
-          </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4 mt-2">
-            <li>Email notification to your registered address</li>
-            <li>In-app notification or popup</li>
-            <li>Updated "Last Updated" date at the top of this policy</li>
-          </ul>
-          <p className="text-gray-700 leading-relaxed mt-4">
-            Your continued use of the app after changes are posted constitutes acceptance 
-            of the updated Privacy Policy. If you do not agree with the changes, you must 
-            stop using the app and may request deletion of your account.
-          </p>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">12. Contact Us</h2>
+        </div>
+      </section>
+
+      {/* Final Acknowledgment */}
+      <div className="border-t-2 border-gray-300 pt-12 mt-12 bg-gray-50 p-8 rounded-lg">
+        <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+          Your Acknowledgment and Consent
+        </h3>
+        
+        <div className="bg-white border border-gray-300 rounded-lg p-6 mb-6">
           <p className="text-gray-700 leading-relaxed mb-4">
-            If you have questions, concerns, or requests regarding this Privacy Policy or 
-            our data practices, please contact us:
+            By downloading, installing, or using the Velosdrop app (as customer or driver), 
+            you acknowledge that:
           </p>
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
-            <p className="text-gray-700 mb-2">
-              <strong>General Support:</strong> admin@velosdrop.com
-            </p>
-            <p className="text-gray-700 mb-2">
-              <strong>Website:</strong> <a href="https://www.velosdrop.com" className="text-blue-600 hover:underline">https://www.velosdrop.com</a>
-            </p>
-            <p className="text-gray-700 mb-2">
-              <strong>Mailing Address:</strong> Velosdrop Inc, Harare, Zimbabwe
-            </p>
-            <p className="text-gray-700 mt-4 text-sm">
-              We aim to respond to all privacy-related inquiries within 7 days.
-            </p>
-          </div>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">13. Governing Law and Jurisdiction</h2>
-          <p className="text-gray-700 leading-relaxed mb-3">
-            This Privacy Policy is governed by and construed in accordance with the laws of 
-            Zimbabwe, without regard to its conflict of law provisions.
-          </p>
-          <p className="text-gray-700 leading-relaxed">
-            Any disputes arising from or relating to this Privacy Policy or our data practices 
-            will be resolved in the courts of Zimbabwe. You consent to the jurisdiction of 
-            these courts for such purposes.
-          </p>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">14. International Data Transfers</h2>
-          <p className="text-gray-700 leading-relaxed">
-            Your data may be transferred to and processed in countries other than Zimbabwe 
-            for the purpose of providing our services. We ensure appropriate safeguards 
-            are in place to protect your data in accordance with this Privacy Policy and 
-            applicable data protection laws.
-          </p>
-        </section>
-  
-        <section className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">15. Data Breach Notification</h2>
-          <p className="text-gray-700 leading-relaxed">
-            In the event of a data breach that affects your personal information, we will:
-          </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4 mt-3">
-            <li>Notify affected users within 72 hours of discovering the breach</li>
-            <li>Describe the nature of the breach and data affected</li>
-            <li>Provide recommended actions to protect yourself</li>
-            <li>Report the breach to relevant authorities as required by law</li>
+          <ul className="list-disc list-inside text-gray-700 space-y-3 ml-4">
+            <li>You have read and understood this Privacy Policy in its entirety</li>
+            <li>You consent to the collection, use, and sharing of your information as described</li>
+            <li>You confirm you are at least 18 years of age</li>
+            <li>You understand your rights and how to exercise them</li>
+            <li>You agree to receive communications about your account and services</li>
+            <li>For drivers: You consent to background checks and verification processes</li>
           </ul>
-        </section>
-  
-        <div className="border-t-2 border-gray-300 pt-8 mt-12 bg-gray-50 p-6 rounded-lg">
-          <h3 className="text-xl font-semibold mb-4">Acknowledgment and Consent</h3>
-          <p className="text-gray-700 leading-relaxed mb-3">
-            By downloading, installing, registering for, or using the Velosdrop Driver app, you acknowledge that you have:
+        </div>
+
+        <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6">
+          <p className="text-red-800 font-bold text-lg mb-2 text-center">
+            ⚠️ IMPORTANT NOTICE
           </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-            <li>Read and understood this Privacy Policy in its entirety</li>
-            <li>Agree to the collection, use, and disclosure of your information as described</li>
-            <li>Confirmed that you are at least 18 years of age</li>
-            <li>Consented to the processing of your personal data, including sensitive information</li>
-            <li>Understood your rights and how to exercise them</li>
-          </ul>
-          <p className="text-gray-700 leading-relaxed mt-4 font-semibold">
-            If you do not agree with any part of this Privacy Policy, you must not use the 
-            Velosdrop Driver app.
+          <p className="text-red-700 text-center">
+            If you do not agree with any part of this Privacy Policy, 
+            you must not download, install, or use the Velosdrop app.
           </p>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
