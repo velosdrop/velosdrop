@@ -162,6 +162,13 @@
       "when": 1765494672446,
       "tag": "0022_mighty_miek",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1770130447680,
+      "tag": "0023_quick_spencer_smythe",
+      "breakpoints": true
     }
   ]
 }

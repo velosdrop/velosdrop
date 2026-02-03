@@ -1,21 +1,10 @@
-// app/driver/topup/page.tsx
+//app/driver/topup/page.tsx
 'use client';
 
-import { FiDollarSign, FiCreditCard, FiArrowLeft, FiArrowUpRight, FiSmartphone } from 'react-icons/fi';
+import { FiDollarSign, FiCreditCard, FiArrowLeft, FiSmartphone } from 'react-icons/fi';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Elements } from '@stripe/react-stripe-js';
-import { loadStripe } from '@stripe/stripe-js';
-import CheckoutPage from "@/components/driver/CheckoutPage";
-import convertToSubcurrency from "@/lib/convertToSubcurrency";
 import MobileMoneyModal from '@/components/driver/MobileMoneyModal';
-
-// Validate Stripe public key
-if (!process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY) {
-  throw new Error("NEXT_PUBLIC_STRIPE_PUBLIC_KEY is not defined");
-}
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY);
 
 // Updated: Phone number formatting function
 const formatPhoneNumber = (phone: string) => {
@@ -84,9 +73,7 @@ const pollPaymentStatus = async (pollUrl: string, driverId: number): Promise<boo
 export default function TopUp() {
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
-  const [showCheckout, setShowCheckout] = useState(false);
   const [showMobileModal, setShowMobileModal] = useState(false);
-  const [clientSecret, setClientSecret] = useState<string>('');
   const [selectedMethod, setSelectedMethod] = useState<'card' | 'mobile' | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [driverId, setDriverId] = useState<number | null>(null);
@@ -146,21 +133,48 @@ export default function TopUp() {
     setSelectedMethod(method);
 
     if (method === 'card') {
-      // Handle card payment (existing Stripe flow)
+      // Handle card payment with PesaPay
       try {
-        const response = await fetch('/api/create-payment-intent', {
+        setIsProcessing(true);
+        
+        const response = await fetch('/api/pesepay/initiate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: convertToSubcurrency(numValue) }),
+          body: JSON.stringify({ 
+            amount: numValue,
+            driverId: driverId 
+          }),
         });
         
-        if (!response.ok) throw new Error('Failed to create payment intent');
+        if (!response.ok) throw new Error('Failed to initiate payment');
         
-        const { clientSecret } = await response.json();
-        setClientSecret(clientSecret);
-        setShowCheckout(true);
+        const result = await response.json();
+        
+        if (result.success) {
+          console.log('✅ PesaPay payment initiated:', {
+            redirectUrl: result.redirectUrl,
+            referenceNumber: result.referenceNumber,
+            transactionReference: result.transactionReference,
+            amount: result.amount,
+            driverId: result.driverId
+          });
+          
+          // Save reference for status checking
+          localStorage.setItem('pesepayReference', result.referenceNumber);
+          localStorage.setItem('pesepayTransactionRef', result.transactionReference || result.referenceNumber);
+          localStorage.setItem('pesepayAmount', amount);
+          localStorage.setItem('pesepayDriverId', driverId.toString());
+          
+          // Redirect to PesaPay payment page
+          window.location.href = result.redirectUrl;
+        } else {
+          setError(result.error || 'Failed to initialize payment');
+        }
       } catch (err) {
+        console.error('❌ Card payment error:', err);
         setError('Failed to initialize payment. Please try again.');
+      } finally {
+        setIsProcessing(false);
       }
     } else if (method === 'mobile') {
       // Show mobile money modal to collect phone number
@@ -261,13 +275,6 @@ export default function TopUp() {
     return false;
   };
 
-  const handleBackToPaymentMethods = () => {
-    setShowCheckout(false);
-    setSelectedMethod(null);
-    setShowMobileModal(false);
-    setClientSecret('');
-  };
-
   const handleBackToWallet = () => {
     router.push('/driver/wallet');
   };
@@ -278,149 +285,131 @@ export default function TopUp() {
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 text-white">
           <div className="flex items-center space-x-4">
             <button 
-              onClick={showCheckout ? handleBackToPaymentMethods : handleBackToWallet}
+              onClick={handleBackToWallet}
               className="hover:opacity-80 transition"
               disabled={isProcessing}
             >
               <FiArrowLeft className="w-5 h-5" />
             </button>
-            <h1 className="text-xl font-bold">
-              {showCheckout ? 'Complete Payment' : 'Top Up Wallet'}
-            </h1>
+            <h1 className="text-xl font-bold">Top Up Wallet</h1>
           </div>
           <p className="text-purple-100 mt-2">
-            {showCheckout ? 'Enter your payment details' : 'Add funds to continue accepting deliveries'}
+            Add funds to continue accepting deliveries
           </p>
         </div>
 
         <div className="p-6 space-y-6">
-          {!showCheckout ? (
-            <>
-              <div>
-                <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
-                  Enter Amount (USD)
-                </label>
-                <div className="relative rounded-md shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FiDollarSign className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    type="number"
-                    name="amount"
-                    id="amount"
-                    min="0.10"
-                    max="100"
-                    step="0.01"
-                    value={amount}
-                    onChange={handleAmountChange}
-                    className={`focus:ring-purple-500 focus:border-purple-500 block w-full pl-10 pr-12 py-3 border ${
-                      error ? 'border-red-500' : 'border-gray-300'
-                    } rounded-md text-gray-900`}
-                    placeholder="0.00"
-                  />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                    <span className="text-gray-500">USD</span>
-                  </div>
+          <>
+            <div>
+              <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
+                Enter Amount (USD)
+              </label>
+              <div className="relative rounded-md shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FiDollarSign className="h-5 w-5 text-gray-400" />
                 </div>
-                {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
-                <p className="mt-1 text-xs text-gray-500">Minimum $0.10 - Maximum $100</p>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Select Payment Method</h3>
-                <div className="space-y-3">
-                  <div 
-                    className={`flex items-center p-4 border rounded-lg cursor-pointer transition-all ${
-                      selectedMethod === 'card' ? 'border-purple-500 bg-purple-50 shadow-sm' : 'border-gray-200 hover:border-purple-500'
-                    } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    onClick={() => !isProcessing && handlePaymentMethodSelect('card')}
-                  >
-                    <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center text-white mr-4">
-                      <FiCreditCard className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">Credit/Debit Card</h4>
-                      <p className="text-sm text-gray-600">Visa, Mastercard</p>
-                    </div>
-                    {selectedMethod === 'card' && (
-                      <div className="w-5 h-5 rounded-full border-2 border-purple-500 flex items-center justify-center">
-                        <div className="w-3 h-3 rounded-full bg-purple-600"></div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div 
-                    className={`flex items-center p-4 border rounded-lg cursor-pointer transition-all ${
-                      selectedMethod === 'mobile' ? 'border-purple-500 bg-purple-50 shadow-sm' : 'border-gray-200 hover:border-purple-500'
-                    } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    onClick={() => !isProcessing && handlePaymentMethodSelect('mobile')}
-                  >
-                    <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-green-600 rounded-lg flex items-center justify-center text-white mr-4">
-                      <FiSmartphone className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">Mobile Money</h4>
-                      <p className="text-sm text-gray-600">EcoCash Zimbabwe</p>
-                    </div>
-                    {selectedMethod === 'mobile' && (
-                      <div className="w-5 h-5 rounded-full border-2 border-purple-500 flex items-center justify-center">
-                        <div className="w-3 h-3 rounded-full bg-purple-600"></div>
-                      </div>
-                    )}
-                  </div>
+                <input
+                  type="number"
+                  name="amount"
+                  id="amount"
+                  min="0.10"
+                  max="100"
+                  step="0.01"
+                  value={amount}
+                  onChange={handleAmountChange}
+                  className={`focus:ring-purple-500 focus:border-purple-500 block w-full pl-10 pr-12 py-3 border ${
+                    error ? 'border-red-500' : 'border-gray-300'
+                  } rounded-md text-gray-900`}
+                  placeholder="0.00"
+                  disabled={isProcessing}
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <span className="text-gray-500">USD</span>
                 </div>
               </div>
+              {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+              <p className="mt-1 text-xs text-gray-500">Minimum $0.10 - Maximum $100</p>
+            </div>
 
-              {isProcessing && (
-                <div className="text-center py-4">
-                  <div className="inline-flex items-center px-4 py-2 bg-purple-100 text-purple-700 rounded-lg">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-2"></div>
-                    Processing mobile payment...
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Select Payment Method</h3>
+              <div className="space-y-3">
+                <div 
+                  className={`flex items-center p-4 border rounded-lg cursor-pointer transition-all ${
+                    selectedMethod === 'card' ? 'border-purple-500 bg-purple-50 shadow-sm' : 'border-gray-200 hover:border-purple-500'
+                  } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  onClick={() => !isProcessing && handlePaymentMethodSelect('card')}
+                >
+                  <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center text-white mr-4">
+                    <FiCreditCard className="w-5 h-5" />
                   </div>
-                  <p className="text-xs text-gray-600 mt-2">
-                    Please check your phone for the EcoCash prompt
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    This may take up to 2 minutes to complete
-                  </p>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900">Credit/Debit Card</h4>
+                    <p className="text-sm text-gray-600">Visa, Mastercard via PesaPay</p>
+                  </div>
+                  {selectedMethod === 'card' && (
+                    <div className="w-5 h-5 rounded-full border-2 border-purple-500 flex items-center justify-center">
+                      <div className="w-3 h-3 rounded-full bg-purple-600"></div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </>
-          ) : clientSecret ? (
-            <Elements 
-              stripe={stripePromise}
-              options={{
-                clientSecret,
-                appearance: {
-                  theme: 'stripe',
-                  variables: {
-                    colorPrimary: '#7c3aed',
-                  }
-                }
-              }}
-            >
-              <CheckoutPage amount={parseFloat(amount)} />
-            </Elements>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-red-500">Payment initialization failed. Please try again.</p>
-              <button
-                onClick={handleBackToPaymentMethods}
-                className="mt-4 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition"
-              >
-                Back to Payment Methods
-              </button>
-            </div>
-          )}
 
-          {!showCheckout && (
-            <div className="flex items-start text-xs text-gray-600">
-              <svg className="h-4 w-4 text-purple-500 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-              </svg>
-              <span>All transactions are secure and encrypted</span>
+                <div 
+                  className={`flex items-center p-4 border rounded-lg cursor-pointer transition-all ${
+                    selectedMethod === 'mobile' ? 'border-purple-500 bg-purple-50 shadow-sm' : 'border-gray-200 hover:border-purple-500'
+                  } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  onClick={() => !isProcessing && handlePaymentMethodSelect('mobile')}
+                >
+                  <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-green-600 rounded-lg flex items-center justify-center text-white mr-4">
+                    <FiSmartphone className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900">Mobile Money</h4>
+                    <p className="text-sm text-gray-600">EcoCash Zimbabwe</p>
+                  </div>
+                  {selectedMethod === 'mobile' && (
+                    <div className="w-5 h-5 rounded-full border-2 border-purple-500 flex items-center justify-center">
+                      <div className="w-3 h-3 rounded-full bg-purple-600"></div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          )}
+
+            {isProcessing && selectedMethod === 'card' && (
+              <div className="text-center py-4">
+                <div className="inline-flex items-center px-4 py-2 bg-purple-100 text-purple-700 rounded-lg">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-2"></div>
+                  Processing payment...
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  Redirecting to secure payment page...
+                </p>
+              </div>
+            )}
+
+            {isProcessing && selectedMethod === 'mobile' && (
+              <div className="text-center py-4">
+                <div className="inline-flex items-center px-4 py-2 bg-purple-100 text-purple-700 rounded-lg">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-2"></div>
+                  Processing mobile payment...
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  Please check your phone for the EcoCash prompt
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  This may take up to 2 minutes to complete
+                </p>
+              </div>
+            )}
+          </>
+
+          <div className="flex items-start text-xs text-gray-600">
+            <svg className="h-4 w-4 text-purple-500 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+            </svg>
+            <span>All transactions are secure and encrypted</span>
+          </div>
         </div>
       </div>
 

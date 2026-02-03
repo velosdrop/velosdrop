@@ -52,10 +52,13 @@ export default function AdminLogin() {
         <div className="bg-gray-900/80 backdrop-blur-lg rounded-2xl shadow-2xl border border-purple-500/20 p-8">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="mx-auto w-16 h-16 bg-gradient-to-r from-purple-600 to-purple-800 rounded-2xl flex items-center justify-center shadow-lg mb-4">
-              <span className="text-white text-2xl font-bold">V</span>
-            </div>
-            <h1 className="text-3xl font-bold text-white mb-2">VelosDrop</h1>
+          <div className="text-center mb-8">
+                 <img 
+                         src="/velosdroplogo.svg" 
+                         alt="VeloCash Logo" 
+                         className="mx-auto w-16 h-16 mb-4"
+                />
+          </div>
             <p className="text-purple-300 text-sm">Admin Portal</p>
           </div>
 

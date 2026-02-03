@@ -174,6 +174,14 @@ export const paymentReferencesTable = sqliteTable('payment_references', {
   status: text('status').default('pending').notNull(), // pending, completed, failed
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+
+  //for mastercard and visa
+  paymentMethod: text('payment_method').default('ecocash'), // 'ecocash', 'card'
+  gatewayReference: text('gateway_reference'), // PesaPay's reference number
+  pollUrl: text('poll_url'), // For mobile money
+  redirectUrl: text('redirect_url'), // For card payments
+  currency: text('currency').default('USD'), // Currency code
+  paymentReason: text('payment_reason'), // Payment description
 });
 
 // Admin wallet adjustments table
