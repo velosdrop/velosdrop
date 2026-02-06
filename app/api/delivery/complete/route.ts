@@ -106,7 +106,7 @@ export async function POST(request: Request) {
     const currentBalance = driverData.balance;
     
     const fare = deliveryData.fare;
-    const commissionPercentage = 0.135;
+    const commissionPercentage = 0.09;
     const commissionAmount = fare * commissionPercentage;
     const commissionInCents = Math.round(commissionAmount * 100);
     
