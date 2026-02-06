@@ -36,7 +36,7 @@ export interface BalanceCheckResult {
   export async function checkDriverBalanceForCommission(
     driverId: number, 
     fare: number, 
-    commissionPercentage: number = 0.135
+    commissionPercentage: number = 0.09 //now at 9% commision
   ): Promise<BalanceCheckResult> {
     try {
       // Validate inputs

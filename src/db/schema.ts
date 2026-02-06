@@ -218,7 +218,7 @@ export const driverCommissionDeductions = sqliteTable('driver_commission_deducti
   driver_id: integer('driver_id').notNull().references(() => driversTable.id, { onDelete: 'cascade' }),
   delivery_id: integer('delivery_id').notNull().references(() => deliveryRequestsTable.id, { onDelete: 'cascade' }),
   fare_amount: real('fare_amount').notNull(),
-  commission_percentage: real('commission_percentage').default(0.135).notNull(),
+  commission_percentage: real('commission_percentage').default(0.09).notNull(),
   commission_amount: real('commission_amount').notNull(),
   driver_balance_before: integer('driver_balance_before').notNull(),
   driver_balance_after: integer('driver_balance_after').notNull(),
