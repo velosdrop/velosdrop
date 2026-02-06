@@ -116,7 +116,7 @@ export interface BalanceCheckResult {
    */
   export function calculateCommission(
     fare: number, 
-    commissionPercentage: number = 0.135
+    commissionPercentage: number = 0.09
   ): CommissionCalculation {
     if (fare <= 0) {
       throw new Error('Fare must be greater than 0');
@@ -161,7 +161,7 @@ export interface BalanceCheckResult {
    */
   export function formatCommissionBreakdown(
     fare: number,
-    commissionPercentage: number = 0.135
+    commissionPercentage: number = 0.09
   ): string {
     const calculation = calculateCommission(fare, commissionPercentage);
     
@@ -287,7 +287,7 @@ export interface BalanceCheckResult {
     deliveryId: number,
     fare: number,
     currentBalanceCents: number,
-    commissionPercentage: number = 0.135
+    commissionPercentage: number = 0.09
   ): DriverCommissionDeduction {
     const commissionAmount = fare * commissionPercentage;
     const commissionCents = Math.round(commissionAmount * 100);
