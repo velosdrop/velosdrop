@@ -1,6 +1,7 @@
 // app/admin/drivers/page.tsx
 'use client';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import DriverCard from '@/components/admin/DriverCard';
 import DriverDetailsModal from '@/components/admin/DriverDetailsModal';
 import { DriverWithStats } from '@/src/types/driver';
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react';
 
 export default function DriversPage() {
+  const router = useRouter();
   const [drivers, setDrivers] = useState<DriverWithStats[]>([]);
   const [filteredDrivers, setFilteredDrivers] = useState<DriverWithStats[]>([]);
   const [selectedDriver, setSelectedDriver] = useState<DriverWithStats | null>(null);
@@ -61,6 +63,10 @@ export default function DriversPage() {
   const handleRefresh = () => {
     setRefreshing(true);
     fetchDrivers();
+  };
+
+  const handleAddDriver = () => {
+    router.push('/admin/drivers/add');
   };
 
   const filterDrivers = () => {
@@ -182,7 +188,10 @@ export default function DriversPage() {
               <Download className="w-4 h-4" />
               <span>Export</span>
             </button>
-            <button className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-4 rounded-xl transition-all duration-200 transform hover:scale-105">
+            <button 
+              onClick={handleAddDriver}
+              className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-4 rounded-xl transition-all duration-200 transform hover:scale-105"
+            >
               <Plus className="w-4 h-4" />
               <span>Add Driver</span>
             </button>
@@ -254,7 +263,7 @@ export default function DriversPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-700 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQgNkw4IDEwTDEyIDYiIHN0cm9rZT0iIzlGNThGQiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+')] bg-no-repeat bg-right-3 bg-center bg-[length:16px_16px]"
+              className="w-full px-4 py-3 bg-gray-700 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 appearance-none"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -272,12 +281,14 @@ export default function DriversPage() {
             <select
               value={vehicleFilter}
               onChange={(e) => setVehicleFilter(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-700 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQgNkw4IDEwTDEyIDYiIHN0cm9rZT0iIzlGNThGQiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+')] bg-no-repeat bg-right-3 bg-center bg-[length:16px_16px]"
+              className="w-full px-4 py-3 bg-gray-700 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 appearance-none"
             >
               <option value="all">All Vehicles</option>
               <option value="bicycle">Bicycle</option>
               <option value="motorbike">Motorbike</option>
               <option value="car">Car</option>
+              <option value="truck">Truck</option>
+              <option value="van">Van</option>
             </select>
           </div>
 
@@ -351,7 +362,10 @@ export default function DriversPage() {
               : 'Try adjusting your search criteria or filters to find what you\'re looking for.'}
           </p>
           <div className="flex items-center justify-center space-x-4">
-            <button className="bg-purple-600 hover:bg-purple-700 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105">
+            <button 
+              onClick={handleAddDriver}
+              className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105"
+            >
               <Plus className="w-5 h-5 inline mr-2" />
               Add First Driver
             </button>

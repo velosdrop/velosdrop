@@ -21,12 +21,16 @@ import {
   Settings,
   RefreshCw,
   CreditCard,
-  FileText
+  FileText,
+  Navigation,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle
 } from 'lucide-react';
 
 // Type definitions
 type TrendType = 'up' | 'down' | 'neutral';
-type ColorType = 'purple' | 'blue' | 'green' | 'orange' | 'cyan' | 'pink' ;
+type ColorType = 'purple' | 'blue' | 'green' | 'orange' | 'cyan' | 'pink' | 'red' | 'gray';
 type HealthStatus = 'healthy' | 'degraded' | 'down';
 
 interface DashboardStats {
@@ -40,6 +44,10 @@ interface DashboardStats {
   newCustomers: number;
   revenueChange: number;
   yesterdayRevenue: number;
+  cancelledOrders: number;
+  inProgressOrders: number;
+  todayRevenue: number;
+  averageOrderValue: number;
 }
 
 interface Driver {
@@ -57,20 +65,31 @@ interface Driver {
 interface Customer {
   id: number;
   username: string;
+  email: string;
   totalOrders: number;
   totalSpent: number;
   createdAt: string;
+  isVerified: boolean;
+  status: string;
 }
 
 interface Order {
   id: string;
+  orderId: number;
   customer: string;
   driver: string;
   status: string;
   amount: number;
   time: string;
+  pickup: string;
+  dropoff: string;
+  distance: string;
+  vehicleType: string;
   customerAvatar: string;
   driverAvatar: string;
+  rawStatus: string;
+  deliveryStatus: string;
+  createdAt: string;
 }
 
 interface EarningsData {
@@ -85,6 +104,30 @@ interface EarningsData {
   };
 }
 
+interface DashboardDataResponse {
+  stats: {
+    totalOrders: number;
+    pendingOrders: number;
+    completedOrders: number;
+    cancelledOrders: number;
+    inProgressOrders: number;
+    totalCustomers: number;
+    activeDrivers: number;
+    onlineDrivers: number;
+    newCustomers24h: number;
+    todayRevenue: number;
+    yesterdayRevenue: number;
+    totalRevenue: number;
+    averageOrderValue: number;
+  };
+  performance: {
+    onTimeDelivery: number;
+    customerSatisfaction: number;
+    driverResponseRate: number;
+    orderCompletionRate: number;
+  };
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     totalOrders: 0,
@@ -96,7 +139,11 @@ export default function Dashboard() {
     onlineDrivers: 0,
     newCustomers: 0,
     revenueChange: 0,
-    yesterdayRevenue: 0
+    yesterdayRevenue: 0,
+    cancelledOrders: 0,
+    inProgressOrders: 0,
+    todayRevenue: 0,
+    averageOrderValue: 0
   });
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [systemHealth, setSystemHealth] = useState({
@@ -106,10 +153,10 @@ export default function Dashboard() {
     notifications: { status: 'degraded' as HealthStatus, deliveryRate: '87%' }
   });
   const [performance, setPerformance] = useState({
-    onTimeDelivery: 92,
-    customerSatisfaction: 88,
-    driverResponse: 95,
-    orderCompletion: 89
+    onTimeDelivery: 0,
+    customerSatisfaction: 0,
+    driverResponse: 0,
+    orderCompletion: 0
   });
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -125,163 +172,187 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const fetchEarningsData = async (): Promise<EarningsData> => {
-    try {
-      const response = await fetch('/api/admin/earnings');
-      if (!response.ok) {
-        throw new Error(`Earnings API returned ${response.status}`);
-      }
-      const data = await response.json();
-      return data.data || {
-        totalEarnings: 0,
-        totalDeliveries: 0,
-        averageCommission: 0,
-        trends: { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0 }
-      };
-    } catch (error) {
-      console.error('Error fetching earnings:', error);
-      return {
-        totalEarnings: 0,
-        totalDeliveries: 0,
-        averageCommission: 0,
-        trends: { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0 }
-      };
-    }
-  };
-
   const loadDashboardData = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      console.log('Fetching dashboard data...');
+      console.log('Fetching dashboard data from database...');
       
-      // Fetch all data in parallel
-      const [driversResponse, customersResponse, earningsData] = await Promise.all([
-        fetch('/api/admin/drivers'),
-        fetch('/api/admin/customers'),
-        fetchEarningsData()
-      ]);
+      // Fetch dashboard data from your new API endpoint
+      const dashboardResponse = await fetch('/api/admin/dashboard-stats');
       
-      console.log('Drivers response status:', driversResponse.status);
-      console.log('Customers response status:', customersResponse.status);
-      
-      if (!driversResponse.ok) {
-        throw new Error(`Drivers API returned ${driversResponse.status}: ${driversResponse.statusText}`);
+      if (!dashboardResponse.ok) {
+        throw new Error(`Dashboard API returned ${dashboardResponse.status}: ${await dashboardResponse.text()}`);
       }
       
-      if (!customersResponse.ok) {
-        throw new Error(`Customers API returned ${customersResponse.status}: ${customersResponse.statusText}`);
+      const dashboardData = await dashboardResponse.json();
+      console.log('Dashboard data:', dashboardData);
+      
+      if (!dashboardData.success) {
+        throw new Error(dashboardData.error || 'Failed to load dashboard data');
       }
       
-      const driversData = await driversResponse.json();
-      console.log('Drivers data:', driversData);
+      // Update stats with real data
+      const statsData = dashboardData.data.stats;
+      const performanceData = dashboardData.data.performance;
       
-      const drivers: Driver[] = driversData.drivers || [];
-      console.log('Processed drivers:', drivers);
-
-      const customersData = await customersResponse.json();
-      console.log('Customers data:', customersData);
+      // Calculate revenue change percentage
+      const revenueChange = statsData.yesterdayRevenue > 0 
+        ? Math.round(((statsData.todayRevenue - statsData.yesterdayRevenue) / statsData.yesterdayRevenue) * 100)
+        : statsData.todayRevenue > 0 ? 100 : 0;
       
-      // Handle both array and object responses
-      let customers: Customer[] = [];
-      if (Array.isArray(customersData)) {
-        customers = customersData;
-      } else if (customersData && Array.isArray(customersData.customers)) {
-        customers = customersData.customers;
-      } else if (customersData && customersData.error) {
-        throw new Error(customersData.error);
-      }
-      
-      console.log('Processed customers:', customers);
-      console.log('Earnings data:', earningsData);
-
-      // Calculate dynamic stats
-      const onlineDrivers = drivers.filter(driver => driver.isOnline === true).length;
-      const activeDrivers = drivers.filter(driver => 
-        driver.status === 'active' || driver.status === 'approved'
-      ).length;
-      
-      // Calculate new customers (last 24 hours)
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const newCustomers = customers.filter(customer => {
-        try {
-          return new Date(customer.createdAt) > twentyFourHoursAgo;
-        } catch {
-          return false;
-        }
-      }).length;
-
-      // Use actual platform commission earnings instead of driver earnings
-      const totalRevenue = earningsData.totalEarnings || 0;
-      const yesterdayRevenue = earningsData.trends?.yesterday || 0;
-      
-      // Calculate percentage change from yesterday
-      const revenueChange = yesterdayRevenue > 0 
-        ? Math.round(((totalRevenue - yesterdayRevenue) / yesterdayRevenue) * 100)
-        : totalRevenue > 0 ? 100 : 0;
-      
-      // Calculate total orders from earnings data (commission deliveries) OR from customers
-      const totalOrders = earningsData.totalDeliveries || customers.reduce((sum, customer) => sum + (Number(customer.totalOrders) || 0), 0);
-
-      // For demo purposes, we'll calculate some derived stats
-      const completedOrders = Math.floor(totalOrders * 0.8); // 80% completion rate
-      const pendingOrders = Math.max(0, totalOrders - completedOrders);
-
       const dynamicStats: DashboardStats = {
-        totalOrders,
-        activeDrivers,
-        totalCustomers: customers.length,
-        totalRevenue,
-        pendingOrders,
-        completedOrders,
-        onlineDrivers,
-        newCustomers,
+        totalOrders: statsData.totalOrders || 0,
+        activeDrivers: statsData.activeDrivers || 0,
+        totalCustomers: statsData.totalCustomers || 0,
+        totalRevenue: statsData.totalRevenue || 0,
+        pendingOrders: statsData.pendingOrders || 0,
+        completedOrders: statsData.completedOrders || 0,
+        onlineDrivers: statsData.onlineDrivers || 0,
+        newCustomers: statsData.newCustomers24h || 0,
         revenueChange,
-        yesterdayRevenue
+        yesterdayRevenue: statsData.yesterdayRevenue || 0,
+        cancelledOrders: statsData.cancelledOrders || 0,
+        inProgressOrders: statsData.inProgressOrders || 0,
+        todayRevenue: statsData.todayRevenue || 0,
+        averageOrderValue: statsData.averageOrderValue || 0
       };
-
-      console.log('Calculated stats:', dynamicStats);
+      
+      console.log('Updated stats with real data:', dynamicStats);
       setStats(dynamicStats);
-
-      // Generate recent orders from the data
-      const mockRecentOrders = generateRecentOrders(drivers, customers);
-      setRecentOrders(mockRecentOrders);
-
+      
+      // Set performance metrics
+      setPerformance({
+        onTimeDelivery: performanceData.onTimeDelivery || 0,
+        customerSatisfaction: performanceData.customerSatisfaction || 0,
+        driverResponse: performanceData.driverResponseRate || 0,
+        orderCompletion: performanceData.orderCompletionRate || 0
+      });
+      
+      // Now fetch recent orders
+      await loadRecentOrders();
+      
       // Update last updated time
       setLastUpdated(new Date().toLocaleTimeString());
 
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       setError(error instanceof Error ? error.message : 'Failed to load dashboard data');
+      
+      // Fallback to loading from separate APIs if dashboard API fails
+      await loadDataFromSeparateAPIs();
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper function to generate recent orders (replace with actual orders API)
-  const generateRecentOrders = (drivers: Driver[], customers: Customer[]): Order[] => {
-    if (customers.length === 0) {
-      return [];
-    }
-    
-    const statuses = ['delivered', 'in_progress', 'pending'];
-    return customers.slice(0, 5).map((customer, index) => {
-      const driver = drivers[index % drivers.length];
-      const status = statuses[index % statuses.length];
-      const amount = 15 + (index * 5) + Math.random() * 10;
+  const loadRecentOrders = async () => {
+    try {
+      const recentOrdersResponse = await fetch('/api/admin/recent-orders?limit=5');
       
-      return {
-        id: `ORD-${1000 + index}`,
-        customer: customer.username || `Customer ${customer.id}`,
-        driver: driver ? `${driver.firstName} ${driver.lastName}` : 'Unassigned',
-        status,
-        amount: Math.round(amount * 100) / 100,
-        time: `${5 + index * 5} min ago`,
-        customerAvatar: customer.username ? customer.username.charAt(0).toUpperCase() : 'C',
-        driverAvatar: driver ? (driver.firstName?.charAt(0) || '') + (driver.lastName?.charAt(0) || '') : 'U'
-      };
-    });
+      if (recentOrdersResponse.ok) {
+        const ordersData = await recentOrdersResponse.json();
+        if (ordersData.success && ordersData.data) {
+          console.log('Loaded real recent orders:', ordersData.data);
+          setRecentOrders(ordersData.data);
+          return;
+        }
+      }
+      
+      console.warn('Using fallback for recent orders');
+      // If API fails, show empty state
+      setRecentOrders([]);
+      
+    } catch (error) {
+      console.error('Error loading recent orders:', error);
+      setRecentOrders([]);
+    }
+  };
+
+  const loadDataFromSeparateAPIs = async () => {
+    try {
+      console.log('Falling back to separate API calls...');
+      
+      const [driversResponse, customersResponse, recentOrdersResponse] = await Promise.all([
+        fetch('/api/admin/drivers'),
+        fetch('/api/admin/customers'),
+        fetch('/api/admin/recent-orders?limit=5')
+      ]);
+      
+      // Process drivers
+      if (driversResponse.ok) {
+        const driversData = await driversResponse.json();
+        const drivers: Driver[] = Array.isArray(driversData) ? driversData : (driversData.drivers || []);
+        
+        const onlineDrivers = drivers.filter(driver => driver.isOnline === true).length;
+        const activeDrivers = drivers.filter(driver => 
+          driver.status === 'active' || driver.status === 'approved'
+        ).length;
+        
+        setStats(prev => ({
+          ...prev,
+          activeDrivers,
+          onlineDrivers
+        }));
+      }
+      
+      // Process customers
+      if (customersResponse.ok) {
+        const customersData = await customersResponse.json();
+        const customers: Customer[] = Array.isArray(customersData) ? customersData : (customersData.customers || []);
+        
+        // Calculate new customers (last 24 hours)
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const newCustomers = customers.filter(customer => {
+          try {
+            return new Date(customer.createdAt) > twentyFourHoursAgo;
+          } catch {
+            return false;
+          }
+        }).length;
+        
+        setStats(prev => ({
+          ...prev,
+          totalCustomers: customers.length,
+          newCustomers
+        }));
+      }
+      
+      // Process recent orders
+      if (recentOrdersResponse.ok) {
+        const ordersData = await recentOrdersResponse.json();
+        if (ordersData.success && ordersData.data) {
+          setRecentOrders(ordersData.data);
+          
+          // Calculate stats from recent orders
+          const completedOrders = ordersData.data.filter((order: Order) => order.status === 'delivered').length;
+          const pendingOrders = ordersData.data.filter((order: Order) => order.status === 'pending').length;
+          const inProgressOrders = ordersData.data.filter((order: Order) => order.status === 'in_progress').length;
+          const cancelledOrders = ordersData.data.filter((order: Order) => order.status === 'cancelled').length;
+          const totalOrders = completedOrders + pendingOrders + inProgressOrders + cancelledOrders;
+          
+          // Calculate revenue from orders
+          const totalRevenue = ordersData.data.reduce((sum: number, order: Order) => sum + (order.amount || 0), 0);
+          const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+          
+          setStats(prev => ({
+            ...prev,
+            totalOrders,
+            completedOrders,
+            pendingOrders,
+            inProgressOrders,
+            cancelledOrders,
+            totalRevenue,
+            averageOrderValue,
+            todayRevenue: totalRevenue // For demo, use total from recent orders
+          }));
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error in fallback loading:', error);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -289,7 +360,20 @@ export default function Dashboard() {
       case 'delivered': return 'bg-emerald-500';
       case 'in_progress': return 'bg-blue-500';
       case 'pending': return 'bg-amber-500';
+      case 'cancelled': return 'bg-red-500';
+      case 'expired': return 'bg-gray-500';
       default: return 'bg-gray-500';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'delivered': return <CheckCircle2 className="w-4 h-4" />;
+      case 'in_progress': return <Navigation className="w-4 h-4" />;
+      case 'pending': return <Clock className="w-4 h-4" />;
+      case 'cancelled': return <XCircle className="w-4 h-4" />;
+      case 'expired': return <AlertTriangle className="w-4 h-4" />;
+      default: return <Package className="w-4 h-4" />;
     }
   };
 
@@ -298,16 +382,9 @@ export default function Dashboard() {
       case 'delivered': return 'Delivered';
       case 'in_progress': return 'In Progress';
       case 'pending': return 'Pending';
+      case 'cancelled': return 'Cancelled';
+      case 'expired': return 'Expired';
       default: return status;
-    }
-  };
-
-  const getHealthColor = (health: string) => {
-    switch (health) {
-      case 'healthy': return 'bg-emerald-500';
-      case 'degraded': return 'bg-amber-500';
-      case 'down': return 'bg-red-500';
-      default: return 'bg-gray-500';
     }
   };
 
@@ -414,12 +491,11 @@ export default function Dashboard() {
           <TrendingUp className="w-5 h-5 text-white/70 group-hover:translate-x-1 transition-transform duration-300" />
         </Link>
 
-        {/* NEW: Driver Transactions Panel */}
+        {/* Driver Transactions Panel */}
         <Link
           href="/admin/driver-transactions"
           className="flex items-center space-x-4 p-4 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 text-white hover:from-amber-700 hover:to-amber-800 transition-all duration-300 transform hover:scale-[1.02] hover:shadow-2xl group relative overflow-hidden"
         >
-          {/* Animated background effect */}
           <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/10 to-orange-400/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
           
           <div className="p-3 bg-white/20 rounded-lg group-hover:scale-110 transition-transform duration-300 relative z-10">
@@ -443,7 +519,7 @@ export default function Dashboard() {
         <StatsCard
           title="Total Orders"
           value={stats.totalOrders.toLocaleString()}
-          change="+12%"
+          change={`${stats.totalOrders > 0 ? '+' : ''}${Math.floor(stats.totalOrders * 0.1)}`} // Placeholder change
           trend="up"
           icon={<Package className="w-6 h-6" />}
           color="purple"
@@ -452,7 +528,7 @@ export default function Dashboard() {
         <StatsCard
           title="Active Drivers"
           value={stats.activeDrivers.toString()}
-          change="+5%"
+          change={`${stats.activeDrivers > 0 ? '+' : ''}${Math.floor(stats.activeDrivers * 0.05)}`}
           trend="up"
           icon={<Car className="w-6 h-6" />}
           color="blue"
@@ -461,7 +537,7 @@ export default function Dashboard() {
         <StatsCard
           title="Total Customers"
           value={stats.totalCustomers.toLocaleString()}
-          change="+8%"
+          change={`${stats.totalCustomers > 0 ? '+' : ''}${stats.newCustomers}`}
           trend="up"
           icon={<Users className="w-6 h-6" />}
           color="cyan"
@@ -509,6 +585,37 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* Additional Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <MiniStatsCard
+          title="In Progress"
+          value={stats.inProgressOrders.toString()}
+          icon={<Navigation className="w-4 h-4" />}
+          color="purple"
+        />
+        <MiniStatsCard
+          title="Cancelled"
+          value={stats.cancelledOrders.toString()}
+          icon={<XCircle className="w-4 h-4" />}
+          color="red"
+        />
+        <MiniStatsCard
+          title="Today's Revenue"
+          value={`$${stats.todayRevenue.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          })}`}
+          icon={<DollarSign className="w-4 h-4" />}
+          color="green"
+        />
+        <MiniStatsCard
+          title="Avg Order"
+          value={`$${stats.averageOrderValue.toFixed(2)}`}
+          icon={<BarChart3 className="w-4 h-4" />}
+          color="cyan"
+        />
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Recent Orders */}
         <div className="xl:col-span-2 space-y-6">
@@ -540,7 +647,8 @@ export default function Dashboard() {
               ) : (
                 <div className="text-center py-8">
                   <Package className="w-12 h-12 text-purple-400 mx-auto mb-4 opacity-50" />
-                  <p className="text-purple-300">No recent orders</p>
+                  <p className="text-purple-300">No recent orders found</p>
+                  <p className="text-purple-400 text-sm">Orders will appear here as they are created</p>
                 </div>
               )}
             </div>
@@ -555,6 +663,7 @@ export default function Dashboard() {
                 </div>
                 <h2 className="text-xl font-bold text-white">Performance Metrics</h2>
               </div>
+              <span className="text-purple-300 text-sm">Based on real data</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <MetricCard
@@ -604,7 +713,7 @@ export default function Dashboard() {
                 <div>
                   <div className="text-emerald-300 text-sm">Today's Revenue</div>
                   <div className="text-white text-2xl font-bold">
-                    ${stats.totalRevenue.toLocaleString(undefined, {
+                    ${stats.todayRevenue.toLocaleString(undefined, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2
                     })}
@@ -636,14 +745,14 @@ export default function Dashboard() {
                 <div className="bg-gray-700/30 rounded-lg p-3">
                   <div className="text-blue-300 text-xs mb-1">Avg per Order</div>
                   <div className="text-white font-medium">
-                    ${(stats.totalOrders > 0 ? stats.totalRevenue / stats.totalOrders : 0).toFixed(2)}
+                    ${stats.averageOrderValue.toFixed(2)}
                   </div>
                 </div>
               </div>
               <div className="pt-4 border-t border-gray-700">
                 <div className="flex items-center space-x-2 text-emerald-300 text-sm">
                   <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                  <span>Commission Rate: 13.5% per delivery</span>
+                  <span>Commission Rate: 9% per delivery</span>
                 </div>
               </div>
             </div>
@@ -712,11 +821,11 @@ export default function Dashboard() {
               <h2 className="text-xl font-bold text-white">Recent Activity</h2>
             </div>
             <div className="space-y-4">
-              <ActivityItem time="2 min ago" action="New order placed" user="John Doe" />
-              <ActivityItem time="5 min ago" action="Driver assigned" user="Mike Johnson" />
-              <ActivityItem time="10 min ago" action="Delivery completed" user="Sarah Wilson" />
-              <ActivityItem time="15 min ago" action="New driver registered" user="Alex Chen" />
-              <ActivityItem time="20 min ago" action="Customer signed up" user="Emily Davis" />
+              <ActivityItem time={recentOrders[0]?.time || 'N/A'} action="Latest order" user={recentOrders[0]?.customer || 'No orders yet'} />
+              <ActivityItem time="5 min ago" action="Dashboard refreshed" user="System" />
+              <ActivityItem time="10 min ago" action="New driver registered" user="System" />
+              <ActivityItem time="15 min ago" action="Customer signed up" user="System" />
+              <ActivityItem time="20 min ago" action="Payment processed" user="System" />
             </div>
           </div>
         </div>
@@ -761,6 +870,14 @@ function StatsCard({ title, value, change, trend, icon, color, delay = 0 }: Stat
     pink: { 
       bg: 'from-pink-600 to-pink-700', 
       icon: 'bg-pink-500/20 text-pink-400' 
+    },
+    red: { 
+      bg: 'from-red-600 to-red-700', 
+      icon: 'bg-red-500/20 text-red-400' 
+    },
+    gray: { 
+      bg: 'from-gray-600 to-gray-700', 
+      icon: 'bg-gray-500/20 text-gray-400' 
     }
   };
 
@@ -817,7 +934,9 @@ function MiniStatsCard({ title, value, icon, color }: MiniStatsCardProps) {
     green: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
     orange: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
     cyan: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-    pink: 'bg-pink-500/20 text-pink-400 border-pink-500/30'
+    pink: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+    red: 'bg-red-500/20 text-red-400 border-red-500/30',
+    gray: 'bg-gray-500/20 text-gray-400 border-gray-500/30'
   };
 
   return (
@@ -856,13 +975,18 @@ function OrderItem({ order, delay }: OrderItemProps) {
           <div>
             <div className="text-white font-medium">{order.id}</div>
             <div className="text-purple-300 text-sm">{order.customer}</div>
+            <div className="text-gray-400 text-xs flex items-center gap-2">
+              <span>→</span>
+              <span className="truncate max-w-[120px]">{order.driver || 'Unassigned'}</span>
+            </div>
           </div>
         </div>
       </div>
       <div className="flex items-center space-x-4">
         <div className="text-right">
-          <div className="text-white font-semibold">${order.amount}</div>
+          <div className="text-white font-semibold">${order.amount.toFixed(2)}</div>
           <div className="text-purple-300 text-sm">{order.time}</div>
+          <div className="text-gray-400 text-xs">{getStatusText(order.status)}</div>
         </div>
         <MoreHorizontal className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
       </div>
@@ -886,7 +1010,9 @@ function ActionButton({ title, description, icon, color, onClick }: ActionButton
     green: 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 text-emerald-400',
     orange: 'bg-orange-500/10 border-orange-500/20 hover:bg-orange-500/20 text-orange-400',
     cyan: 'bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/20 text-cyan-400',
-    pink: 'bg-pink-500/10 border-pink-500/20 hover:bg-pink-500/20 text-pink-400'
+    pink: 'bg-pink-500/10 border-pink-500/20 hover:bg-pink-500/20 text-pink-400',
+    red: 'bg-red-500/10 border-red-500/20 hover:bg-red-500/20 text-red-400',
+    gray: 'bg-gray-500/10 border-gray-500/20 hover:bg-gray-500/20 text-gray-400'
   };
 
   return (
@@ -923,7 +1049,9 @@ function MetricCard({ label, percentage, value, color, icon }: MetricCardProps) 
     green: 'bg-emerald-500',
     orange: 'bg-orange-500',
     cyan: 'bg-cyan-500',
-    pink: 'bg-pink-500'
+    pink: 'bg-pink-500',
+    red: 'bg-red-500',
+    gray: 'bg-gray-500'
   };
 
   return (
@@ -935,7 +1063,7 @@ function MetricCard({ label, percentage, value, color, icon }: MetricCardProps) 
       <div className="w-full bg-gray-600 rounded-full h-2 mb-2">
         <div 
           className={`h-2 rounded-full ${colorClasses[color]} transition-all duration-1000 ease-out`}
-          style={{ width: `${percentage}%` }}
+          style={{ width: `${Math.min(percentage, 100)}%` }}
         ></div>
       </div>
       <div className="flex items-center justify-between text-xs">
@@ -975,16 +1103,20 @@ function getStatusColor(status: string): string {
     case 'delivered': return 'bg-emerald-500';
     case 'in_progress': return 'bg-blue-500';
     case 'pending': return 'bg-amber-500';
+    case 'cancelled': return 'bg-red-500';
+    case 'expired': return 'bg-gray-500';
     default: return 'bg-gray-500';
   }
 }
 
-// Helper function to get health color
-function getHealthColor(health: string): string {
-  switch (health) {
-    case 'healthy': return 'bg-emerald-500';
-    case 'degraded': return 'bg-amber-500';
-    case 'down': return 'bg-red-500';
-    default: return 'bg-gray-500';
+// Helper function to get status text
+function getStatusText(status: string): string {
+  switch (status) {
+    case 'delivered': return 'Delivered';
+    case 'in_progress': return 'In Progress';
+    case 'pending': return 'Pending';
+    case 'cancelled': return 'Cancelled';
+    case 'expired': return 'Expired';
+    default: return status;
   }
 }

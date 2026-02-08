@@ -22,23 +22,19 @@ export const adminsTable = sqliteTable('admins', {
 export const customersTable = sqliteTable('customers', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
   username: text('username').unique().notNull(),
-  phoneNumber: text('phone_number').unique().notNull(),
-  password: text('password').notNull(),
+  email: text('email'),
+  googleId: text('google_id'),
+  phoneNumber: text('phone_number'),
+  authProvider: text('auth_provider').default('phone'),// Changed: Made optional (remove .notNull())
+  password: text('password'), // Changed: Made optional (remove .notNull())
   profilePictureUrl: text('profile_picture_url'),
-  
-  // Authentication
   isVerified: integer('is_verified', { mode: 'boolean' }).default(false).notNull(),
   lastLogin: text('last_login').default(sql`CURRENT_TIMESTAMP`),
-  
-  // Location preferences
   homeAddress: text('home_address'),
   workAddress: text('work_address'),
   lastLocation: text('last_location').$type<LocationData>().default(null),
-  // Separate columns for spatial queries
   latitude: real('latitude'),
   longitude: real('longitude'),
-  
-  // Status
   status: text('status').default('active').notNull(),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),

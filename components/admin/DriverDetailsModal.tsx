@@ -67,6 +67,25 @@ export default function DriverDetailsModal({
   const [documentErrors, setDocumentErrors] = useState<{ [key: string]: boolean }>({});
   const downloadLinkRef = useRef<HTMLAnchorElement>(null);
 
+  // Add this near the top of the component, right after the component declaration
+useEffect(() => {
+  console.log('🔍 Driver Document URLs:', {
+    licenseFront: driver.licenseFrontUrl,
+    licenseBack: driver.licenseBackUrl,
+    registrationFront: driver.registrationFrontUrl,
+    registrationBack: driver.registrationBackUrl,
+    nationalIdFront: driver.nationalIdFrontUrl,
+    nationalIdBack: driver.nationalIdBackUrl,
+    vehicleFront: driver.vehicleFrontUrl,
+    vehicleBack: driver.vehicleBackUrl,
+  });
+  
+  console.log('✅ Valid URLs check:', {
+    licenseFront: isValidDocumentUrl(driver.licenseFrontUrl),
+    licenseBack: isValidDocumentUrl(driver.licenseBackUrl),
+  });
+}, [driver]);
+
   useEffect(() => {
     if (isOpen) {
       setIsClosing(false);

@@ -5,25 +5,25 @@ const Services = () => {
     { 
       type: "Motorcycle", 
       icon: "motorcycle.svg", 
-      capacity: "Small packages (up to 5 kg)",
+      capacity: "Small packages",
       description: "Fastest option for small deliveries"
     },
     { 
       type: "Car", 
       icon: "car.svg", 
-      capacity: "Medium packages (up to 25kg)",
+      capacity: "Medium packages",
       description: "Standard deliveries with climate control"
     },
     { 
       type: "Van", 
       icon: "van.svg", 
-      capacity: "Large items (up to 500kg)",
+      capacity: "Large items",
       description: "Furniture, appliances, and bulk items"
     },
     { 
       type: "Truck", 
       icon: "truck.svg", 
-      capacity: "Heavy freight (500kg+)",
+      capacity: "Heavy freight",
       description: "Commercial and industrial deliveries"
     }
   ];

@@ -26,6 +26,14 @@ const ZIMBABWE_COUNTRY: Country = {
   emoji: "🇿🇼",
 };
 
+// Customer interface matching your context
+interface Customer {
+  id: number;
+  username: string;
+  phoneNumber: string;
+  profilePictureUrl?: string;
+}
+
 export default function CustomerLogin() {
   const [formData, setFormData] = useState({
     phone: "",
@@ -105,33 +113,56 @@ export default function CustomerLogin() {
       const phoneDigits = formData.phone.replace(/\D/g, "");
       const fullPhoneNumber = `+${selectedCountry.phone}${phoneDigits}`;
 
-      const customer = await db
+      // Use .execute() instead of .get() for better compatibility
+      const result = await db
         .select()
         .from(customersTable)
         .where(eq(customersTable.phoneNumber, fullPhoneNumber))
-        .get();
+        .execute();
 
-      if (!customer || !(await compare(formData.password, customer.password))) {
+      const customer = result[0]; // Get first result
+
+      if (!customer) {
         setErrors({ form: "Invalid phone number or password" });
+        setIsLoading(false);
         return;
       }
 
+      // Check if customer has a password (it might be null if they used OTP or Google auth)
+      if (!customer.password) {
+        setErrors({ form: "This account doesn't have a password. Please use OTP login or reset your password." });
+        setIsLoading(false);
+        return;
+      }
+
+      // Now we know customer.password is a string, so we can safely compare
+      const isPasswordValid = await compare(formData.password, customer.password);
+
+      if (!isPasswordValid) {
+        setErrors({ form: "Invalid phone number or password" });
+        setIsLoading(false);
+        return;
+      }
+
+      // Update last login
       await db
         .update(customersTable)
         .set({ lastLogin: new Date().toISOString() })
         .where(eq(customersTable.id, customer.id))
-        .run();
+        .execute();
 
-      // Store complete customer data including ID
-      const customerData = {
+      // Prepare customer data for context
+      const customerData: Customer = {
         id: customer.id,
         username: customer.username,
-        phoneNumber: customer.phoneNumber,
+        phoneNumber: customer.phoneNumber || "", // Ensure it's a string
         profilePictureUrl: customer.profilePictureUrl || undefined
       };
       
+      // Set customer in context
       setCustomer(customerData);
 
+      // Redirect to dashboard
       router.push("/customer/customer-dashboard");
     } catch (error) {
       console.error("Login failed:", error);
