@@ -1,8 +1,9 @@
-//app/api/pesepay/payments/status/route.ts
+// /app/api/payments/status/route.ts app/api/payments/status/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/src/db/index';
-import { sql, eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { paymentReferencesTable, driversTable } from '@/src/db/schema';
+import { eq } from 'drizzle-orm';
 const { Pesepay } = require('pesepay');
 
 const pesepay = new Pesepay(

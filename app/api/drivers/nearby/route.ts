@@ -1,7 +1,6 @@
-//app/api/drivers/nearby/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/src/db';
-import { driversTable, driverRatingsTable } from '@/src/db/schema';
+import { driversTable, driverRatingsTable, deliveryRequestsTable } from '@/src/db/schema';
 import { eq, and, sql, isNotNull, or } from 'drizzle-orm';
 
 // Helper function to calculate approximate distance (Haversine)
@@ -60,7 +59,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const userLat = parseFloat(searchParams.get('lat') || '0');
     const userLng = parseFloat(searchParams.get('lng') || '0');
-    const radius = parseFloat(searchParams.get('radius') || '5');
+    const radius = parseFloat(searchParams.get('radius') || '15');
     const vehicleType = searchParams.get('vehicleType'); // Get requested vehicle type
 
     console.log('Fetching nearby drivers with params:', { 
@@ -97,6 +96,17 @@ export async function GET(request: NextRequest) {
       .groupBy(driverRatingsTable.driverId)
       .as('ratings');
 
+    // Subquery for total completed deliveries
+    const deliveriesSubquery = db
+      .select({
+        driverId: deliveryRequestsTable.assignedDriverId,
+        totalDeliveries: sql<number>`count(*)`.as('totalDeliveries'),
+      })
+      .from(deliveryRequestsTable)
+      .where(eq(deliveryRequestsTable.status, 'completed'))
+      .groupBy(deliveryRequestsTable.assignedDriverId)
+      .as('deliveries');
+
     // Get compatible vehicle types
     const compatibleVehicleTypes = vehicleType 
       ? getCompatibleVehicleTypes(vehicleType)
@@ -124,9 +134,13 @@ export async function GET(request: NextRequest) {
         totalRatings: sql`coalesce(${avgRatingSubquery.totalRatings}, 0)`.as(
           'totalRatings'
         ),
+        totalDeliveries: sql`coalesce(${deliveriesSubquery.totalDeliveries}, 0)`.as(
+          'totalDeliveries'
+        ),
       })
       .from(driversTable)
       .leftJoin(avgRatingSubquery, eq(avgRatingSubquery.driverId, driversTable.id))
+      .leftJoin(deliveriesSubquery, eq(deliveriesSubquery.driverId, driversTable.id))
       .where(
         and(
           eq(driversTable.isOnline, true),
@@ -164,6 +178,7 @@ export async function GET(request: NextRequest) {
           isOnline: Boolean(driver.isOnline),
           rating: parseFloat(String(driver.averageRating)) || 0,
           totalRatings: parseInt(String(driver.totalRatings)) || 0,
+          totalDeliveries: parseInt(String(driver.totalDeliveries)) || 0,
         };
       })
       .filter((driver) => !isNaN(driver.distance) && driver.distance <= radius) // allow distance === 0
@@ -190,6 +205,7 @@ export async function GET(request: NextRequest) {
       profile_picture_url: driver.profilePictureUrl,
       averageRating: driver.rating,
       total_ratings: driver.totalRatings,
+      total_deliveries: driver.totalDeliveries,
       distance_km: driver.distance
     }));
 
