@@ -1,4 +1,3 @@
-// components/Navbar.tsx
 'use client';
 
 import { NAV_LINKS } from "@/constants";
@@ -6,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { Utensils } from 'lucide-react'; // Install: npm install lucide-react
 
 const Navbar = () => {
   const pathname = usePathname();
@@ -75,8 +75,25 @@ const Navbar = () => {
               </div>
             </Link>
 
-            {/* --- RIGHT SIDE WRAPPER: Contains Logins + Hamburger --- */}
+            {/* --- RIGHT SIDE WRAPPER: Contains Food Delivery + Logins + Hamburger --- */}
             <div className="flex items-center gap-2 sm:gap-4">
+              
+              {/* 🍔 FOOD DELIVERY BUTTON - Black & Purple Theme */}
+              <Link
+                href="/food/merchant/"
+                className={`
+                  flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2
+                  rounded-full font-medium transition-all duration-300 whitespace-nowrap
+                  ${
+                    isScrolled
+                      ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-600/20'
+                      : 'bg-purple-600/90 backdrop-blur-sm text-white hover:bg-purple-700 border border-purple-500/50'
+                  }
+                `}
+              >
+                <Utensils className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="text-xs sm:text-sm font-semibold">Food Delivery</span>
+              </Link>
               
               {/* Login Buttons - Visible on Mobile & Desktop */}
               {isHomePage && (
@@ -142,7 +159,17 @@ const Navbar = () => {
           <div className="px-4 py-6 space-y-4">
             {isHomePage && (
               <>
-                {/* Regular Nav Links only - Logins moved to top bar */}
+                {/* Food Delivery link in mobile menu - Purple theme */}
+                <Link
+                  href="/food-delivery"
+                  className="flex items-center gap-2 text-purple-400 hover:text-purple-300 font-medium py-3 px-2 transition-colors duration-200 border-b border-gray-800"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <Utensils className="w-4 h-4" />
+                  <span>Food Delivery</span>
+                </Link>
+                
+                {/* Regular Nav Links */}
                 {NAV_LINKS.map((link) => (
                   <Link
                     key={link.key}

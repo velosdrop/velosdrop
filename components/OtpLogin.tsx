@@ -96,7 +96,7 @@ export function OtpLogin({ onVerificationSuccess }: {
     const fullPhoneNumber = getFullPhoneNumber();
 
     try {
-      const response = await fetch('/api/send-otp', {
+      const response = await fetch('/api/whatsapp/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phoneNumber: fullPhoneNumber })
@@ -122,7 +122,7 @@ export function OtpLogin({ onVerificationSuccess }: {
     const fullPhoneNumber = getFullPhoneNumber();
 
     try {
-      const response = await fetch('/api/verify-otp', {
+      const response = await fetch('/api/whatsapp/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phoneNumber: fullPhoneNumber, otp })

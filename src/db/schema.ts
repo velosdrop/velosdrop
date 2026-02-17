@@ -4,7 +4,7 @@ export type LocationData = {
   latitude: number;
 } | null;
 
-import { sql } from 'drizzle-orm';
+import { sql, type InferInsertModel, type InferSelectModel } from 'drizzle-orm';
 import { integer, sqliteTable, text, real } from 'drizzle-orm/sqlite-core';
 
 export const adminsTable = sqliteTable('admins', {
@@ -88,31 +88,31 @@ export const deliveryRequestsTable = sqliteTable('delivery_requests', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
   customerId: integer('customer_id').notNull().references(() => customersTable.id, { onDelete: 'cascade' }),
   customerUsername: text('customer_username').notNull(),
-  
+
   // OLD COLUMNS (keep for now - will be migrated and deleted later)
   pickupLocation: text('pickup_location'),
   dropoffLocation: text('dropoff_location'),
-  
+
   // NEW COLUMNS (optional for backward compatibility with existing data)
   pickupAddress: text('pickup_address'), // REMOVED .notNull()
   pickupLatitude: real('pickup_latitude'), // REMOVED .notNull()
   pickupLongitude: real('pickup_longitude'), // REMOVED .notNull()
-  
+
   dropoffAddress: text('dropoff_address'), // REMOVED .notNull()
   dropoffLatitude: real('dropoff_latitude'), // REMOVED .notNull()
   dropoffLongitude: real('dropoff_longitude'), // REMOVED .notNull()
-  
+
   fare: real('fare').notNull(),
   distance: real('distance').notNull(),
-  vehicleType: text('vehicle_type').notNull().default('car'), 
+  vehicleType: text('vehicle_type').notNull().default('car'),
   packageDetails: text('package_details'),
   recipientPhoneNumber: text('recipient_phone_number'),
   status: text('status').default('pending').notNull(),
-  assignedDriverId: integer('assigned_driver_id').references(() => driversTable.id), 
+  assignedDriverId: integer('assigned_driver_id').references(() => driversTable.id),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   expiresAt: text('expires_at').notNull(),
 
-    // NEW FIELDS FOR DELIVERY COMPLETION FLOW
+  // NEW FIELDS FOR DELIVERY COMPLETION FLOW
   driverArrivedAt: text('driver_arrived_at'), // When driver enters geofence
   deliveryCompletedAt: text('delivery_completed_at'), // When driver marks completed
   deliveryPhotoUrl: text('delivery_photo_url'), // Photo proof
@@ -120,9 +120,9 @@ export const deliveryRequestsTable = sqliteTable('delivery_requests', {
   commissionAmount: real('commission_amount').default(0), // Store 13.5% of fare
   customerConfirmedAt: text('customer_confirmed_at'), // When customer confirms
   autoConfirmedAt: text('auto_confirmed_at'), // If auto-confirmed after timeout
-  deliveryStatus: text('delivery_status').default('pending').notNull(), 
-    // Values: 'pending', 'en_route', 'arrived', 'awaiting_confirmation', 'completed', 'paid'
-    
+  deliveryStatus: text('delivery_status').default('pending').notNull(),
+  // Values: 'pending', 'en_route', 'arrived', 'awaiting_confirmation', 'completed', 'paid'
+
 });
 
 // Driver responses table
@@ -232,6 +232,170 @@ export const platformEarnings = sqliteTable('platform_earnings', {
   created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export const merchantsTable = sqliteTable('merchants', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+
+  // Business Details
+  businessName: text('business_name').notNull(),
+  ownerName: text('owner_name').notNull(),
+  city: text('city').notNull(),
+  address: text('address').notNull(),
+  email: text('email').unique().notNull(),
+  phoneNumber: text('phone_number').notNull(),
+  password: text('password').notNull(),
+
+  // Optional Fields
+  logoUrl: text('logo_url'),
+  coverImageUrl: text('cover_image_url'),
+  description: text('description'),
+  businessType: text('business_type'), // restaurant, retail, grocery, etc.
+
+  // Location
+  latitude: real('latitude'),
+  longitude: real('longitude'),
+  lastLocation: text('last_location').$type<LocationData>().default(null),
+
+  // Business Hours (JSON object) - FIXED HERE
+  businessHours: text('business_hours', { mode: 'json' }).$type<{
+    monday?: { open: string; close: string };
+    tuesday?: { open: string; close: string };
+    wednesday?: { open: string; close: string };
+    thursday?: { open: string; close: string };
+    friday?: { open: string; close: string };
+    saturday?: { open: string; close: string };
+    sunday?: { open: string; close: string };
+  } | null>().default(null),
+
+  // Settings
+  isActive: integer('is_active', { mode: 'boolean' }).default(true).notNull(),
+  isOpen: integer('is_open', { mode: 'boolean' }).default(true).notNull(),
+  status: text('status').default('pending').notNull(), // pending, approved, suspended
+
+  // Delivery Settings
+  deliveryRadius: integer('delivery_radius').default(5), // in km
+  minimumOrder: real('minimum_order').default(0),
+  deliveryFee: real('delivery_fee').default(0),
+  commission: real('commission').default(15), // default 15%
+
+  // Payment Details (for payouts)
+  bankName: text('bank_name'),
+  bankAccountName: text('bank_account_name'),
+  bankAccountNumber: text('bank_account_number'),
+
+  // Stats
+  totalOrders: integer('total_orders').default(0).notNull(),
+  totalRevenue: real('total_revenue').default(0).notNull(),
+  averageRating: real('average_rating').default(0),
+
+  // Metadata
+  lastLogin: text('last_login'),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const merchantProductsTable = sqliteTable('merchant_products', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  merchantId: integer('merchant_id').notNull().references(() => merchantsTable.id, { onDelete: 'cascade' }),
+  
+  // Basic Info
+  name: text('name').notNull(),
+  description: text('description'),
+  price: real('price').notNull(),
+  category: text('category'), // e.g. "Burgers", "Pizza", "Drinks"
+  
+  // Images
+  imageUrl: text('image_url'), // Main product image
+  additionalImages: text('additional_images', { mode: 'json' }).$type<string[]>().default([]),
+  
+  // Status
+  isAvailable: integer('is_available', { mode: 'boolean' }).default(true).notNull(),
+  isPopular: integer('is_popular', { mode: 'boolean' }).default(false),
+  
+  // Options (for variations like size, extras)
+  options: text('options', { mode: 'json' }).$type<Array<{
+    name: string;
+    price?: number;
+    maxChoices?: number;
+    choices?: Array<{ name: string; price?: number }>;
+  }>>().default([]),
+  
+  // Inventory
+  preparationTime: integer('preparation_time'), // in minutes
+  stock: integer('stock').default(-1), // -1 means unlimited
+  
+  // Metadata
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+// Merchant Categories Table
+export const merchantCategoriesTable = sqliteTable('merchant_categories', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  merchantId: integer('merchant_id').notNull().references(() => merchantsTable.id, { onDelete: 'cascade' }),
+  
+  name: text('name').notNull(),
+  description: text('description'),
+  imageUrl: text('image_url'),
+  displayOrder: integer('display_order').default(0),
+  
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+// Merchant Orders Table
+export const merchantOrdersTable = sqliteTable('merchant_orders', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }).notNull(),
+  merchantId: integer('merchant_id').notNull().references(() => merchantsTable.id, { onDelete: 'cascade' }),
+  customerId: integer('customer_id').references(() => customersTable.id),
+  driverId: integer('driver_id').references(() => driversTable.id),
+  
+  orderNumber: text('order_number').unique().notNull(),
+  items: text('items', { mode: 'json' }).$type<Array<{
+    productId: number;
+    name: string;
+    price: number;
+    quantity: number;
+    notes?: string;
+    options?: Array<{ name: string; choice: string; price?: number }>;
+  }>>().notNull(),
+  
+  subtotal: real('subtotal').notNull(),
+  deliveryFee: real('delivery_fee').notNull(),
+  totalAmount: real('total_amount').notNull(),
+  commission: real('commission').notNull(),
+  merchantPayout: real('merchant_payout').notNull(),
+  
+  paymentMethod: text('payment_method').default('online'), // online, cash_on_delivery
+  paymentStatus: text('payment_status').default('pending'), // pending, paid, failed
+  
+  deliveryAddress: text('delivery_address').notNull(),
+  deliveryLatitude: real('delivery_latitude'),
+  deliveryLongitude: real('delivery_longitude'),
+  customerPhone: text('customer_phone'),
+  customerName: text('customer_name'),
+  
+  status: text('status').default('pending').notNull(), // pending, confirmed, preparing, ready, picked_up, delivered, cancelled
+  statusHistory: text('status_history', { mode: 'json' }).$type<Array<{
+    status: string;
+    timestamp: string;
+    note?: string;
+  }>>().default([]),
+  
+  customerNotes: text('customer_notes'),
+  estimatedPreparationTime: integer('estimated_preparation_time'),
+  actualPreparationTime: integer('actual_preparation_time'),
+  
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  confirmedAt: text('confirmed_at'),
+  readyAt: text('ready_at'),
+  pickedUpAt: text('picked_up_at'),
+  deliveredAt: text('delivered_at'),
+  cancelledAt: text('cancelled_at'),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+
+
 
 
 export type InsertAdminWalletAdjustment = typeof adminWalletAdjustments.$inferInsert;
@@ -254,6 +418,16 @@ export type InsertPaymentReference = typeof paymentReferencesTable.$inferInsert;
 export type SelectPaymentReference = typeof paymentReferencesTable.$inferSelect;
 export type InsertMessage = typeof messagesTable.$inferInsert;
 export type SelectMessage = typeof messagesTable.$inferSelect;
+export type Merchant = InferSelectModel<typeof merchantsTable>;
+export type NewMerchant = InferInsertModel<typeof merchantsTable>;
+export type MerchantProduct = InferSelectModel<typeof merchantProductsTable>;
+export type MerchantCategory = InferSelectModel<typeof merchantCategoriesTable>;
+export type MerchantOrder = InferSelectModel<typeof merchantOrdersTable>;
+
+export type NewMerchantProduct = InferInsertModel<typeof merchantProductsTable>;
+export type NewMerchantCategory = InferInsertModel<typeof merchantCategoriesTable>;
+export type NewMerchantOrder = InferInsertModel<typeof merchantOrdersTable>;
+
 
 export interface Admin extends Omit<SelectAdmin, 'isActive'> {
   isActive: boolean;
@@ -275,4 +449,4 @@ export interface DeliveryRequest extends SelectDeliveryRequest {
   customerUsername: string;
 }
 
-export interface DriverResponse extends SelectDriverResponse {}
+export interface DriverResponse extends SelectDriverResponse { }
