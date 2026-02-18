@@ -17,7 +17,7 @@ export default function MerchantLandingPage() {
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">
             <Link href="#benefits" className="hover:text-white transition-colors">Benefits</Link>
             <Link href="#how-it-works" className="hover:text-white transition-colors">How it Works</Link>
-            <Link href="/restaurant/login" className="hover:text-white transition-colors">Merchant Login</Link>
+            <Link href="/food/merchant/login" className="hover:text-white transition-colors">Merchant Login</Link>
             <Link 
               href="/food/merchant/registration" 
               className="bg-white text-black px-5 py-2.5 rounded-xl font-semibold hover:bg-gray-200 transition-all hover:scale-105"

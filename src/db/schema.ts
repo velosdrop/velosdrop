@@ -395,9 +395,6 @@ export const merchantOrdersTable = sqliteTable('merchant_orders', {
 });
 
 
-
-
-
 export type InsertAdminWalletAdjustment = typeof adminWalletAdjustments.$inferInsert;
 export type SelectAdminWalletAdjustment = typeof adminWalletAdjustments.$inferSelect;
 export type InsertAdmin = typeof adminsTable.$inferInsert;
