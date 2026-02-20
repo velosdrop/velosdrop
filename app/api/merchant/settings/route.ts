@@ -19,18 +19,25 @@ export async function PUT(request: Request) {
 
     const data = await request.json();
 
+    // Create update object with proper typing - NO COMMISSION
+    const updateData: any = {
+      deliveryRadius: data.deliveryRadius,
+      minimumOrder: data.minimumOrder,
+      deliveryFee: data.deliveryFee, // per km rate
+      bankName: data.bankName,
+      bankAccountName: data.bankAccountName,
+      bankAccountNumber: data.bankAccountNumber,
+      updatedAt: new Date().toISOString()
+    };
+
+    // Only add deliveryType if it exists in the data
+    if (data.deliveryType) {
+      updateData.deliveryType = data.deliveryType;
+    }
+
     const [updatedMerchant] = await db
       .update(merchantsTable)
-      .set({
-        deliveryRadius: data.deliveryRadius,
-        minimumOrder: data.minimumOrder,
-        deliveryFee: data.deliveryFee,
-        commission: data.commission,
-        bankName: data.bankName,
-        bankAccountName: data.bankAccountName,
-        bankAccountNumber: data.bankAccountNumber,
-        updatedAt: new Date().toISOString()
-      })
+      .set(updateData)
       .where(eq(merchantsTable.id, merchantId))
       .returning();
 

@@ -14,6 +14,7 @@ import SettingsSection from "@/components/customer/SettingsSection";
 import NotificationsSection from "@/components/customer/NotificationsSection";
 import BookingPanel from "@/components/customer/BookingPanel";
 import CustomerMap from "@/components/customer/CustomerMap";
+import FoodSection from "@/components/customer/food/FoodSection"; // Add this import
 
 export default function CustomerDashboard() {
   const [activeSection, setActiveSection] = useState("dashboard");
@@ -187,6 +188,8 @@ export default function CustomerDashboard() {
     switch (activeSection) {
       case "orders":
         return <OrdersSection />;
+      case "food":
+        return <FoodSection />; // Add this case
       case "help":
         return <HelpCenterSection />;
       case "settings":
@@ -365,6 +368,16 @@ export default function CustomerDashboard() {
                 )
               },
               { 
+                id: "food", // Add this new section
+                name: "Food Delivery", 
+                icon: (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M3 3a1 1 0 000 2h11a1 1 0 100-2H3zM3 7a1 1 0 000 2h5a1 1 0 000-2H3zM3 11a1 1 0 100 2h4a1 1 0 100-2H3zM13 16a1 1 0 102 0 1 1 0 00-2 0z" />
+                    <path d="M16 7a1 1 0 00-1 1v3.586a1 1 0 01-.293.707l-2.828 2.828A1 1 0 0111.586 16H8a1 1 0 00-1 1v1a1 1 0 001 1h4.586a1 1 0 00.707-.293l3.414-3.414A1 1 0 0017 14.586V8a1 1 0 00-1-1z" />
+                  </svg>
+                )
+              },
+              { 
                 id: "notifications", 
                 name: "Notifications", 
                 icon: (
@@ -462,6 +475,8 @@ export default function CustomerDashboard() {
                   <>Messages ({unreadMessageCount} unread)</>
                 ) : activeSection === 'notifications' ? (
                   <>Messages</>
+                ) : activeSection === 'food' ? ( // Add this condition
+                  <>Food Delivery</>
                 ) : (
                   activeSection.charAt(0).toUpperCase() + activeSection.slice(1)
                 )}

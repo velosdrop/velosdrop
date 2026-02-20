@@ -243,6 +243,8 @@ export const merchantsTable = sqliteTable('merchants', {
   email: text('email').unique().notNull(),
   phoneNumber: text('phone_number').notNull(),
   password: text('password').notNull(),
+  deliveryType: text('delivery_type').default('platform').notNull(), 
+  deliveryRequestId: integer('delivery_request_id').references(() => deliveryRequestsTable.id),
 
   // Optional Fields
   logoUrl: text('logo_url'),

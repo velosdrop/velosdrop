@@ -3,10 +3,10 @@
 
 import { useState } from 'react';
 import { 
-  Bell, Moon, Sun, Globe, CreditCard, 
-  Truck, Percent, DollarSign, Shield,
-  Mail, Phone, Smartphone, Save, Bike,
-  ToggleLeft, ToggleRight, ChevronRight
+  Bell, Moon, Sun, CreditCard, 
+  Truck, DollarSign, Shield,
+  Mail, Smartphone, Save, Bike,
+  ChevronRight, Info
 } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -17,19 +17,17 @@ interface SettingsProps {
 
 export default function SettingsComponent({ merchant, onSettingsUpdate }: SettingsProps) {
   const { theme, setTheme } = useTheme();
-  const [activeSection, setActiveSection] = useState('notifications');
+  const [activeSection, setActiveSection] = useState('delivery');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   
-  // Delivery Settings (matches your schema)
+  // Delivery Settings - Exactly matching your schema
   const [delivery, setDelivery] = useState({
     deliveryRadius: merchant?.deliveryRadius || 5,
     minimumOrder: merchant?.minimumOrder || 0,
-    deliveryFee: merchant?.deliveryFee || 0,
-    commission: merchant?.commission || 15,
-    autoAcceptOrders: false,
-    estimatedTime: '25-35',
-    useOwnBikers: false  // Simple toggle for "Do you have your own bikers?"
+    deliveryFee: merchant?.deliveryFee || 2.50, // per km rate - simple input, no arrows
+    // This maps to deliveryType in schema
+    useOwnBikers: merchant?.deliveryType === 'self'
   });
 
   // Notification settings
@@ -53,11 +51,10 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
     bankAccountNumber: merchant?.bankAccountNumber || ''
   });
 
-  // Notification sections for sidebar
   const sections = [
+    { id: 'delivery', label: 'Delivery', icon: Truck },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'appearance', label: 'Appearance', icon: Sun },
-    { id: 'delivery', label: 'Delivery', icon: Truck },
     { id: 'payments', label: 'Payments', icon: CreditCard },
     { id: 'privacy', label: 'Privacy', icon: Shield },
   ];
@@ -71,11 +68,12 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
       const settingsData = {
         deliveryRadius: delivery.deliveryRadius,
         minimumOrder: delivery.minimumOrder,
-        deliveryFee: delivery.deliveryFee,
-        commission: delivery.commission,
+        deliveryFee: delivery.deliveryFee, // per km rate
         bankName: payment.bankName,
         bankAccountName: payment.bankAccountName,
         bankAccountNumber: payment.bankAccountNumber,
+        // Convert useOwnBikers to deliveryType for the database
+        deliveryType: delivery.useOwnBikers ? 'self' : 'platform'
       };
 
       const response = await fetch('/api/merchant/settings', {
@@ -88,16 +86,33 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
       });
 
       if (response.ok) {
+        const data = await response.json();
         setSuccess('Settings saved successfully!');
         if (onSettingsUpdate) {
-          onSettingsUpdate(settingsData);
+          onSettingsUpdate(data.merchant);
+        }
+        
+        // Show different message based on biker selection
+        if (delivery.useOwnBikers) {
+          setSuccess('✓ Using your own bikers - Customers pay you online for everything');
+        } else {
+          setSuccess('✓ Using platform drivers - Customers pay drivers in cash for delivery');
         }
       }
     } catch (error) {
       console.error('Error saving settings:', error);
     } finally {
       setSaving(false);
-      setTimeout(() => setSuccess(''), 3000);
+      setTimeout(() => setSuccess(''), 4000);
+    }
+  };
+
+  // Handle input change without arrows - just plain text input
+  const handleNumberInput = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
+    const value = e.target.value;
+    // Allow empty string or valid number
+    if (value === '' || !isNaN(parseFloat(value))) {
+      setDelivery({...delivery, [field]: value === '' ? '' : parseFloat(value)});
     }
   };
 
@@ -127,8 +142,8 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
 
       {/* Success Message */}
       {success && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-          <p className="text-sm text-green-600">{success}</p>
+        <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+          <p className="text-sm text-green-600 dark:text-green-400">{success}</p>
         </div>
       )}
 
@@ -159,6 +174,125 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
 
         {/* Settings Content */}
         <div className="flex-1">
+          {/* Delivery Settings Section */}
+          {activeSection === 'delivery' && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Delivery Settings</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Configure your delivery preferences</p>
+              
+              <div className="space-y-6">
+                {/* Use Own Bikers Toggle */}
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border-2 border-purple-100 dark:border-purple-900/30">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2 rounded-full ${delivery.useOwnBikers ? 'bg-green-100 dark:bg-green-900/20' : 'bg-purple-100 dark:bg-purple-900/20'}`}>
+                        <Bike className={`w-6 h-6 ${delivery.useOwnBikers ? 'text-green-600' : 'text-purple-600'}`} />
+                      </div>
+                      <div>
+                        <span className="text-base font-medium text-gray-900 dark:text-white">I have my own bikers</span>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                          Toggle ON if you have your own delivery team. Toggle OFF to use our platform drivers.
+                        </p>
+                        
+                        {/* Dynamic explanation based on selection */}
+                        {delivery.useOwnBikers ? (
+                          <div className="mt-3 flex items-start gap-2 bg-green-50 dark:bg-green-900/10 p-3 rounded-lg">
+                            <Info className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="text-sm text-green-700 dark:text-green-300 font-medium">✓ Using your own bikers</p>
+                              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                Customers will pay you online for both food and delivery. You handle all deliveries.
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-3 flex items-start gap-2 bg-purple-50 dark:bg-purple-900/10 p-3 rounded-lg">
+                            <Info className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="text-sm text-purple-700 dark:text-purple-300 font-medium">✓ Using platform drivers</p>
+                              <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                                Customers pay you online for food only. They pay our drivers in cash for delivery.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setDelivery({...delivery, useOwnBikers: !delivery.useOwnBikers})}
+                      className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                        delivery.useOwnBikers ? 'bg-green-600' : 'bg-purple-600'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                          delivery.useOwnBikers ? 'translate-x-7' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Delivery Settings from Schema - Simple inputs, no arrows */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Delivery Radius (km)
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={delivery.deliveryRadius}
+                      onChange={(e) => handleNumberInput(e, 'deliveryRadius')}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:border-purple-500 text-gray-900 dark:text-white dark:bg-gray-700"
+                      placeholder="e.g. 5"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Maximum distance you'll deliver</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Minimum Order ($)
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      pattern="[0-9]*[.]?[0-9]*"
+                      value={delivery.minimumOrder}
+                      onChange={(e) => handleNumberInput(e, 'minimumOrder')}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:border-purple-500 text-gray-900 dark:text-white dark:bg-gray-700"
+                      placeholder="e.g. 10.00"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Delivery Fee (per km) - in $
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*[.]?[0-9]*"
+                    value={delivery.deliveryFee}
+                    onChange={(e) => handleNumberInput(e, 'deliveryFee')}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:border-purple-500 text-gray-900 dark:text-white dark:bg-gray-700"
+                    placeholder="e.g. 2.50"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {delivery.useOwnBikers 
+                      ? 'Your per-kilometer rate (customer pays you online)' 
+                      : 'Platform per-kilometer rate (customer pays driver cash)'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Example: If customer is 5km away, they'll pay ${parseFloat(delivery.deliveryFee as any) * 5 || 0}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Notifications Section */}
           {activeSection === 'notifications' && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
@@ -311,126 +445,6 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
             </div>
           )}
 
-          {/* Delivery Settings Section */}
-          {activeSection === 'delivery' && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Delivery Settings</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Configure your delivery preferences</p>
-              
-              <div className="space-y-4">
-                {/* Simple Use Own Bikers Toggle - NO biker management */}
-                <label className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Bike className="w-5 h-5 text-purple-600" />
-                    <div>
-                      <span className="text-sm font-medium text-gray-900 dark:text-white">I have my own bikers</span>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Toggle on if you have your own delivery team</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setDelivery({...delivery, useOwnBikers: !delivery.useOwnBikers})}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      delivery.useOwnBikers ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        delivery.useOwnBikers ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </label>
-
-                {/* Auto-accept orders */}
-                <label className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Auto-accept orders</span>
-                    <p className="text-xs text-gray-500">Automatically accept new orders</p>
-                  </div>
-                  <button
-                    onClick={() => setDelivery({...delivery, autoAcceptOrders: !delivery.autoAcceptOrders})}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      delivery.autoAcceptOrders ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        delivery.autoAcceptOrders ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </label>
-
-                {/* Delivery Settings from Schema */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Delivery Radius (km)
-                  </label>
-                  <input
-                    type="number"
-                    value={delivery.deliveryRadius}
-                    onChange={(e) => setDelivery({...delivery, deliveryRadius: parseInt(e.target.value)})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:border-purple-500 text-gray-900 dark:text-white dark:bg-gray-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Minimum Order Amount ($)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={delivery.minimumOrder}
-                    onChange={(e) => setDelivery({...delivery, minimumOrder: parseFloat(e.target.value)})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:border-purple-500 text-gray-900 dark:text-white dark:bg-gray-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Delivery Fee ($)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={delivery.deliveryFee}
-                    onChange={(e) => setDelivery({...delivery, deliveryFee: parseFloat(e.target.value)})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:border-purple-500 text-gray-900 dark:text-white dark:bg-gray-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Commission Rate (%)
-                  </label>
-                  <input
-                    type="number"
-                    value={delivery.commission}
-                    onChange={(e) => setDelivery({...delivery, commission: parseInt(e.target.value)})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:border-purple-500 text-gray-900 dark:text-white dark:bg-gray-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Estimated delivery time
-                  </label>
-                  <select
-                    value={delivery.estimatedTime}
-                    onChange={(e) => setDelivery({...delivery, estimatedTime: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:border-purple-500 text-gray-900 dark:text-white dark:bg-gray-700"
-                  >
-                    <option>15-25 minutes</option>
-                    <option>25-35 minutes</option>
-                    <option>35-45 minutes</option>
-                    <option>45-60 minutes</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Payments Section */}
           {activeSection === 'payments' && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
@@ -469,7 +483,7 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
                   })}
                 </div>
 
-                {/* Bank Details (from schema) */}
+                {/* Bank Details */}
                 <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
                   <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Bank Account Details</h3>
                   <div className="space-y-3">
