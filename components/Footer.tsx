@@ -1,3 +1,4 @@
+// components/Footer.tsx
 import { FOOTER_CONTACT_INFO, SOCIALS } from '@/constants'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -73,6 +74,17 @@ const Footer = () => {
               </FooterColumn>
             </div>
           </div>
+        </div>
+
+        {/* Legal Entity Disclosure - ADD THIS SECTION */}
+        <div className="border-t border-gray-800 pt-6 pb-2">
+          <p className="text-sm text-gray-400 text-center">
+            VelosDrop is a trading name of{' '}
+            <span className="text-purple-400 font-medium">Glorymind Enterprises (Private) Limited</span>
+          </p>
+          <p className="text-xs text-gray-500 text-center mt-1">
+            Registered in Zimbabwe | Company Registration: 10674/2007
+          </p>
         </div>
 
         <div className="border border-gray-800" />
