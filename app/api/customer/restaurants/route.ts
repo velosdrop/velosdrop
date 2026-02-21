@@ -26,6 +26,7 @@ export async function GET(request: Request) {
         city: merchantsTable.city,
         address: merchantsTable.address,
         businessHours: merchantsTable.businessHours,
+        merchantCode: merchantsTable.merchantCode,
         latitude: merchantsTable.latitude,
         longitude: merchantsTable.longitude,
       })

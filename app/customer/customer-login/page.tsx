@@ -4,12 +4,9 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { db } from "@/src/db";
-import { customersTable } from "@/src/db/schema";
-import { eq } from "drizzle-orm";
-import { compare } from "bcryptjs";
 import { countries } from "countries-list";
 import { useUser } from '@/app/context/UserContext';
+import jwt from 'jsonwebtoken';
 
 interface Country {
   code: string;
@@ -113,54 +110,34 @@ export default function CustomerLogin() {
       const phoneDigits = formData.phone.replace(/\D/g, "");
       const fullPhoneNumber = `+${selectedCountry.phone}${phoneDigits}`;
 
-      // Use .execute() instead of .get() for better compatibility
-      const result = await db
-        .select()
-        .from(customersTable)
-        .where(eq(customersTable.phoneNumber, fullPhoneNumber))
-        .execute();
+      // Call your API endpoint instead of direct DB access
+      const response = await fetch('/api/customer/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumber: fullPhoneNumber,
+          password: formData.password
+        }),
+      });
 
-      const customer = result[0]; // Get first result
+      const data = await response.json();
 
-      if (!customer) {
-        setErrors({ form: "Invalid phone number or password" });
+      if (!response.ok) {
+        setErrors({ form: data.error || "Invalid phone number or password" });
         setIsLoading(false);
         return;
       }
 
-      // Check if customer has a password (it might be null if they used OTP or Google auth)
-      if (!customer.password) {
-        setErrors({ form: "This account doesn't have a password. Please use OTP login or reset your password." });
-        setIsLoading(false);
-        return;
-      }
-
-      // Now we know customer.password is a string, so we can safely compare
-      const isPasswordValid = await compare(formData.password, customer.password);
-
-      if (!isPasswordValid) {
-        setErrors({ form: "Invalid phone number or password" });
-        setIsLoading(false);
-        return;
-      }
-
-      // Update last login
-      await db
-        .update(customersTable)
-        .set({ lastLogin: new Date().toISOString() })
-        .where(eq(customersTable.id, customer.id))
-        .execute();
-
-      // Prepare customer data for context
-      const customerData: Customer = {
-        id: customer.id,
-        username: customer.username,
-        phoneNumber: customer.phoneNumber || "", // Ensure it's a string
-        profilePictureUrl: customer.profilePictureUrl || undefined
-      };
+      // Store the token in localStorage
+      localStorage.setItem('customerToken', data.token);
       
+      // Also store customer data if needed
+      localStorage.setItem('customerData', JSON.stringify(data.customer));
+
       // Set customer in context
-      setCustomer(customerData);
+      setCustomer(data.customer);
 
       // Redirect to dashboard
       router.push("/customer/customer-dashboard");

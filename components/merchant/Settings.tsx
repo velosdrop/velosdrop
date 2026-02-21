@@ -6,7 +6,7 @@ import {
   Bell, Moon, Sun, CreditCard, 
   Truck, DollarSign, Shield,
   Mail, Smartphone, Save, Bike,
-  ChevronRight, Info
+  ChevronRight, Info, Wallet
 } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -40,7 +40,7 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
     weeklyReports: true
   });
 
-  // Payment settings
+  // Payment settings - WITH MERCHANT CODE ADDED
   const [payment, setPayment] = useState({
     cashOnDelivery: true,
     cardPayments: true,
@@ -48,7 +48,8 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
     invoicePayment: false,
     bankName: merchant?.bankName || '',
     bankAccountName: merchant?.bankAccountName || '',
-    bankAccountNumber: merchant?.bankAccountNumber || ''
+    bankAccountNumber: merchant?.bankAccountNumber || '',
+    merchantCode: merchant?.merchantCode || '' // ADDED: EcoCash merchant code
   });
 
   const sections = [
@@ -72,6 +73,7 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
         bankName: payment.bankName,
         bankAccountName: payment.bankAccountName,
         bankAccountNumber: payment.bankAccountNumber,
+        merchantCode: payment.merchantCode, // ADDED: Include merchant code
         // Convert useOwnBikers to deliveryType for the database
         deliveryType: delivery.useOwnBikers ? 'self' : 'platform'
       };
@@ -286,7 +288,7 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
                       : 'Platform per-kilometer rate (customer pays driver cash)'}
                   </p>
                   <p className="text-xs text-gray-400 mt-1">
-                    Example: If customer is 5km away, they'll pay ${parseFloat(delivery.deliveryFee as any) * 5 || 0}
+                    Example: If customer is 5km away, they'll pay ${(parseFloat(delivery.deliveryFee as any) * 5 || 0).toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -445,7 +447,7 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
             </div>
           )}
 
-          {/* Payments Section */}
+          {/* Payments Section - UPDATED WITH MERCHANT CODE */}
           {activeSection === 'payments' && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Payment Methods</h2>
@@ -457,7 +459,7 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
                   {[
                     { key: 'cashOnDelivery', label: 'Cash on Delivery', icon: DollarSign },
                     { key: 'cardPayments', label: 'Card Payments', icon: CreditCard },
-                    { key: 'ecocash', label: 'EcoCash (Zimbabwe)', icon: Smartphone }
+                    { key: 'ecocash', label: 'EcoCash (Zimbabwe)', icon: Wallet }
                   ].map((item) => {
                     const Icon = item.icon;
                     return (
@@ -482,6 +484,46 @@ export default function SettingsComponent({ merchant, onSettingsUpdate }: Settin
                     );
                   })}
                 </div>
+
+                {/* EcoCash Merchant Code - NEW SECTION */}
+                {payment.ecocash && (
+                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                      <Wallet className="w-4 h-4 text-green-600" />
+                      EcoCash Merchant Settings
+                    </h3>
+                    
+                    <div className="bg-green-50 dark:bg-green-900/10 p-4 rounded-lg mb-4">
+                      <div className="flex items-start gap-3">
+                        <Info className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm text-green-700 dark:text-green-300 font-medium">EcoCash Merchant Code</p>
+                          <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                            Enter your EcoCash merchant code to receive payments directly to your EcoCash business account. 
+                            Customers will pay you via EcoCash using this merchant code.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Merchant Code <span className="text-gray-400 text-xs">(e.g., 123456)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={payment.merchantCode}
+                        onChange={(e) => setPayment({...payment, merchantCode: e.target.value})}
+                        placeholder="Enter your EcoCash merchant code"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:border-purple-500 text-gray-900 dark:text-white dark:bg-gray-700"
+                      />
+                      <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+                        <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                        This code will be used for all EcoCash payments from customers
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Bank Details */}
                 <div className="pt-4 border-t border-gray-200 dark:border-gray-700">

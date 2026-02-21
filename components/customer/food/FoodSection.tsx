@@ -1,3 +1,4 @@
+// components/customer/food/FoodSection.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -6,6 +7,7 @@ import RestaurantMenu from "./RestaurantMenu";
 import FoodCart from "./FoodCart";
 import FoodCheckout from "./FoodCheckout";
 import FoodOrderTracking from "./FoodOrderTracking";
+import SearchingForFoodDrivers from "./SearchingForFoodDrivers"; // Import the driver search component
 
 interface Category {
   id: number;
@@ -33,10 +35,13 @@ interface Merchant {
   address: string;
   businessHours: any;
   categories: Category[];
+  merchantCode?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export default function FoodSection() {
-  const [view, setView] = useState<"restaurants" | "menu" | "cart" | "checkout" | "tracking">("restaurants");
+  const [view, setView] = useState<"restaurants" | "menu" | "cart" | "checkout" | "tracking" | "searching">("restaurants");
   const [selectedRestaurant, setSelectedRestaurant] = useState<Merchant | null>(null);
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [currentOrder, setCurrentOrder] = useState<any>(null);
@@ -46,6 +51,7 @@ export default function FoodSection() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedDeliveryType, setSelectedDeliveryType] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [pendingOrder, setPendingOrder] = useState<any>(null); // Add this for platform delivery
 
   // Fetch restaurants from database
   useEffect(() => {
@@ -104,6 +110,26 @@ export default function FoodSection() {
     }
   };
 
+  // Handle when driver is found
+  const handleDriverFound = (driver: any) => {
+    // Update the order with driver info
+    const updatedOrder = {
+      ...pendingOrder,
+      driver: driver,
+      driverAssigned: true,
+      status: "preparing" // Now the restaurant can start preparing
+    };
+    
+    setCurrentOrder(updatedOrder);
+    setView("tracking");
+  };
+
+  // Handle cancel search
+  const handleCancelSearch = () => {
+    setView("cart"); // Go back to cart
+    setPendingOrder(null);
+  };
+
   if (view === "menu" && selectedRestaurant) {
     return (
       <RestaurantMenu 
@@ -136,9 +162,47 @@ export default function FoodSection() {
         restaurant={selectedRestaurant}
         onBack={() => setView("cart")}
         onPlaceOrder={(order) => {
-          setCurrentOrder(order);
-          setView("tracking");
+          // Check if restaurant needs a driver (platform delivery)
+          if (selectedRestaurant?.deliveryType === 'platform') {
+            // Save order and show driver search
+            setPendingOrder(order);
+            setView("searching");
+          } else {
+            // Restaurant has own bikers - go directly to tracking
+            setCurrentOrder(order);
+            setView("tracking");
+          }
         }}
+      />
+    );
+  }
+
+  // New view for searching drivers
+  if (view === "searching" && pendingOrder && selectedRestaurant) {
+    return (
+      <SearchingForFoodDrivers
+        orderId={pendingOrder.id}
+        restaurantId={selectedRestaurant.id}
+        restaurantName={selectedRestaurant.businessName}
+        restaurantAddress={selectedRestaurant.address}
+        restaurantCoords={{
+          latitude: selectedRestaurant.latitude || -17.827,
+          longitude: selectedRestaurant.longitude || 31.033
+        }}
+        deliveryAddress={pendingOrder.deliveryAddress}
+        deliveryCoords={{
+          latitude: -17.827, // You'll need to get these from somewhere
+          longitude: 31.033
+        }}
+        items={pendingOrder.items}
+        subtotal={pendingOrder.subtotal}
+        deliveryFee={pendingOrder.deliveryFee}
+        totalAmount={pendingOrder.total}
+        customerId={pendingOrder.customerId || 1} // Make sure this comes from your auth
+        customerName={pendingOrder.customerName || "Customer"}
+        customerPhone={pendingOrder.phoneNumber}
+        onCancel={handleCancelSearch}
+        onDriverAssigned={handleDriverFound}
       />
     );
   }

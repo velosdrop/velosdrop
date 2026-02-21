@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
           to: formattedPhone,
           type: 'template',
           template: {
-            name: 'otp_velos',
+            name: 'authentication_verification_code ',
             language: {
               code: 'en_US'
             },

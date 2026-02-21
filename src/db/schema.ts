@@ -283,6 +283,7 @@ export const merchantsTable = sqliteTable('merchants', {
   bankName: text('bank_name'),
   bankAccountName: text('bank_account_name'),
   bankAccountNumber: text('bank_account_number'),
+  merchantCode: text('merchant_code'),
 
   // Stats
   totalOrders: integer('total_orders').default(0).notNull(),

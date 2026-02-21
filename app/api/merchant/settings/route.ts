@@ -19,7 +19,7 @@ export async function PUT(request: Request) {
 
     const data = await request.json();
 
-    // Create update object with proper typing - NO COMMISSION
+    // Create update object with proper typing - WITH MERCHANT CODE ADDED
     const updateData: any = {
       deliveryRadius: data.deliveryRadius,
       minimumOrder: data.minimumOrder,
@@ -27,6 +27,7 @@ export async function PUT(request: Request) {
       bankName: data.bankName,
       bankAccountName: data.bankAccountName,
       bankAccountNumber: data.bankAccountNumber,
+      merchantCode: data.merchantCode, // ADDED: Include merchant code
       updatedAt: new Date().toISOString()
     };
 
